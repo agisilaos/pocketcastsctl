@@ -1,0 +1,6 @@
+/pocketcastsctl
+/bin/
+.gocache/
+.gomodcache/
+*.har
+.DS_Store
