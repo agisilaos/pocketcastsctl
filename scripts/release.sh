@@ -256,7 +256,7 @@ update_homebrew_formula() {
   git clone "${tap_remote}" "${tmp}/tap" >/dev/null 2>&1 || die "failed to clone tap repo: ${tap_remote}"
   mkdir -p "${tmp}/tap/Formula"
 
-  cat >\"${tmp}/tap/Formula/pocketcastsctl.rb\" <<RUBY
+  cat >"${tmp}/tap/Formula/pocketcastsctl.rb" <<RUBY
 class Pocketcastsctl < Formula
   desc "macOS CLI for Pocket Casts Web Player control"
   homepage "https://github.com/${repo_owner}/${repo_name}"
