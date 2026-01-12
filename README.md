@@ -2,6 +2,9 @@
 
 Control Pocket Casts **Web Player** from the command line on macOS.
 
+[![release](https://img.shields.io/github/v/release/agisilaos/pocketcastsctl?display_name=tag&sort=semver)](https://github.com/agisilaos/pocketcastsctl/releases)
+[![platform](https://img.shields.io/badge/platform-macOS-000000)](#)
+
 This project is intentionally starting with **browser automation** (Safari/Chrome via AppleScript) so play/pause/next/prev works without needing Pocket Casts’ private HTTP APIs. Queue/account APIs can be added later by observing the Web Player network calls.
 
 Supported browsers for automation depend on whether the macOS app is scriptable; you can set `--browser` to `chrome`, `safari`, `arc`, `dia`, `brave`, `edge`, or pass a custom app name with `--browser-app`.
@@ -146,19 +149,3 @@ The release workflow mirrors [`homepodctl`](https://github.com/agisilaos/homepod
   - Update the Homebrew tap (`agisilaos/homebrew-tap`)
 
 Run the release on macOS with a clean git tree.
-
-## Roadmap: account-level queue control
-
-If you want queue management without relying on the browser UI (add/remove/reorder, etc.), the next step is to capture the Web Player requests:
-
-1. Open Chrome DevTools → Network, enable **Preserve log**.
-2. Filter for `graphql`, `queue`, `upnext`, `sync`, `api`.
-3. Perform actions in the UI (add to Up Next, reorder, remove).
-4. Right-click the Network table → **Save all as HAR with content**.
-5. Redact it, then summarize endpoints:
-   - `./bin/pocketcastsctl har redact in.har redacted.har`
-   - `./bin/pocketcastsctl har summarize --host api.pocketcasts.com redacted.har`
-   - `./bin/pocketcastsctl har graphql --host api.pocketcasts.com redacted.har`
-6. We implement the discovered endpoints in Go under `internal/pocketcasts/` and add CLI commands (`queue add/rm/mv`).
-
-If you share a redacted HAR (remove cookies/tokens) or the relevant endpoint shapes, we can wire it up quickly.

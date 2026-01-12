@@ -60,6 +60,8 @@ func run(args []string) int {
 		return runQueue(args[1:], cfg)
 	case "har":
 		return runHAR(args[1:])
+	case "completion":
+		return runCompletion(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown command: %s\n\n", args[0])
 		printHelp()
@@ -119,7 +121,7 @@ Usage:
   pocketcastsctl auth clear
   pocketcastsctl web <play|pause|toggle|next|prev|status> [--browser <name>] [--browser-app <app>] [--url-contains needle]
   pocketcastsctl queue ls [--json] [--browser <name>] [--browser-app <app>] [--url-contains needle]
-  pocketcastsctl queue api ls [--limit N] [--search q] [--json|--raw]
+  pocketcastsctl queue api ls [--limit N] [--search q] [--json|--raw] [--plain]
   pocketcastsctl queue api add (--uuid id --podcast id --title t --published rfc3339 --url audioUrl) | (--episode-json json)
   pocketcastsctl queue api rm <episode-uuid...>
   pocketcastsctl queue api play <index|uuid> [--browser <name>] [--browser-app <app>] [--url-contains needle]
@@ -555,6 +557,9 @@ func runQueue(args []string, cfg config.Config) int {
 	fs := flag.NewFlagSet("queue ls", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	jsonOut := fs.Bool("json", false, "output JSON")
+	plain := fs.Bool("plain", false, "plain tab-separated output (index, title, href)")
+	search := fs.String("search", "", "filter by substring in title")
+	limit := fs.Int("limit", 0, "limit output items (0 = no limit)")
 	browser := fs.String("browser", cfg.Browser, `browser name`)
 	browserApp := fs.String("browser-app", cfg.BrowserApp, `macOS application name (optional)`)
 	urlContains := fs.String("url-contains", cfg.URLContains, `substring to match the Pocket Casts tab URL`)
@@ -584,6 +589,14 @@ func runQueue(args []string, cfg config.Config) int {
 		fmt.Fprintf(os.Stderr, "queue ls failed: %v\n", err)
 		return 1
 	}
+	items = filterQueueItems(items, *search)
+	if *limit > 0 && *limit < len(items) {
+		items = items[:*limit]
+	}
+	if len(items) == 0 {
+		fmt.Fprintln(os.Stderr, "queue ls: no items matched")
+		return 1
+	}
 
 	if *jsonOut {
 		b, _ := json.MarshalIndent(items, "", "  ")
@@ -593,8 +606,12 @@ func runQueue(args []string, cfg config.Config) int {
 
 	for i, it := range items {
 		title := it.Title
-		if title == "" {
+		if strings.TrimSpace(title) == "" {
 			title = "(untitled)"
+		}
+		if *plain {
+			fmt.Printf("%d\t%s\t%s\n", i+1, strings.TrimSpace(title), strings.TrimSpace(it.Href))
+			continue
 		}
 		if it.Href != "" {
 			fmt.Printf("%2d. %s  %s\n", i+1, title, it.Href)
@@ -926,6 +943,57 @@ func runHARGraphQL(args []string) int {
 	return 0
 }
 
+func runCompletion(args []string) int {
+	if len(args) != 1 {
+		fmt.Fprintln(os.Stderr, "usage: pocketcastsctl completion <bash|zsh|fish>")
+		return 2
+	}
+	shell := strings.ToLower(strings.TrimSpace(args[0]))
+	script, ok := completionScripts()[shell]
+	if !ok {
+		fmt.Fprintf(os.Stderr, "unknown shell: %s (supported: bash, zsh, fish)\n", shell)
+		return 2
+	}
+	fmt.Print(script)
+	return 0
+}
+
+func completionScripts() map[string]string {
+	cmds := []string{
+		"help", "version", "completion",
+		"config init",
+		"auth login", "auth sync", "auth tabs", "auth clear",
+		"web play", "web pause", "web toggle", "web next", "web prev", "web status",
+		"queue ls",
+		"queue api ls", "queue api add", "queue api rm", "queue api play", "queue api pick",
+		"local pick", "local play", "local pause", "local resume", "local stop", "local status",
+		"har summarize", "har graphql", "har redact",
+	}
+	join := strings.Join(cmds, " ")
+	return map[string]string{
+		"bash": fmt.Sprintf(`#!/usr/bin/env bash
+_pocketcastsctl_completions() {
+    local cur prev opts
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    opts="%s"
+    COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+}
+complete -F _pocketcastsctl_completions pocketcastsctl
+`, join),
+		"zsh": fmt.Sprintf(`#compdef pocketcastsctl
+_pocketcastsctl_completions() {
+  local -a commands
+  commands=(%s)
+  compadd "$@" -- $commands
+}
+_pocketcastsctl_completions "$@"
+`, join),
+		"fish": fmt.Sprintf(`set -l commands %s
+complete -c pocketcastsctl -f -a "$commands"
+`, strings.Join(cmds, " ")),
+	}
+}
+
 func runQueueAPI(args []string, cfg config.Config) int {
 	if len(args) == 0 {
 		fmt.Fprintln(os.Stderr, "queue api requires a subcommand (ls/add/rm/play/pick)")
@@ -962,6 +1030,7 @@ func runQueueAPILS(args []string, client *pocketcasts.Client, ctx context.Contex
 	fs.SetOutput(os.Stderr)
 	raw := fs.Bool("raw", false, "output raw JSON response")
 	jsonOut := fs.Bool("json", false, "output simplified JSON (episodes only)")
+	plain := fs.Bool("plain", false, "plain tab-separated output (index, title, uuid, published)")
 	limit := fs.Int("limit", 0, "limit output items (0 = no limit)")
 	search := fs.String("search", "", "filter by substring in title")
 	if err := fs.Parse(args); err != nil {
@@ -1024,6 +1093,10 @@ func runQueueAPILS(args []string, client *pocketcasts.Client, ctx context.Contex
 		published := strings.TrimSpace(ep.Published)
 		if published != "" && len(published) >= 10 {
 			published = published[:10]
+		}
+		if *plain {
+			fmt.Printf("%d\t%s\t%s\t%s\n", i+1, title, short, published)
+			continue
 		}
 		if published != "" {
 			fmt.Printf("%2d. %s  (%s)  %s\n", i+1, title, short, published)
@@ -1291,6 +1364,20 @@ func filterEpisodes(eps []pocketcasts.UpNextEpisode, search string) []pocketcast
 	for _, ep := range eps {
 		if strings.Contains(strings.ToLower(ep.Title), search) {
 			out = append(out, ep)
+		}
+	}
+	return out
+}
+
+func filterQueueItems(items []browsercontrol.QueueItem, search string) []browsercontrol.QueueItem {
+	search = strings.ToLower(strings.TrimSpace(search))
+	if search == "" {
+		return items
+	}
+	out := make([]browsercontrol.QueueItem, 0, len(items))
+	for _, it := range items {
+		if strings.Contains(strings.ToLower(it.Title), search) {
+			out = append(out, it)
 		}
 	}
 	return out
