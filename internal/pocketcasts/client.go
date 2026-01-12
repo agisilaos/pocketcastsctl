@@ -53,12 +53,7 @@ func (c *Client) newRequest(ctx context.Context, method, path string, body io.Re
 	if err != nil {
 		return nil, err
 	}
-	for k, v := range c.headers {
-		if strings.TrimSpace(k) == "" || strings.TrimSpace(v) == "" {
-			continue
-		}
-		req.Header.Set(k, v)
-	}
+	applyDefaultAPIHeaders(req.Header, c.headers)
 	return req, nil
 }
 
@@ -83,4 +78,30 @@ func (c *Client) debugString() string {
 		keys = append(keys, k)
 	}
 	return fmt.Sprintf("baseURL=%s headers=%v", c.baseURL, keys)
+}
+
+func applyDefaultAPIHeaders(h http.Header, user map[string]string) {
+	// Mimic the Pocket Casts Web Player requests closely enough to avoid CORS/authorization surprises.
+	defaults := map[string]string{
+		"Accept":          "*/*",
+		"Accept-Language": "en-US,en;q=0.9",
+		"Content-Type":    "application/json",
+		"Origin":          "https://pocketcasts.com",
+		"Referer":         "https://pocketcasts.com/",
+		"DNT":             "1",
+		"User-Agent":      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",
+		"X-App-Language":  "en",
+		"X-User-Region":   "us",
+	}
+	for k, v := range defaults {
+		if h.Get(k) == "" {
+			h.Set(k, v)
+		}
+	}
+	for k, v := range user {
+		if strings.TrimSpace(k) == "" || strings.TrimSpace(v) == "" {
+			continue
+		}
+		h.Set(k, v)
+	}
 }

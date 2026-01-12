@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"encoding/base64"
 	"context"
 	"encoding/json"
 	"errors"
@@ -456,6 +457,16 @@ func selectBestToken(cands []browsercontrol.TokenCandidate, keyContains string) 
 		if strings.Contains(k, "session") {
 			score += 5
 		}
+		if exp, ok := jwtExp(c.Token); ok {
+			now := time.Now().Unix()
+			if exp > now {
+				score += 50
+				// prefer longer-lived tokens slightly
+				score += int((exp - now) / 60)
+			} else {
+				score -= 200
+			}
+		}
 		if len(strings.TrimSpace(c.Token)) >= 40 {
 			score += 5
 		}
@@ -468,6 +479,37 @@ func selectBestToken(cands []browsercontrol.TokenCandidate, keyContains string) 
 	bestToken = strings.TrimPrefix(bestToken, "Bearer ")
 	bestToken = strings.TrimPrefix(bestToken, "bearer ")
 	return strings.TrimSpace(bestToken)
+}
+
+func jwtExp(tok string) (int64, bool) {
+	parts := strings.Split(strings.TrimSpace(tok), ".")
+	if len(parts) != 3 {
+		return 0, false
+	}
+	payload, err := decodeJWTPart(parts[1])
+	if err != nil {
+		return 0, false
+	}
+	var m map[string]any
+	if err := json.Unmarshal(payload, &m); err != nil {
+		return 0, false
+	}
+	switch v := m["exp"].(type) {
+	case float64:
+		return int64(v), true
+	case int64:
+		return v, true
+	case int:
+		return int64(v), true
+	}
+	return 0, false
+}
+
+func decodeJWTPart(s string) ([]byte, error) {
+	if l := len(s) % 4; l != 0 {
+		s += strings.Repeat("=", 4-l)
+	}
+	return base64.RawURLEncoding.DecodeString(s)
 }
 
 func runWeb(args []string, cfg config.Config) int {

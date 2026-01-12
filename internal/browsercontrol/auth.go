@@ -49,7 +49,7 @@ func scoreTokenCandidate(c TokenCandidate) int {
 }
 
 func jsExtractTokenCandidates() string {
-	// Only return values that look like tokens to avoid leaking unrelated localStorage data.
+	// Only return values that look like tokens to avoid leaking unrelated storage data.
 	return `(function(){
   function isJwtLike(s){
     return typeof s === 'string' && /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(s);
@@ -83,18 +83,24 @@ func jsExtractTokenCandidates() string {
   }
 
   const out = [];
-  for (let i=0; i<localStorage.length; i++){
-    const key = localStorage.key(i);
-    const val = localStorage.getItem(key);
-    if (!val) continue;
-    if (isTokenish(val) && (key.toLowerCase().includes('token') || key.toLowerCase().includes('auth') || key.toLowerCase().includes('session'))) {
-      out.push({sourceKey: key, token: val});
+  function extractFromStorage(store, label){
+    if (!store) return;
+    for (let i=0; i<store.length; i++){
+      const key = store.key(i);
+      const val = store.getItem(key);
+      if (!val) continue;
+      if (isTokenish(val) && (key.toLowerCase().includes('token') || key.toLowerCase().includes('auth') || key.toLowerCase().includes('session'))) {
+        out.push({sourceKey: label + ":" + key, token: val});
+      }
+      try {
+        const parsed = JSON.parse(val);
+        findInObject(parsed, out);
+      } catch (e) {}
     }
-    try {
-      const parsed = JSON.parse(val);
-      findInObject(parsed, out);
-    } catch (e) {}
   }
+
+  extractFromStorage(localStorage, 'localStorage');
+  extractFromStorage(sessionStorage, 'sessionStorage');
   return JSON.stringify(out);
 })()`
 }
