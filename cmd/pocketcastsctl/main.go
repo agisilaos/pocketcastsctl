@@ -2,8 +2,8 @@ package main
 
 import (
 	"bufio"
-	"encoding/base64"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -1047,16 +1047,18 @@ func runQueueAPI(args []string, cfg config.Config) int {
 		Headers: cfg.APIHeaders,
 	})
 
+	serverModified := strconv.FormatInt(time.Now().UnixMilli(), 10)
+
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
 	switch args[0] {
 	case "ls":
-		return runQueueAPILS(args[1:], client, ctx)
+		return runQueueAPILS(args[1:], client, ctx, serverModified)
 	case "add":
-		return runQueueAPIAdd(args[1:], client, ctx)
+		return runQueueAPIAdd(args[1:], client, ctx, serverModified)
 	case "rm", "remove":
-		return runQueueAPIRemove(args[1:], client, ctx)
+		return runQueueAPIRemove(args[1:], client, ctx, serverModified)
 	case "play":
 		return runQueueAPIPlay(args[1:], cfg, client, ctx)
 	case "pick":
@@ -1067,7 +1069,7 @@ func runQueueAPI(args []string, cfg config.Config) int {
 	}
 }
 
-func runQueueAPILS(args []string, client *pocketcasts.Client, ctx context.Context) int {
+func runQueueAPILS(args []string, client *pocketcasts.Client, ctx context.Context, serverModified string) int {
 	fs := flag.NewFlagSet("queue api ls", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	raw := fs.Bool("raw", false, "output raw JSON response")
@@ -1085,7 +1087,7 @@ func runQueueAPILS(args []string, client *pocketcasts.Client, ctx context.Contex
 
 	body, err := client.UpNextList(ctx, pocketcasts.UpNextListRequest{
 		Model:          "webplayer",
-		ServerModified: "0",
+		ServerModified: serverModified,
 		ShowPlayStatus: true,
 		Version:        2,
 	})
@@ -1149,7 +1151,7 @@ func runQueueAPILS(args []string, client *pocketcasts.Client, ctx context.Contex
 	return 0
 }
 
-func runQueueAPIAdd(args []string, client *pocketcasts.Client, ctx context.Context) int {
+func runQueueAPIAdd(args []string, client *pocketcasts.Client, ctx context.Context, serverModified string) int {
 	fs := flag.NewFlagSet("queue api add", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	episodeJSON := fs.String("episode-json", "", "raw JSON object for the episode")
@@ -1187,7 +1189,7 @@ func runQueueAPIAdd(args []string, client *pocketcasts.Client, ctx context.Conte
 		return 2
 	}
 
-	body, err := client.UpNextPlayNext(ctx, ep)
+	body, err := client.UpNextPlayNext(ctx, ep, serverModified)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "queue api add failed: %v\n", err)
 		return 1
@@ -1210,7 +1212,7 @@ func runQueueAPIAdd(args []string, client *pocketcasts.Client, ctx context.Conte
 	return 0
 }
 
-func runQueueAPIRemove(args []string, client *pocketcasts.Client, ctx context.Context) int {
+func runQueueAPIRemove(args []string, client *pocketcasts.Client, ctx context.Context, serverModified string) int {
 	fs := flag.NewFlagSet("queue api rm", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	raw := fs.Bool("raw", false, "output raw JSON response")
@@ -1237,7 +1239,7 @@ func runQueueAPIRemove(args []string, client *pocketcasts.Client, ctx context.Co
 		return 2
 	}
 
-	body, err := client.UpNextRemove(ctx, uuids)
+	body, err := client.UpNextRemove(ctx, uuids, serverModified)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "queue api rm failed: %v\n", err)
 		return 1

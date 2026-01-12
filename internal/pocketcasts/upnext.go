@@ -14,6 +14,8 @@ type UpNextListRequest struct {
 	ServerModified string `json:"serverModified"`
 	ShowPlayStatus bool   `json:"showPlayStatus"`
 	Version        int    `json:"version"`
+	Discover       bool   `json:"discover,omitempty"`
+	LessInfo       bool   `json:"lessInfo,omitempty"`
 }
 
 func (c *Client) UpNextList(ctx context.Context, req UpNextListRequest) ([]byte, error) {
@@ -44,4 +46,3 @@ func (c *Client) UpNextList(ctx context.Context, req UpNextListRequest) ([]byte,
 	}
 	return body, nil
 }
-

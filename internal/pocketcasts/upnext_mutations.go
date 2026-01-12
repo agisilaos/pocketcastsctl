@@ -20,14 +20,16 @@ type UpNextEpisode struct {
 }
 
 type upNextPlayNextRequest struct {
-	Episode UpNextEpisode `json:"episode"`
-	Version int           `json:"version"`
+	Episode        UpNextEpisode `json:"episode"`
+	Version        int           `json:"version"`
+	ServerModified string        `json:"serverModified,omitempty"`
 }
 
-func (c *Client) UpNextPlayNext(ctx context.Context, episode UpNextEpisode) ([]byte, error) {
+func (c *Client) UpNextPlayNext(ctx context.Context, episode UpNextEpisode, serverModified string) ([]byte, error) {
 	reqBody := upNextPlayNextRequest{
-		Episode: episode,
-		Version: 2,
+		Episode:        episode,
+		Version:        2,
+		ServerModified: serverModified,
 	}
 	b, err := json.Marshal(reqBody)
 	if err != nil {
@@ -57,14 +59,16 @@ func (c *Client) UpNextPlayNext(ctx context.Context, episode UpNextEpisode) ([]b
 }
 
 type upNextRemoveRequest struct {
-	UUIDs   []string `json:"uuids"`
-	Version int      `json:"version"`
+	UUIDs          []string `json:"uuids"`
+	Version        int      `json:"version"`
+	ServerModified string   `json:"serverModified,omitempty"`
 }
 
-func (c *Client) UpNextRemove(ctx context.Context, uuids []string) ([]byte, error) {
+func (c *Client) UpNextRemove(ctx context.Context, uuids []string, serverModified string) ([]byte, error) {
 	reqBody := upNextRemoveRequest{
-		UUIDs:   uuids,
-		Version: 2,
+		UUIDs:          uuids,
+		Version:        2,
+		ServerModified: serverModified,
 	}
 	b, err := json.Marshal(reqBody)
 	if err != nil {

@@ -18,7 +18,8 @@ type Log struct {
 }
 
 type Entry struct {
-	Request Request `json:"request"`
+	Request  Request  `json:"request"`
+	Response Response `json:"response"`
 }
 
 type Request struct {
@@ -48,6 +49,12 @@ type QueryParam struct {
 type PostData struct {
 	MimeType string `json:"mimeType"`
 	Text     string `json:"text"`
+}
+
+type Response struct {
+	Status  int      `json:"status"`
+	Headers []Header `json:"headers"`
+	Body    []byte   `json:"-"`
 }
 
 func ReadFile(path string) (File, error) {
