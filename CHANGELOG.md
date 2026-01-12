@@ -6,6 +6,8 @@ The format is based on *Keep a Changelog*, and this project adheres to *Semantic
 
 ## [Unreleased]
 
+## [v0.1.0] - 2026-01-12
+
 ### Added
 - Initial `pocketcastsctl` CLI for Pocket Casts Web Player control on macOS (browser automation).
 - Queue API helpers (`queue api ls/add/rm/play/pick`) using observed Web Player endpoints.
