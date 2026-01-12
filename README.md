@@ -2,7 +2,7 @@
 
 Control Pocket Casts **Web Player** from the command line on macOS.
 
-This project is intentionally starting with **browser automation** (Safari/Chrome via AppleScript) so play/pause/next/prev works without needing Pocket Casts’ private HTTP APIs. Queue/account APIs can be added later by reverse-engineering the Web Player network calls.
+This project is intentionally starting with **browser automation** (Safari/Chrome via AppleScript) so play/pause/next/prev works without needing Pocket Casts’ private HTTP APIs. Queue/account APIs can be added later by observing the Web Player network calls.
 
 Supported browsers for automation depend on whether the macOS app is scriptable; you can set `--browser` to `chrome`, `safari`, `arc`, `dia`, `brave`, `edge`, or pass a custom app name with `--browser-app`.
 
@@ -15,7 +15,27 @@ go build -o ./bin/pocketcastsctl ./cmd/pocketcastsctl
 ./bin/pocketcastsctl help
 ```
 
+After a tagged release:
+
+- Homebrew tap (macOS): `brew tap agisilaos/tap && brew install pocketcastsctl`
+- Prebuilt tarballs: download from GitHub Releases (`pocketcastsctl_<ver>_darwin_<arch>.tar.gz`)
+- Go install: `go install github.com/agisilaos/pocketcastsctl/cmd/pocketcastsctl@latest`
+
+For local iteration:
+
+```bash
+make build   # builds ./pocketcastsctl
+make test    # runs unit tests
+make release VERSION=v0.1.0  # builds artifacts + tag + tap update (macOS + gh + git)
+```
+
 ## Usage
+
+Show build metadata:
+
+```bash
+./bin/pocketcastsctl --version
+```
 
 ### Playback (Web Player tab)
 
@@ -63,7 +83,7 @@ macOS may prompt you to allow `osascript` to control your browser (Automation pe
 ./bin/pocketcastsctl queue ls --json
 ```
 
-### Queue (API, reverse engineered)
+### Queue (API, best effort)
 
 This path calls Pocket Casts’ private API (currently `up_next/list`, `up_next/play_next`, `up_next/remove`) using an auth token extracted from your logged-in Web Player tab.
 
@@ -113,9 +133,23 @@ Add “Play Next” (requires episode fields observed in HAR; easiest is `--epis
 ./bin/pocketcastsctl queue api add --episode-json '{"uuid":"...","podcast":"...","published":"...","title":"...","url":"..."}'
 ```
 
-## Roadmap: account-level queue control (reverse engineered)
+## Release process
 
-If you want queue management without relying on the browser UI (add/remove/reorder, etc.), the next step is to reverse-engineer the Web Player requests:
+The release workflow mirrors [`homepodctl`](https://github.com/agisilaos/homepodctl):
+
+- Version metadata is embedded via ldflags (`main.version`, `main.commit`, `main.date`); `pocketcastsctl --version` shows it.
+- `make release VERSION=vX.Y.Z` runs `scripts/release.sh` to:
+  - Update `CHANGELOG.md` from the `[Unreleased]` section
+  - Tag and push `main` + the tag
+  - Build macOS arm64/amd64 tarballs under `dist/` with checksums
+  - Create a GitHub Release (if `gh` is installed)
+  - Update the Homebrew tap (`agisilaos/homebrew-tap`)
+
+Run the release on macOS with a clean git tree.
+
+## Roadmap: account-level queue control
+
+If you want queue management without relying on the browser UI (add/remove/reorder, etc.), the next step is to capture the Web Player requests:
 
 1. Open Chrome DevTools → Network, enable **Preserve log**.
 2. Filter for `graphql`, `queue`, `upnext`, `sync`, `api`.

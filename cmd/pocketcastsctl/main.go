@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -22,6 +23,12 @@ import (
 	"pocketcastsctl/internal/state"
 )
 
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+)
+
 func main() {
 	os.Exit(run(os.Args[1:]))
 }
@@ -29,6 +36,10 @@ func main() {
 func run(args []string) int {
 	if len(args) == 0 || args[0] == "help" || args[0] == "-h" || args[0] == "--help" {
 		printHelp()
+		return 0
+	}
+	if args[0] == "--version" || args[0] == "version" {
+		fmt.Println(formatVersion())
 		return 0
 	}
 
@@ -91,6 +102,8 @@ func printHelp() {
 pocketcastsctl controls the Pocket Casts Web Player (macOS).
 
 Usage:
+  pocketcastsctl --version
+  pocketcastsctl version
   pocketcastsctl ls
   pocketcastsctl pick
   pocketcastsctl play <index|uuid>
@@ -117,6 +130,10 @@ Usage:
   pocketcastsctl config init
   pocketcastsctl help
 `) + "\n")
+}
+
+func formatVersion() string {
+	return fmt.Sprintf("pocketcastsctl %s (%s) %s", version, commit, date)
 }
 
 func runConfig(args []string, cfg config.Config) int {
@@ -150,7 +167,7 @@ func runAuth(args []string, cfg config.Config) int {
 		return runAuthLogin(args[1:], cfg)
 	case "sync":
 		fs := flag.NewFlagSet("auth sync", flag.ContinueOnError)
-		fs.SetOutput(ioDiscard{})
+		fs.SetOutput(os.Stderr)
 		browser := fs.String("browser", cfg.Browser, `chrome or safari`)
 		browserApp := fs.String("browser-app", cfg.BrowserApp, `macOS application name (optional)`)
 		urlContains := fs.String("url-contains", cfg.URLContains, `substring to match the Pocket Casts tab URL`)
@@ -159,6 +176,9 @@ func runAuth(args []string, cfg config.Config) int {
 		keyContains := fs.String("key-contains", "", "prefer tokens whose sourceKey contains this substring")
 		dryRun := fs.Bool("dry-run", false, "print token candidate keys only (no token values) and exit")
 		if err := fs.Parse(args[1:]); err != nil {
+			if errors.Is(err, flag.ErrHelp) {
+				return 0
+			}
 			fmt.Fprintf(os.Stderr, "failed to parse flags: %v\n", err)
 			return 2
 		}
@@ -266,12 +286,15 @@ func isBrowserAutomationHintError(err error) bool {
 
 func runAuthLogin(args []string, cfg config.Config) int {
 	fs := flag.NewFlagSet("auth login", flag.ContinueOnError)
-	fs.SetOutput(ioDiscard{})
+	fs.SetOutput(os.Stderr)
 	browser := fs.String("browser", cfg.Browser, `browser name (chrome/safari/arc/dia/brave/edge or custom app name)`)
 	browserApp := fs.String("browser-app", cfg.BrowserApp, `macOS application name (optional)`)
 	openURL := fs.String("url", "https://pocketcasts.com/podcasts", "URL to open for login")
 	urlContains := fs.String("url-contains", cfg.URLContains, `substring to match the Pocket Casts tab URL`)
 	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
 		fmt.Fprintf(os.Stderr, "failed to parse flags: %v\n", err)
 		return 2
 	}
@@ -300,10 +323,13 @@ func runAuthLogin(args []string, cfg config.Config) int {
 
 func runAuthTabs(args []string, cfg config.Config) int {
 	fs := flag.NewFlagSet("auth tabs", flag.ContinueOnError)
-	fs.SetOutput(ioDiscard{})
+	fs.SetOutput(os.Stderr)
 	browser := fs.String("browser", cfg.Browser, `browser name`)
 	browserApp := fs.String("browser-app", cfg.BrowserApp, `macOS application name (optional)`)
 	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
 		fmt.Fprintf(os.Stderr, "failed to parse flags: %v\n", err)
 		return 2
 	}
@@ -449,11 +475,14 @@ func runWeb(args []string, cfg config.Config) int {
 	}
 
 	fs := flag.NewFlagSet("web", flag.ContinueOnError)
-	fs.SetOutput(ioDiscard{})
+	fs.SetOutput(os.Stderr)
 	browser := fs.String("browser", cfg.Browser, `browser name`)
 	browserApp := fs.String("browser-app", cfg.BrowserApp, `macOS application name (optional)`)
 	urlContains := fs.String("url-contains", cfg.URLContains, `substring to match the Pocket Casts tab URL`)
 	if err := fs.Parse(args[1:]); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
 		fmt.Fprintf(os.Stderr, "failed to parse flags: %v\n", err)
 		return 2
 	}
@@ -524,12 +553,15 @@ func runQueue(args []string, cfg config.Config) int {
 	}
 
 	fs := flag.NewFlagSet("queue ls", flag.ContinueOnError)
-	fs.SetOutput(ioDiscard{})
+	fs.SetOutput(os.Stderr)
 	jsonOut := fs.Bool("json", false, "output JSON")
 	browser := fs.String("browser", cfg.Browser, `browser name`)
 	browserApp := fs.String("browser-app", cfg.BrowserApp, `macOS application name (optional)`)
 	urlContains := fs.String("url-contains", cfg.URLContains, `substring to match the Pocket Casts tab URL`)
 	if err := fs.Parse(args[1:]); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
 		fmt.Fprintf(os.Stderr, "failed to parse flags: %v\n", err)
 		return 2
 	}
@@ -573,10 +605,6 @@ func runQueue(args []string, cfg config.Config) int {
 	return 0
 }
 
-type ioDiscard struct{}
-
-func (ioDiscard) Write(p []byte) (int, error) { return len(p), nil }
-
 func runLocal(args []string, cfg config.Config) int {
 	if len(args) == 0 {
 		fmt.Fprintln(os.Stderr, "local requires a subcommand (pick/play/pause/resume/stop/status)")
@@ -603,10 +631,13 @@ func runLocal(args []string, cfg config.Config) int {
 
 func runLocalPick(args []string, cfg config.Config) int {
 	fs := flag.NewFlagSet("local pick", flag.ContinueOnError)
-	fs.SetOutput(ioDiscard{})
+	fs.SetOutput(os.Stderr)
 	search := fs.String("search", "", "filter by substring in title before showing picker")
 	limit := fs.Int("limit", 0, "limit items in picker (0 = no limit)")
 	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
 		fmt.Fprintf(os.Stderr, "failed to parse flags: %v\n", err)
 		return 2
 	}
@@ -819,10 +850,13 @@ func runHAR(args []string) int {
 
 func runHARSummarize(args []string) int {
 	fs := flag.NewFlagSet("har summarize", flag.ContinueOnError)
-	fs.SetOutput(ioDiscard{})
+	fs.SetOutput(os.Stderr)
 	host := fs.String("host", "api.pocketcasts.com", "filter requests by host (empty = no filter)")
 	jsonOut := fs.Bool("json", false, "output JSON")
 	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
 		fmt.Fprintf(os.Stderr, "failed to parse flags: %v\n", err)
 		return 2
 	}
@@ -862,10 +896,13 @@ func runHARRedact(args []string) int {
 
 func runHARGraphQL(args []string) int {
 	fs := flag.NewFlagSet("har graphql", flag.ContinueOnError)
-	fs.SetOutput(ioDiscard{})
+	fs.SetOutput(os.Stderr)
 	host := fs.String("host", "api.pocketcasts.com", "filter requests by host (empty = no filter)")
 	jsonOut := fs.Bool("json", false, "output JSON")
 	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
 		fmt.Fprintf(os.Stderr, "failed to parse flags: %v\n", err)
 		return 2
 	}
@@ -922,12 +959,15 @@ func runQueueAPI(args []string, cfg config.Config) int {
 
 func runQueueAPILS(args []string, client *pocketcasts.Client, ctx context.Context) int {
 	fs := flag.NewFlagSet("queue api ls", flag.ContinueOnError)
-	fs.SetOutput(ioDiscard{})
+	fs.SetOutput(os.Stderr)
 	raw := fs.Bool("raw", false, "output raw JSON response")
 	jsonOut := fs.Bool("json", false, "output simplified JSON (episodes only)")
 	limit := fs.Int("limit", 0, "limit output items (0 = no limit)")
 	search := fs.String("search", "", "filter by substring in title")
 	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
 		fmt.Fprintf(os.Stderr, "failed to parse flags: %v\n", err)
 		return 2
 	}
@@ -996,7 +1036,7 @@ func runQueueAPILS(args []string, client *pocketcasts.Client, ctx context.Contex
 
 func runQueueAPIAdd(args []string, client *pocketcasts.Client, ctx context.Context) int {
 	fs := flag.NewFlagSet("queue api add", flag.ContinueOnError)
-	fs.SetOutput(ioDiscard{})
+	fs.SetOutput(os.Stderr)
 	episodeJSON := fs.String("episode-json", "", "raw JSON object for the episode")
 	uuid := fs.String("uuid", "", "episode UUID")
 	podcast := fs.String("podcast", "", "podcast UUID")
@@ -1005,6 +1045,9 @@ func runQueueAPIAdd(args []string, client *pocketcasts.Client, ctx context.Conte
 	urlStr := fs.String("url", "", "episode audio URL")
 	raw := fs.Bool("raw", false, "output raw JSON response")
 	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
 		fmt.Fprintf(os.Stderr, "failed to parse flags: %v\n", err)
 		return 2
 	}
@@ -1054,9 +1097,12 @@ func runQueueAPIAdd(args []string, client *pocketcasts.Client, ctx context.Conte
 
 func runQueueAPIRemove(args []string, client *pocketcasts.Client, ctx context.Context) int {
 	fs := flag.NewFlagSet("queue api rm", flag.ContinueOnError)
-	fs.SetOutput(ioDiscard{})
+	fs.SetOutput(os.Stderr)
 	raw := fs.Bool("raw", false, "output raw JSON response")
 	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
 		fmt.Fprintf(os.Stderr, "failed to parse flags: %v\n", err)
 		return 2
 	}
@@ -1101,13 +1147,16 @@ func runQueueAPIRemove(args []string, client *pocketcasts.Client, ctx context.Co
 
 func runQueueAPIPlay(args []string, cfg config.Config, client *pocketcasts.Client, ctx context.Context) int {
 	fs := flag.NewFlagSet("queue api play", flag.ContinueOnError)
-	fs.SetOutput(ioDiscard{})
+	fs.SetOutput(os.Stderr)
 	browser := fs.String("browser", cfg.Browser, `browser name`)
 	browserApp := fs.String("browser-app", cfg.BrowserApp, `macOS application name (optional)`)
 	urlContains := fs.String("url-contains", cfg.URLContains, `substring to match the Pocket Casts tab URL`)
 	webBase := fs.String("web-base", "https://play.pocketcasts.com", "web player base URL")
 	search := fs.String("search", "", "filter by substring in title before choosing")
 	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
 		fmt.Fprintf(os.Stderr, "failed to parse flags: %v\n", err)
 		return 2
 	}
@@ -1148,7 +1197,7 @@ func runQueueAPIPlay(args []string, cfg config.Config, client *pocketcasts.Clien
 
 func runQueueAPIPick(args []string, cfg config.Config, client *pocketcasts.Client, ctx context.Context) int {
 	fs := flag.NewFlagSet("queue api pick", flag.ContinueOnError)
-	fs.SetOutput(ioDiscard{})
+	fs.SetOutput(os.Stderr)
 	browser := fs.String("browser", cfg.Browser, `browser name`)
 	browserApp := fs.String("browser-app", cfg.BrowserApp, `macOS application name (optional)`)
 	urlContains := fs.String("url-contains", cfg.URLContains, `substring to match the Pocket Casts tab URL`)
@@ -1157,6 +1206,9 @@ func runQueueAPIPick(args []string, cfg config.Config, client *pocketcasts.Clien
 	limit := fs.Int("limit", 0, "limit items in picker (0 = no limit)")
 	noPlay := fs.Bool("no-play", false, "only print selected UUID (do not start playback)")
 	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
 		fmt.Fprintf(os.Stderr, "failed to parse flags: %v\n", err)
 		return 2
 	}
