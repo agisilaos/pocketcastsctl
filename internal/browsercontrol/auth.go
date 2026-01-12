@@ -99,8 +99,8 @@ func jsExtractTokenCandidates() string {
     }
   }
 
-  extractFromStorage(localStorage, 'localStorage');
-  extractFromStorage(sessionStorage, 'sessionStorage');
+  try { extractFromStorage(localStorage, 'localStorage'); } catch(e){}
+  try { extractFromStorage(sessionStorage, 'sessionStorage'); } catch(e){}
   return JSON.stringify(out);
 })()`
 }
