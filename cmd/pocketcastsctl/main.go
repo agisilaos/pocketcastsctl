@@ -617,7 +617,12 @@ func runAuth(args []string, cfg config.Config) int {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
-		cands, err := controller.TokenCandidates(ctx)
+		var cands []browsercontrol.TokenCandidate
+		err = retryTransient(ctx, 3, 150*time.Millisecond, func() error {
+			var tokenErr error
+			cands, tokenErr = controller.TokenCandidates(ctx)
+			return tokenErr
+		})
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "auth sync failed: %v\n", err)
 			if isBrowserAutomationHintError(err) {
@@ -827,7 +832,12 @@ func runAuthTabs(args []string, cfg config.Config) int {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	urls, err := controller.TabURLs(ctx)
+	var urls []string
+	err = retryTransient(ctx, 3, 150*time.Millisecond, func() error {
+		var tabErr error
+		urls, tabErr = controller.TabURLs(ctx)
+		return tabErr
+	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "auth tabs failed: %v\n", err)
 		return 1
@@ -1114,7 +1124,12 @@ func runQueue(args []string, cfg config.Config) int {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	items, err := controller.QueueList(ctx)
+	var items []browsercontrol.QueueItem
+	err = retryTransient(ctx, 3, 150*time.Millisecond, func() error {
+		var listErr error
+		items, listErr = controller.QueueList(ctx)
+		return listErr
+	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "queue ls failed: %v\n", err)
 		return 1
