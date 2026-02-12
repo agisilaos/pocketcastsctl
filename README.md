@@ -103,6 +103,7 @@ This path calls Pocket Casts’ private API (currently `up_next/list`, `up_next/
 
 ```bash
 ./bin/pocketcastsctl login
+./bin/pocketcastsctl auth status
 ./bin/pocketcastsctl queue api ls
 ./bin/pocketcastsctl queue api play 1
 ```

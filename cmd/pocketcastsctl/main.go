@@ -119,6 +119,8 @@ func runHelp(args []string) int {
 			printAuthSyncHelp()
 		case "tabs":
 			printAuthTabsHelp()
+		case "status":
+			printAuthStatusHelp()
 		case "clear":
 			printAuthClearHelp()
 		default:
@@ -270,6 +272,7 @@ Usage:
   pocketcastsctl auth login [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com]
   pocketcastsctl auth sync [--browser <name>] [--browser-app <app>] [--url-contains needle]
   pocketcastsctl auth tabs [--browser <name>] [--browser-app <app>]
+  pocketcastsctl auth status [--json]
   pocketcastsctl auth clear
   pocketcastsctl web <play|pause|toggle|next|prev|status> [--browser <name>] [--browser-app <app>] [--url-contains needle]
   pocketcastsctl queue ls [--json] [--browser <name>] [--browser-app <app>] [--url-contains needle]
@@ -321,6 +324,7 @@ Usage:
   pocketcastsctl auth login [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com]
   pocketcastsctl auth sync [--browser <name>] [--browser-app <app>] [--url-contains needle]
   pocketcastsctl auth tabs [--browser <name>] [--browser-app <app>]
+  pocketcastsctl auth status [--json]
   pocketcastsctl auth clear
 `) + "\n")
 }
@@ -335,6 +339,10 @@ func printAuthSyncHelp() {
 
 func printAuthTabsHelp() {
 	fmt.Println("Usage:\n  pocketcastsctl auth tabs [--browser <name>] [--browser-app <app>]")
+}
+
+func printAuthStatusHelp() {
+	fmt.Println("Usage:\n  pocketcastsctl auth status [--json]")
 }
 
 func printAuthClearHelp() {
@@ -576,6 +584,8 @@ func runAuth(args []string, cfg config.Config) int {
 	switch args[0] {
 	case "login":
 		return runAuthLogin(args[1:], cfg)
+	case "status":
+		return runAuthStatus(args[1:], cfg)
 	case "sync":
 		fs := flag.NewFlagSet("auth sync", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
@@ -668,6 +678,67 @@ func runAuth(args []string, cfg config.Config) int {
 		fmt.Fprintf(os.Stderr, "unknown auth subcommand: %s\n", args[0])
 		return 2
 	}
+}
+
+func runAuthStatus(args []string, cfg config.Config) int {
+	fs := flag.NewFlagSet("auth status", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	jsonOut := fs.Bool("json", false, "output JSON")
+	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
+		fmt.Fprintf(os.Stderr, "failed to parse flags: %v\n", err)
+		return 2
+	}
+	if fs.NArg() != 0 {
+		fmt.Fprintln(os.Stderr, "usage: pocketcastsctl auth status [--json]")
+		return 2
+	}
+
+	headers := cfg.APIHeaders
+	if headers == nil {
+		headers = map[string]string{}
+	}
+	count := 0
+	for _, v := range headers {
+		if strings.TrimSpace(v) != "" {
+			count++
+		}
+	}
+	authHeader := false
+	for k, v := range headers {
+		if strings.EqualFold(strings.TrimSpace(k), "Authorization") && strings.TrimSpace(v) != "" {
+			authHeader = true
+			break
+		}
+	}
+
+	status := map[string]any{
+		"config_path":          config.Path(),
+		"api_headers_count":    count,
+		"authorization_present": authHeader,
+		"browser":              cfg.Browser,
+		"url_contains":         cfg.URLContains,
+	}
+
+	if *jsonOut {
+		b, _ := json.MarshalIndent(status, "", "  ")
+		fmt.Println(string(b))
+		return 0
+	}
+
+	fmt.Println("config_path:", status["config_path"])
+	fmt.Println("api_headers_count:", status["api_headers_count"])
+	if authHeader {
+		fmt.Println("authorization: configured")
+	} else {
+		fmt.Println("authorization: missing")
+		fmt.Fprintln(os.Stderr, "tip: run `pocketcastsctl auth sync` after logging into Pocket Casts web player")
+	}
+	fmt.Println("browser:", status["browser"])
+	fmt.Println("url_contains:", status["url_contains"])
+	return 0
 }
 
 func isBrowserAutomationHintError(err error) bool {
@@ -1420,7 +1491,7 @@ func completionScripts() map[string]string {
 	cmds := []string{
 		"help", "version", "completion",
 		"config init",
-		"auth login", "auth sync", "auth tabs", "auth clear",
+		"auth login", "auth sync", "auth tabs", "auth status", "auth clear",
 		"web play", "web pause", "web toggle", "web next", "web prev", "web status",
 		"queue ls",
 		"queue api ls", "queue api add", "queue api rm", "queue api play", "queue api pick",

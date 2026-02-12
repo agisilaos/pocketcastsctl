@@ -3,6 +3,7 @@ package main
 import (
 	"io"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -179,8 +180,35 @@ func TestRunQueueRemoveErrorWritesStderrOnly(t *testing.T) {
 	}
 }
 
+func TestRunAuthStatusDefault(t *testing.T) {
+	code, stdout, stderr := runForTest(t, []string{"auth", "status"}, "")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr=%q", code, stderr)
+	}
+	if !strings.Contains(stdout, "authorization: missing") {
+		t.Fatalf("stdout missing authorization status: %q", stdout)
+	}
+	if !strings.Contains(stderr, "tip: run `pocketcastsctl auth sync`") {
+		t.Fatalf("stderr missing auth tip: %q", stderr)
+	}
+}
+
+func TestRunAuthStatusJSON(t *testing.T) {
+	code, stdout, stderr := runForTest(t, []string{"auth", "status", "--json"}, "")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr=%q", code, stderr)
+	}
+	if !strings.Contains(stdout, "\"authorization_present\": false") {
+		t.Fatalf("stdout missing JSON auth status: %q", stdout)
+	}
+	if strings.TrimSpace(stderr) != "" {
+		t.Fatalf("stderr not empty: %q", stderr)
+	}
+}
+
 func runForTest(t *testing.T, args []string, stdin string) (int, string, string) {
 	t.Helper()
+	t.Setenv(config.EnvConfigPath, filepath.Join(t.TempDir(), "config.json"))
 
 	origStdout := os.Stdout
 	origStderr := os.Stderr
