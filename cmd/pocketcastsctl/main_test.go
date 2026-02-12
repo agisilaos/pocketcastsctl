@@ -3,6 +3,8 @@ package main
 import (
 	"reflect"
 	"testing"
+
+	"pocketcastsctl/internal/config"
 )
 
 func TestFormatVersion(t *testing.T) {
@@ -56,5 +58,31 @@ func TestRewriteAliases(t *testing.T) {
 				t.Fatalf("rewriteAliases(%v) = %v, want %v", tt.in, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestRedactedConfig(t *testing.T) {
+	cfg := config.Config{
+		Browser:     "chrome",
+		BrowserApp:  "",
+		URLContains: "pocketcasts.com",
+		APIBaseURL:  "https://api.pocketcasts.com",
+		APIHeaders: map[string]string{
+			"Authorization": "Bearer abc123",
+			"X-Empty":       "",
+		},
+	}
+
+	redacted := redactedConfig(cfg, false)
+	if got := redacted.APIHeaders["Authorization"]; got != "[redacted]" {
+		t.Fatalf("redacted header = %q, want [redacted]", got)
+	}
+	if got := redacted.APIHeaders["X-Empty"]; got != "" {
+		t.Fatalf("empty header = %q, want empty", got)
+	}
+
+	revealed := redactedConfig(cfg, true)
+	if got := revealed.APIHeaders["Authorization"]; got != "Bearer abc123" {
+		t.Fatalf("revealed header = %q, want original value", got)
 	}
 }
