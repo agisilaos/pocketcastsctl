@@ -218,7 +218,7 @@ Usage:
   pocketcastsctl queue ls [--json] [--browser <name>] [--browser-app <app>] [--url-contains needle]
   pocketcastsctl queue api ls [--limit N] [--search q] [--json|--raw] [--plain]
   pocketcastsctl queue api add (--uuid id --podcast id --title t --published rfc3339 --url audioUrl) | (--episode-json json)
-  pocketcastsctl queue api rm <episode-uuid...>
+  pocketcastsctl queue api rm [--dry-run] [--force|--no-input] <episode-uuid...>
   pocketcastsctl queue api play <index|uuid> [--browser <name>] [--browser-app <app>] [--url-contains needle]
   pocketcastsctl queue api pick [--search q] [--browser <name>] [--browser-app <app>] [--url-contains needle]
 `) + "\n")
@@ -229,7 +229,7 @@ func printQueueAPIHelp() {
 Usage:
   pocketcastsctl queue api ls [--limit N] [--search q] [--json|--raw] [--plain]
   pocketcastsctl queue api add (--uuid id --podcast id --title t --published rfc3339 --url audioUrl) | (--episode-json json)
-  pocketcastsctl queue api rm <episode-uuid...>
+  pocketcastsctl queue api rm [--dry-run] [--force|--no-input] <episode-uuid...>
   pocketcastsctl queue api play <index|uuid> [--browser <name>] [--browser-app <app>] [--url-contains needle]
   pocketcastsctl queue api pick [--search q] [--browser <name>] [--browser-app <app>] [--url-contains needle]
 `) + "\n")
@@ -1412,6 +1412,9 @@ func runQueueAPIRemove(args []string, client *pocketcasts.Client, ctx context.Co
 	fs := flag.NewFlagSet("queue api rm", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	raw := fs.Bool("raw", false, "output raw JSON response")
+	dryRun := fs.Bool("dry-run", false, "print the UUIDs that would be removed and exit")
+	force := fs.Bool("force", false, "skip interactive confirmation")
+	noInput := fs.Bool("no-input", false, "disable prompts (requires --force)")
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0
@@ -1433,6 +1436,26 @@ func runQueueAPIRemove(args []string, client *pocketcasts.Client, ctx context.Co
 	if len(uuids) == 0 {
 		fmt.Fprintln(os.Stderr, "no uuids provided")
 		return 2
+	}
+	if *dryRun {
+		for _, u := range uuids {
+			fmt.Println(u)
+		}
+		return 0
+	}
+
+	if !*force {
+		if *noInput || !stdinIsTTY() {
+			fmt.Fprintln(os.Stderr, "queue api rm: non-interactive mode requires --force (or use --dry-run)")
+			return 2
+		}
+		fmt.Fprintf(os.Stderr, "Remove %d episode(s) from Up Next? [y/N]: ", len(uuids))
+		line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+		answer := strings.ToLower(strings.TrimSpace(line))
+		if answer != "y" && answer != "yes" {
+			fmt.Fprintln(os.Stderr, "aborted")
+			return 1
+		}
 	}
 
 	body, err := client.UpNextRemove(ctx, uuids, serverModified)
@@ -1456,6 +1479,14 @@ func runQueueAPIRemove(args []string, client *pocketcasts.Client, ctx context.Co
 	b, _ := json.MarshalIndent(v, "", "  ")
 	fmt.Println(string(b))
 	return 0
+}
+
+func stdinIsTTY() bool {
+	fi, err := os.Stdin.Stat()
+	if err != nil {
+		return false
+	}
+	return fi.Mode()&os.ModeCharDevice != 0
 }
 
 func runQueueAPIPlay(args []string, cfg config.Config, client *pocketcasts.Client, ctx context.Context) int {
