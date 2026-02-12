@@ -38,6 +38,8 @@ Show build metadata:
 
 ```bash
 ./bin/pocketcastsctl --version
+./bin/pocketcastsctl help
+./bin/pocketcastsctl help queue api
 ```
 
 ### Playback (Web Player tab)
@@ -50,7 +52,7 @@ Open `https://play.pocketcasts.com` and sign in. Then:
 ./bin/pocketcastsctl web next
 ```
 
-Short aliases:
+Deprecated short aliases (still work for now, but print warnings):
 
 ```bash
 ./bin/pocketcastsctl status
@@ -96,7 +98,7 @@ This path calls Pocket Casts’ private API (currently `up_next/list`, `up_next/
 ./bin/pocketcastsctl queue api play 1
 ```
 
-Short aliases:
+Deprecated short aliases (still work for now, but print warnings):
 
 ```bash
 ./bin/pocketcastsctl ls
@@ -120,8 +122,11 @@ Note: some setups appear to work without an explicit stored auth header; `queue 
 Remove from Up Next:
 
 ```bash
-./bin/pocketcastsctl rm <episode-uuid>
+./bin/pocketcastsctl queue api rm --dry-run <episode-uuid>
+./bin/pocketcastsctl queue api rm --force <episode-uuid>
 ```
+
+By default, `queue api rm` prompts for confirmation on TTY. In non-interactive mode, you must pass `--force` (or use `--dry-run`).
 
 Play a specific item from Up Next:
 
@@ -135,6 +140,25 @@ Add “Play Next” (requires episode fields observed in HAR; easiest is `--epis
 ```bash
 ./bin/pocketcastsctl queue api add --episode-json '{"uuid":"...","podcast":"...","published":"...","title":"...","url":"..."}'
 ```
+
+## Config + environment
+
+Show config path and current config (redacts `api_headers` values by default):
+
+```bash
+./bin/pocketcastsctl config path
+./bin/pocketcastsctl config show
+./bin/pocketcastsctl config show --json
+./bin/pocketcastsctl config show --json --reveal-secrets
+```
+
+Environment overrides:
+
+- `POCKETCASTS_CONFIG` (override config file path)
+- `POCKETCASTS_BROWSER`
+- `POCKETCASTS_BROWSER_APP`
+- `POCKETCASTS_URL_CONTAINS`
+- `POCKETCASTS_API_BASE_URL`
 
 ## Release process
 
