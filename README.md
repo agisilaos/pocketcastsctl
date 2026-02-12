@@ -42,6 +42,15 @@ Show build metadata:
 ./bin/pocketcastsctl help queue api
 ```
 
+### I/O contract
+
+- Primary command output is written to `stdout`.
+- Diagnostics, warnings, prompts, and errors are written to `stderr`.
+- For scripting:
+  - Prefer `--json` where available for structured output.
+  - Prefer `--plain` for stable tab/line-oriented output.
+- Destructive safety checks (for example `queue api rm` without `--force` in non-interactive mode) fail with a non-zero exit code and error text on `stderr`.
+
 ### Playback (Web Player tab)
 
 Open `https://play.pocketcasts.com` and sign in. Then:

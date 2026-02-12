@@ -140,6 +140,45 @@ func TestRunQueueRemoveRequiresForceNonInteractive(t *testing.T) {
 	}
 }
 
+func TestRunVersionWritesStdoutOnly(t *testing.T) {
+	code, stdout, stderr := runForTest(t, []string{"--version"}, "")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if strings.TrimSpace(stdout) == "" {
+		t.Fatalf("stdout was empty")
+	}
+	if strings.TrimSpace(stderr) != "" {
+		t.Fatalf("stderr not empty: %q", stderr)
+	}
+}
+
+func TestRunHelpWritesStdoutOnly(t *testing.T) {
+	code, stdout, stderr := runForTest(t, []string{"help", "queue"}, "")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if !strings.Contains(stdout, "Usage:") {
+		t.Fatalf("stdout missing usage: %q", stdout)
+	}
+	if strings.TrimSpace(stderr) != "" {
+		t.Fatalf("stderr not empty: %q", stderr)
+	}
+}
+
+func TestRunQueueRemoveErrorWritesStderrOnly(t *testing.T) {
+	code, stdout, stderr := runForTest(t, []string{"queue", "api", "rm", "episode-1"}, "")
+	if code != 2 {
+		t.Fatalf("exit code = %d, want 2", code)
+	}
+	if strings.TrimSpace(stdout) != "" {
+		t.Fatalf("stdout expected empty on error, got: %q", stdout)
+	}
+	if !strings.Contains(stderr, "non-interactive mode requires --force") {
+		t.Fatalf("stderr missing safety message: %q", stderr)
+	}
+}
+
 func runForTest(t *testing.T, args []string, stdin string) (int, string, string) {
 	t.Helper()
 
