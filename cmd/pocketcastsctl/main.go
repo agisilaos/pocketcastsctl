@@ -1035,7 +1035,12 @@ func runWeb(args []string, cfg config.Config) int {
 	case "prev":
 		return runWebAction(ctx, controller, browsercontrol.ActionPrev)
 	case "status":
-		st, err := controller.Status(ctx)
+		var st browsercontrol.StatusResult
+		err = retryTransient(ctx, 3, 150*time.Millisecond, func() error {
+			var statusErr error
+			st, statusErr = controller.Status(ctx)
+			return statusErr
+		})
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "status failed: %v\n", err)
 			return 1
@@ -1572,12 +1577,7 @@ func runQueueAPILS(args []string, client *pocketcasts.Client, ctx context.Contex
 		return 2
 	}
 
-	body, err := client.UpNextList(ctx, pocketcasts.UpNextListRequest{
-		Model:          "webplayer",
-		ServerModified: serverModified,
-		ShowPlayStatus: true,
-		Version:        2,
-	})
+	body, err := fetchUpNextWithRetry(ctx, client, serverModified)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "queue api ls failed: %v\n", err)
 		return 1
@@ -1800,12 +1800,7 @@ func runQueueAPIPlay(args []string, cfg config.Config, client *pocketcasts.Clien
 		return 2
 	}
 
-	body, err := client.UpNextList(ctx, pocketcasts.UpNextListRequest{
-		Model:          "webplayer",
-		ServerModified: "0",
-		ShowPlayStatus: true,
-		Version:        2,
-	})
+	body, err := fetchUpNextWithRetry(ctx, client, "0")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "queue api play: failed to fetch queue: %v\n", err)
 		return 1
@@ -1852,12 +1847,7 @@ func runQueueAPIPick(args []string, cfg config.Config, client *pocketcasts.Clien
 		return 2
 	}
 
-	body, err := client.UpNextList(ctx, pocketcasts.UpNextListRequest{
-		Model:          "webplayer",
-		ServerModified: "0",
-		ShowPlayStatus: true,
-		Version:        2,
-	})
+	body, err := fetchUpNextWithRetry(ctx, client, "0")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "queue api pick: failed to fetch queue: %v\n", err)
 		return 1
@@ -1943,6 +1933,111 @@ func filterQueueItems(items []browsercontrol.QueueItem, search string) []browser
 		}
 	}
 	return out
+}
+
+func fetchUpNextWithRetry(ctx context.Context, client *pocketcasts.Client, serverModified string) ([]byte, error) {
+	var body []byte
+	err := retryTransient(ctx, 3, 200*time.Millisecond, func() error {
+		var fetchErr error
+		body, fetchErr = client.UpNextList(ctx, pocketcasts.UpNextListRequest{
+			Model:          "webplayer",
+			ServerModified: serverModified,
+			ShowPlayStatus: true,
+			Version:        2,
+		})
+		return fetchErr
+	})
+	if err != nil {
+		return nil, err
+	}
+	return body, nil
+}
+
+func retryTransient(ctx context.Context, attempts int, baseDelay time.Duration, fn func() error) error {
+	if attempts < 1 {
+		attempts = 1
+	}
+	if baseDelay <= 0 {
+		baseDelay = 100 * time.Millisecond
+	}
+
+	var lastErr error
+	tried := 0
+	for i := 1; i <= attempts; i++ {
+		if ctx.Err() != nil {
+			return fmt.Errorf("after %d attempt(s): %w", max(1, tried), ctx.Err())
+		}
+		tried = i
+		err := fn()
+		if err == nil {
+			return nil
+		}
+		lastErr = err
+		if i == attempts || !isRetryableTransientError(err) {
+			break
+		}
+		wait := baseDelay * time.Duration(1<<(i-1))
+		timer := time.NewTimer(wait)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return fmt.Errorf("after %d attempt(s): %w", i, ctx.Err())
+		case <-timer.C:
+		}
+	}
+	if lastErr == nil {
+		return nil
+	}
+	return fmt.Errorf("after %d attempt(s): %w", tried, lastErr)
+}
+
+func isRetryableTransientError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+	s := strings.ToLower(err.Error())
+
+	nonRetry := []string{
+		"invalid browser",
+		"usage:",
+		"unknown ",
+		"parse",
+		"not authorized to send apple events",
+		"not allowed assistive access",
+	}
+	for _, token := range nonRetry {
+		if strings.Contains(s, token) {
+			return false
+		}
+	}
+
+	retry := []string{
+		"timeout",
+		"tempor",
+		"connection reset",
+		"connection refused",
+		"broken pipe",
+		"eof",
+		"no tab found",
+		"application isn't running",
+		"application isn’t running",
+	}
+	for _, token := range retry {
+		if strings.Contains(s, token) {
+			return true
+		}
+	}
+	return false
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 func playEpisodeInWebPlayer(ctx context.Context, browser, browserApp, urlContains, webBase string, ep pocketcasts.UpNextEpisode) int {

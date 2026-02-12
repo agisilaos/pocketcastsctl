@@ -1,12 +1,15 @@
 package main
 
 import (
+	"context"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"pocketcastsctl/internal/config"
 )
@@ -203,6 +206,49 @@ func TestRunAuthStatusJSON(t *testing.T) {
 	}
 	if strings.TrimSpace(stderr) != "" {
 		t.Fatalf("stderr not empty: %q", stderr)
+	}
+}
+
+func TestRetryTransientSuccessAfterRetry(t *testing.T) {
+	attempts := 0
+	err := retryTransient(context.Background(), 3, time.Millisecond, func() error {
+		attempts++
+		if attempts < 2 {
+			return fmt.Errorf("connection refused")
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("retryTransient() error = %v, want nil", err)
+	}
+	if attempts != 2 {
+		t.Fatalf("attempts = %d, want 2", attempts)
+	}
+}
+
+func TestRetryTransientNonRetryableNoRetry(t *testing.T) {
+	attempts := 0
+	err := retryTransient(context.Background(), 3, time.Millisecond, func() error {
+		attempts++
+		return fmt.Errorf("invalid browser options")
+	})
+	if err == nil {
+		t.Fatalf("retryTransient() error = nil, want non-nil")
+	}
+	if attempts != 1 {
+		t.Fatalf("attempts = %d, want 1", attempts)
+	}
+	if !strings.Contains(err.Error(), "after 1 attempt(s):") {
+		t.Fatalf("unexpected wrapped error: %v", err)
+	}
+}
+
+func TestIsRetryableTransientError(t *testing.T) {
+	if !isRetryableTransientError(fmt.Errorf("connection reset by peer")) {
+		t.Fatalf("expected retryable transient error")
+	}
+	if isRetryableTransientError(fmt.Errorf("invalid browser options")) {
+		t.Fatalf("expected non-retryable error")
 	}
 }
 
