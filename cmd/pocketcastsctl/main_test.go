@@ -1,7 +1,10 @@
 package main
 
 import (
+	"io"
+	"os"
 	"reflect"
+	"strings"
 	"testing"
 
 	"pocketcastsctl/internal/config"
@@ -85,4 +88,104 @@ func TestRedactedConfig(t *testing.T) {
 	if got := revealed.APIHeaders["Authorization"]; got != "Bearer abc123" {
 		t.Fatalf("revealed header = %q, want original value", got)
 	}
+}
+
+func TestRunHelpQueueAPILeaf(t *testing.T) {
+	code, stdout, stderr := runForTest(t, []string{"help", "queue", "api", "rm"}, "")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr=%q", code, stderr)
+	}
+	if !strings.Contains(stdout, "pocketcastsctl queue api rm [--dry-run] [--force|--no-input]") {
+		t.Fatalf("stdout missing queue api rm usage: %q", stdout)
+	}
+}
+
+func TestRunQueueHelpFlag(t *testing.T) {
+	code, stdout, stderr := runForTest(t, []string{"queue", "--help"}, "")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr=%q", code, stderr)
+	}
+	if !strings.Contains(stdout, "pocketcastsctl queue ls") {
+		t.Fatalf("stdout missing queue help: %q", stdout)
+	}
+}
+
+func TestRunUnknownHelpTopic(t *testing.T) {
+	code, _, stderr := runForTest(t, []string{"help", "queue", "api", "unknown"}, "")
+	if code != 2 {
+		t.Fatalf("exit code = %d, want 2", code)
+	}
+	if !strings.Contains(stderr, "unknown help topic: queue api unknown") {
+		t.Fatalf("stderr missing unknown help message: %q", stderr)
+	}
+}
+
+func TestRunAliasDeprecationWarning(t *testing.T) {
+	code, _, stderr := runForTest(t, []string{"ls", "--help"}, "")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr=%q", code, stderr)
+	}
+	if !strings.Contains(stderr, "shortcut is deprecated") {
+		t.Fatalf("stderr missing deprecation warning: %q", stderr)
+	}
+}
+
+func TestRunQueueRemoveRequiresForceNonInteractive(t *testing.T) {
+	code, _, stderr := runForTest(t, []string{"queue", "api", "rm", "episode-1"}, "")
+	if code != 2 {
+		t.Fatalf("exit code = %d, want 2", code)
+	}
+	if !strings.Contains(stderr, "non-interactive mode requires --force") {
+		t.Fatalf("stderr missing safety message: %q", stderr)
+	}
+}
+
+func runForTest(t *testing.T, args []string, stdin string) (int, string, string) {
+	t.Helper()
+
+	origStdout := os.Stdout
+	origStderr := os.Stderr
+	origStdin := os.Stdin
+	defer func() {
+		os.Stdout = origStdout
+		os.Stderr = origStderr
+		os.Stdin = origStdin
+	}()
+
+	outR, outW, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("stdout pipe: %v", err)
+	}
+	errR, errW, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("stderr pipe: %v", err)
+	}
+	inR, inW, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("stdin pipe: %v", err)
+	}
+
+	if stdin != "" {
+		if _, err := io.WriteString(inW, stdin); err != nil {
+			t.Fatalf("stdin write: %v", err)
+		}
+	}
+	_ = inW.Close()
+
+	os.Stdout = outW
+	os.Stderr = errW
+	os.Stdin = inR
+
+	code := run(args)
+
+	_ = outW.Close()
+	_ = errW.Close()
+
+	outBytes, _ := io.ReadAll(outR)
+	errBytes, _ := io.ReadAll(errR)
+	_ = outR.Close()
+	_ = errR.Close()
+	_ = inR.Close()
+
+	return code, string(outBytes), string(errBytes)
 }
