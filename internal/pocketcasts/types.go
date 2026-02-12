@@ -5,4 +5,3 @@ type QueueItem struct {
 	Title string
 	URL   string
 }
-
