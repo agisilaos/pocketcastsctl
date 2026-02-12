@@ -93,29 +93,137 @@ func runHelp(args []string) int {
 	}
 	switch args[0] {
 	case "config":
-		printConfigHelp()
+		if len(args) == 1 {
+			printConfigHelp()
+			return 0
+		}
+		switch args[1] {
+		case "init":
+			printConfigInitHelp()
+		case "path":
+			printConfigPathHelp()
+		case "show":
+			printConfigShowHelp()
+		default:
+			return unknownHelpTopic(args)
+		}
 	case "auth":
-		printAuthHelp()
+		if len(args) == 1 {
+			printAuthHelp()
+			return 0
+		}
+		switch args[1] {
+		case "login":
+			printAuthLoginHelp()
+		case "sync":
+			printAuthSyncHelp()
+		case "tabs":
+			printAuthTabsHelp()
+		case "clear":
+			printAuthClearHelp()
+		default:
+			return unknownHelpTopic(args)
+		}
 	case "web":
-		printWebHelp()
+		if len(args) == 1 {
+			printWebHelp()
+			return 0
+		}
+		switch args[1] {
+		case "play":
+			printWebPlayHelp()
+		case "pause":
+			printWebPauseHelp()
+		case "toggle":
+			printWebToggleHelp()
+		case "next":
+			printWebNextHelp()
+		case "prev":
+			printWebPrevHelp()
+		case "status":
+			printWebStatusHelp()
+		default:
+			return unknownHelpTopic(args)
+		}
 	case "queue":
-		if len(args) > 1 && args[1] == "api" {
+		if len(args) == 1 {
+			printQueueHelp()
+			return 0
+		}
+		if args[1] == "ls" {
+			printQueueLSHelp()
+			return 0
+		}
+		if args[1] == "api" && len(args) == 2 {
 			printQueueAPIHelp()
 			return 0
 		}
-		printQueueHelp()
+		if args[1] == "api" && len(args) > 2 {
+			switch args[2] {
+			case "ls":
+				printQueueAPILSHelp()
+			case "add":
+				printQueueAPIAddHelp()
+			case "rm":
+				printQueueAPIRMHelp()
+			case "play":
+				printQueueAPIPlayHelp()
+			case "pick":
+				printQueueAPIPickHelp()
+			default:
+				return unknownHelpTopic(args)
+			}
+			return 0
+		}
+		return unknownHelpTopic(args)
 	case "local":
-		printLocalHelp()
+		if len(args) == 1 {
+			printLocalHelp()
+			return 0
+		}
+		switch args[1] {
+		case "pick":
+			printLocalPickHelp()
+		case "play":
+			printLocalPlayHelp()
+		case "pause":
+			printLocalPauseHelp()
+		case "resume":
+			printLocalResumeHelp()
+		case "stop":
+			printLocalStopHelp()
+		case "status":
+			printLocalStatusHelp()
+		default:
+			return unknownHelpTopic(args)
+		}
 	case "har":
-		printHARHelp()
+		if len(args) == 1 {
+			printHARHelp()
+			return 0
+		}
+		switch args[1] {
+		case "summarize":
+			printHARSummarizeHelp()
+		case "graphql":
+			printHARGraphQLHelp()
+		case "redact":
+			printHARRedactHelp()
+		default:
+			return unknownHelpTopic(args)
+		}
 	case "completion":
 		printCompletionHelp()
 	default:
-		fmt.Fprintf(os.Stderr, "unknown help topic: %s\n\n", args[0])
-		printRootHelp()
-		return 2
+		return unknownHelpTopic(args)
 	}
 	return 0
+}
+
+func unknownHelpTopic(args []string) int {
+	fmt.Fprintf(os.Stderr, "unknown help topic: %s\n\n", strings.Join(args, " "))
+	printRootHelp()
+	return 2
 }
 
 func rewriteAliases(args []string) ([]string, string) {
@@ -167,7 +275,7 @@ Usage:
   pocketcastsctl queue ls [--json] [--browser <name>] [--browser-app <app>] [--url-contains needle]
   pocketcastsctl queue api ls [--limit N] [--search q] [--json|--raw] [--plain]
   pocketcastsctl queue api add (--uuid id --podcast id --title t --published rfc3339 --url audioUrl) | (--episode-json json)
-  pocketcastsctl queue api rm <episode-uuid...>
+  pocketcastsctl queue api rm [--dry-run] [--force|--no-input] <episode-uuid...>
   pocketcastsctl queue api play <index|uuid> [--browser <name>] [--browser-app <app>] [--url-contains needle]
   pocketcastsctl queue api pick [--search q] [--browser <name>] [--browser-app <app>] [--url-contains needle]
   pocketcastsctl har summarize [--host host] [--json] <file.har>   (use --host= to disable filtering)
@@ -195,6 +303,18 @@ Usage:
 `) + "\n")
 }
 
+func printConfigInitHelp() {
+	fmt.Println("Usage:\n  pocketcastsctl config init")
+}
+
+func printConfigPathHelp() {
+	fmt.Println("Usage:\n  pocketcastsctl config path")
+}
+
+func printConfigShowHelp() {
+	fmt.Println("Usage:\n  pocketcastsctl config show [--json] [--reveal-secrets]")
+}
+
 func printAuthHelp() {
 	fmt.Print(strings.TrimSpace(`
 Usage:
@@ -205,11 +325,51 @@ Usage:
 `) + "\n")
 }
 
+func printAuthLoginHelp() {
+	fmt.Println("Usage:\n  pocketcastsctl auth login [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--url-contains needle]")
+}
+
+func printAuthSyncHelp() {
+	fmt.Println("Usage:\n  pocketcastsctl auth sync [--browser <name>] [--browser-app <app>] [--url-contains needle] [--header name] [--prefix pfx] [--key-contains q] [--dry-run]")
+}
+
+func printAuthTabsHelp() {
+	fmt.Println("Usage:\n  pocketcastsctl auth tabs [--browser <name>] [--browser-app <app>]")
+}
+
+func printAuthClearHelp() {
+	fmt.Println("Usage:\n  pocketcastsctl auth clear")
+}
+
 func printWebHelp() {
 	fmt.Print(strings.TrimSpace(`
 Usage:
   pocketcastsctl web <play|pause|toggle|next|prev|status> [--browser <name>] [--browser-app <app>] [--url-contains needle]
 `) + "\n")
+}
+
+func printWebPlayHelp() {
+	fmt.Println("Usage:\n  pocketcastsctl web play [--browser <name>] [--browser-app <app>] [--url-contains needle]")
+}
+
+func printWebPauseHelp() {
+	fmt.Println("Usage:\n  pocketcastsctl web pause [--browser <name>] [--browser-app <app>] [--url-contains needle]")
+}
+
+func printWebToggleHelp() {
+	fmt.Println("Usage:\n  pocketcastsctl web toggle [--browser <name>] [--browser-app <app>] [--url-contains needle]")
+}
+
+func printWebNextHelp() {
+	fmt.Println("Usage:\n  pocketcastsctl web next [--browser <name>] [--browser-app <app>] [--url-contains needle]")
+}
+
+func printWebPrevHelp() {
+	fmt.Println("Usage:\n  pocketcastsctl web prev [--browser <name>] [--browser-app <app>] [--url-contains needle]")
+}
+
+func printWebStatusHelp() {
+	fmt.Println("Usage:\n  pocketcastsctl web status [--browser <name>] [--browser-app <app>] [--url-contains needle]")
 }
 
 func printQueueHelp() {
@@ -224,6 +384,10 @@ Usage:
 `) + "\n")
 }
 
+func printQueueLSHelp() {
+	fmt.Println("Usage:\n  pocketcastsctl queue ls [--json] [--plain] [--search q] [--limit N] [--browser <name>] [--browser-app <app>] [--url-contains needle]")
+}
+
 func printQueueAPIHelp() {
 	fmt.Print(strings.TrimSpace(`
 Usage:
@@ -235,6 +399,26 @@ Usage:
 `) + "\n")
 }
 
+func printQueueAPILSHelp() {
+	fmt.Println("Usage:\n  pocketcastsctl queue api ls [--limit N] [--search q] [--json|--raw] [--plain]")
+}
+
+func printQueueAPIAddHelp() {
+	fmt.Println("Usage:\n  pocketcastsctl queue api add (--uuid id --podcast id --title t --published rfc3339 --url audioUrl) | (--episode-json json) [--raw]")
+}
+
+func printQueueAPIRMHelp() {
+	fmt.Println("Usage:\n  pocketcastsctl queue api rm [--dry-run] [--force|--no-input] [--raw] <episode-uuid...>")
+}
+
+func printQueueAPIPlayHelp() {
+	fmt.Println("Usage:\n  pocketcastsctl queue api play <index|uuid> [--search q] [--browser <name>] [--browser-app <app>] [--url-contains needle] [--web-base url]")
+}
+
+func printQueueAPIPickHelp() {
+	fmt.Println("Usage:\n  pocketcastsctl queue api pick [--search q] [--limit N] [--no-play] [--browser <name>] [--browser-app <app>] [--url-contains needle] [--web-base url]")
+}
+
 func printLocalHelp() {
 	fmt.Print(strings.TrimSpace(`
 Usage:
@@ -244,6 +428,30 @@ Usage:
 `) + "\n")
 }
 
+func printLocalPickHelp() {
+	fmt.Println("Usage:\n  pocketcastsctl local pick [--search q] [--limit N]")
+}
+
+func printLocalPlayHelp() {
+	fmt.Println("Usage:\n  pocketcastsctl local play <index|uuid>")
+}
+
+func printLocalPauseHelp() {
+	fmt.Println("Usage:\n  pocketcastsctl local pause")
+}
+
+func printLocalResumeHelp() {
+	fmt.Println("Usage:\n  pocketcastsctl local resume")
+}
+
+func printLocalStopHelp() {
+	fmt.Println("Usage:\n  pocketcastsctl local stop")
+}
+
+func printLocalStatusHelp() {
+	fmt.Println("Usage:\n  pocketcastsctl local status")
+}
+
 func printHARHelp() {
 	fmt.Print(strings.TrimSpace(`
 Usage:
@@ -251,6 +459,18 @@ Usage:
   pocketcastsctl har graphql [--host host] [--json] <file.har>     (use --host= to disable filtering)
   pocketcastsctl har redact <in.har> <out.har>
 `) + "\n")
+}
+
+func printHARSummarizeHelp() {
+	fmt.Println("Usage:\n  pocketcastsctl har summarize [--host host] [--json] <file.har>")
+}
+
+func printHARGraphQLHelp() {
+	fmt.Println("Usage:\n  pocketcastsctl har graphql [--host host] [--json] <file.har>")
+}
+
+func printHARRedactHelp() {
+	fmt.Println("Usage:\n  pocketcastsctl har redact <in.har> <out.har>")
 }
 
 func printCompletionHelp() {
