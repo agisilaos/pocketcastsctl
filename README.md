@@ -53,6 +53,8 @@ Recommended first-run flow:
 ./bin/pocketcastsctl queue api play 1
 ```
 
+`doctor` validates setup (browser automation, config, auth presence, and API auth validity when configured) and suggests next actions.
+
 ### I/O contract
 
 - Primary command output is written to `stdout`.
@@ -136,6 +138,15 @@ If it finds the wrong thing, use:
 ```bash
 ./pocketcastsctl auth sync --dry-run
 ./pocketcastsctl auth sync --key-contains token
+```
+
+If `queue api` commands return `401 Unauthorized`, refresh credentials:
+
+```bash
+./bin/pocketcastsctl auth sync
+# if still failing:
+./bin/pocketcastsctl auth login
+./bin/pocketcastsctl auth sync
 ```
 
 Note: some setups appear to work without an explicit stored auth header; `queue api ls` will attempt the request either way.

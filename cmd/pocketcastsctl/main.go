@@ -766,11 +766,12 @@ func runAuthStatus(args []string, cfg config.Config) int {
 	}
 
 	status := map[string]any{
-		"config_path":           config.Path(),
-		"api_headers_count":     count,
-		"authorization_present": authHeader,
-		"browser":               cfg.Browser,
-		"url_contains":          cfg.URLContains,
+		"config_path":            redactUserPath(config.Path()),
+		"api_headers_count":      count,
+		"authorization_present":  authHeader,
+		"authorization_verified": false,
+		"browser":                cfg.Browser,
+		"url_contains":           cfg.URLContains,
 	}
 
 	if *jsonOut {
@@ -783,6 +784,7 @@ func runAuthStatus(args []string, cfg config.Config) int {
 	if authHeader {
 		fmt.Println("auth status:", overall)
 		fmt.Println("[OK] authorization: configured")
+		fmt.Println("[WARN] authorization validity: not verified (run `pocketcastsctl doctor`)")
 	} else {
 		overall = "WARN"
 		fmt.Println("auth status:", overall)
@@ -1660,7 +1662,7 @@ func runDoctor(args []string, cfg config.Config) int {
 }
 
 func collectDoctorChecks(cfg config.Config) []doctorCheck {
-	checks := make([]doctorCheck, 0, 6)
+	checks := make([]doctorCheck, 0, 7)
 
 	if _, err := exec.LookPath("osascript"); err != nil {
 		checks = append(checks, doctorCheck{
@@ -1707,7 +1709,7 @@ func collectDoctorChecks(cfg config.Config) []doctorCheck {
 		checks = append(checks, doctorCheck{
 			ID:      "config_file",
 			Status:  "ok",
-			Message: config.Path(),
+			Message: redactUserPath(config.Path()),
 		})
 	}
 
@@ -1731,6 +1733,38 @@ func collectDoctorChecks(cfg config.Config) []doctorCheck {
 			Message: "Authorization header missing",
 			Hint:    "run `pocketcastsctl auth login` then `pocketcastsctl auth sync`",
 		})
+	}
+
+	if authConfigured {
+		client := pocketcasts.New(pocketcasts.Options{
+			BaseURL: cfg.APIBaseURL,
+			Headers: cfg.APIHeaders,
+		})
+		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+		defer cancel()
+		if _, err := fetchUpNextWithRetry(ctx, client, "0"); err != nil {
+			if isUnauthorizedError(err) {
+				checks = append(checks, doctorCheck{
+					ID:      "auth_validation",
+					Status:  "fail",
+					Message: "stored auth is rejected (401 Unauthorized)",
+					Hint:    "run `pocketcastsctl auth sync` (or `auth login` then `auth sync`)",
+				})
+			} else {
+				checks = append(checks, doctorCheck{
+					ID:      "auth_validation",
+					Status:  "warn",
+					Message: fmt.Sprintf("unable to validate auth now (%v)", err),
+					Hint:    "retry later; if queue commands fail, run `pocketcastsctl auth sync`",
+				})
+			}
+		} else {
+			checks = append(checks, doctorCheck{
+				ID:      "auth_validation",
+				Status:  "ok",
+				Message: "stored auth accepted by API",
+			})
+		}
 	}
 
 	if _, err := exec.LookPath("mpv"); err == nil {
@@ -1838,6 +1872,9 @@ func runQueueAPILS(args []string, client *pocketcasts.Client, ctx context.Contex
 	body, err := fetchUpNextWithRetry(ctx, client, serverModified)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "queue api ls failed: %v\n", err)
+		if isUnauthorizedError(err) {
+			printAuthRecoveryHint()
+		}
 		return 1
 	}
 
@@ -2061,6 +2098,9 @@ func runQueueAPIPlay(args []string, cfg config.Config, client *pocketcasts.Clien
 	body, err := fetchUpNextWithRetry(ctx, client, "0")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "queue api play: failed to fetch queue: %v\n", err)
+		if isUnauthorizedError(err) {
+			printAuthRecoveryHint()
+		}
 		return 1
 	}
 	eps, err := pocketcasts.ExtractUpNextEpisodes(body)
@@ -2108,6 +2148,9 @@ func runQueueAPIPick(args []string, cfg config.Config, client *pocketcasts.Clien
 	body, err := fetchUpNextWithRetry(ctx, client, "0")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "queue api pick: failed to fetch queue: %v\n", err)
+		if isUnauthorizedError(err) {
+			printAuthRecoveryHint()
+		}
 		return 1
 	}
 	eps, err := pocketcasts.ExtractUpNextEpisodes(body)
@@ -2289,6 +2332,33 @@ func isRetryableTransientError(err error) bool {
 		}
 	}
 	return false
+}
+
+func isUnauthorizedError(err error) bool {
+	if err == nil {
+		return false
+	}
+	s := strings.ToLower(err.Error())
+	return strings.Contains(s, "401") && strings.Contains(s, "unauthorized")
+}
+
+func printAuthRecoveryHint() {
+	fmt.Fprintln(os.Stderr, "tip: refresh credentials with `pocketcastsctl auth sync`")
+	fmt.Fprintln(os.Stderr, "tip: if needed, run `pocketcastsctl auth login` then `pocketcastsctl auth sync`")
+}
+
+func redactUserPath(p string) string {
+	home, err := os.UserHomeDir()
+	if err != nil || strings.TrimSpace(home) == "" {
+		return p
+	}
+	if p == home {
+		return "~"
+	}
+	if strings.HasPrefix(p, home+"/") {
+		return "~" + strings.TrimPrefix(p, home)
+	}
+	return p
 }
 
 func max(a, b int) int {

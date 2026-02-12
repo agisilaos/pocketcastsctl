@@ -258,6 +258,26 @@ func TestIsRetryableTransientError(t *testing.T) {
 	}
 }
 
+func TestIsUnauthorizedError(t *testing.T) {
+	if !isUnauthorizedError(fmt.Errorf("http 401: Unauthorized")) {
+		t.Fatalf("expected unauthorized error to be detected")
+	}
+	if isUnauthorizedError(fmt.Errorf("http 500: internal error")) {
+		t.Fatalf("did not expect non-401 error to be detected as unauthorized")
+	}
+}
+
+func TestRedactUserPath(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil || strings.TrimSpace(home) == "" {
+		t.Skip("home dir unavailable")
+	}
+	got := redactUserPath(filepath.Join(home, "Library", "Application Support", "pocketcastsctl", "config.json"))
+	if !strings.HasPrefix(got, "~/") {
+		t.Fatalf("expected redacted path to start with ~/, got %q", got)
+	}
+}
+
 func TestSummarizeDoctorChecks(t *testing.T) {
 	ok, warn, fail := summarizeDoctorChecks([]doctorCheck{
 		{Status: "ok"},
