@@ -51,7 +51,7 @@ func TestRewriteAliases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := rewriteAliases(tt.in)
+			got, _ := rewriteAliases(tt.in)
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Fatalf("rewriteAliases(%v) = %v, want %v", tt.in, got, tt.want)
 			}

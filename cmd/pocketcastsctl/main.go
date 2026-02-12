@@ -35,9 +35,12 @@ func main() {
 }
 
 func run(args []string) int {
-	if len(args) == 0 || args[0] == "help" || args[0] == "-h" || args[0] == "--help" {
-		printHelp()
+	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" {
+		printRootHelp()
 		return 0
+	}
+	if args[0] == "help" {
+		return runHelp(args[1:])
 	}
 	if args[0] == "--version" || args[0] == "version" {
 		fmt.Println(formatVersion())
@@ -46,7 +49,10 @@ func run(args []string) int {
 
 	cfg, _ := config.Load()
 
-	args = rewriteAliases(args)
+	args, aliasWarning := rewriteAliases(args)
+	if aliasWarning != "" {
+		fmt.Fprintln(os.Stderr, aliasWarning)
+	}
 
 	switch args[0] {
 	case "config":
@@ -65,57 +71,93 @@ func run(args []string) int {
 		return runCompletion(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown command: %s\n\n", args[0])
-		printHelp()
+		printRootHelp()
 		return 2
 	}
 }
 
-func rewriteAliases(args []string) []string {
-	if len(args) == 0 {
-		return args
-	}
-	switch args[0] {
-	case "ls":
-		return append([]string{"queue", "api", "ls"}, args[1:]...)
-	case "play":
-		return append([]string{"queue", "api", "play"}, args[1:]...)
-	case "pick":
-		return append([]string{"queue", "api", "pick"}, args[1:]...)
-	case "login":
-		return append([]string{"auth", "login"}, args[1:]...)
-	case "rm":
-		return append([]string{"queue", "api", "rm"}, args[1:]...)
-	case "toggle":
-		return append([]string{"web", "toggle"}, args[1:]...)
-	case "next":
-		return append([]string{"web", "next"}, args[1:]...)
-	case "prev":
-		return append([]string{"web", "prev"}, args[1:]...)
-	case "pause":
-		return append([]string{"web", "pause"}, args[1:]...)
-	case "status":
-		return append([]string{"web", "status"}, args[1:]...)
+func isHelpArg(s string) bool {
+	switch s {
+	case "help", "-h", "--help":
+		return true
 	default:
-		return args
+		return false
 	}
 }
 
-func printHelp() {
+func runHelp(args []string) int {
+	if len(args) == 0 {
+		printRootHelp()
+		return 0
+	}
+	switch args[0] {
+	case "config":
+		printConfigHelp()
+	case "auth":
+		printAuthHelp()
+	case "web":
+		printWebHelp()
+	case "queue":
+		if len(args) > 1 && args[1] == "api" {
+			printQueueAPIHelp()
+			return 0
+		}
+		printQueueHelp()
+	case "local":
+		printLocalHelp()
+	case "har":
+		printHARHelp()
+	case "completion":
+		printCompletionHelp()
+	default:
+		fmt.Fprintf(os.Stderr, "unknown help topic: %s\n\n", args[0])
+		printRootHelp()
+		return 2
+	}
+	return 0
+}
+
+func rewriteAliases(args []string) ([]string, string) {
+	if len(args) == 0 {
+		return args, ""
+	}
+	switch args[0] {
+	case "ls":
+		return append([]string{"queue", "api", "ls"}, args[1:]...), aliasWarning("ls", "queue api ls")
+	case "play":
+		return append([]string{"queue", "api", "play"}, args[1:]...), aliasWarning("play", "queue api play")
+	case "pick":
+		return append([]string{"queue", "api", "pick"}, args[1:]...), aliasWarning("pick", "queue api pick")
+	case "login":
+		return append([]string{"auth", "login"}, args[1:]...), aliasWarning("login", "auth login")
+	case "rm":
+		return append([]string{"queue", "api", "rm"}, args[1:]...), aliasWarning("rm", "queue api rm")
+	case "toggle":
+		return append([]string{"web", "toggle"}, args[1:]...), aliasWarning("toggle", "web toggle")
+	case "next":
+		return append([]string{"web", "next"}, args[1:]...), aliasWarning("next", "web next")
+	case "prev":
+		return append([]string{"web", "prev"}, args[1:]...), aliasWarning("prev", "web prev")
+	case "pause":
+		return append([]string{"web", "pause"}, args[1:]...), aliasWarning("pause", "web pause")
+	case "status":
+		return append([]string{"web", "status"}, args[1:]...), aliasWarning("status", "web status")
+	default:
+		return args, ""
+	}
+}
+
+func aliasWarning(oldCmd, newCmd string) string {
+	return fmt.Sprintf("warning: `%s` shortcut is deprecated; use `pocketcastsctl %s` (planned removal: v0.3.0)", oldCmd, newCmd)
+}
+
+func printRootHelp() {
 	fmt.Print(strings.TrimSpace(`
 pocketcastsctl controls the Pocket Casts Web Player (macOS).
 
 Usage:
   pocketcastsctl --version
   pocketcastsctl version
-  pocketcastsctl ls
-  pocketcastsctl pick
-  pocketcastsctl play <index|uuid>
-  pocketcastsctl rm <episode-uuid...>
-  pocketcastsctl toggle|next|prev|pause|status
-  pocketcastsctl local pick
-  pocketcastsctl local play <index|uuid>
-  pocketcastsctl local pause|resume|stop|status
-  pocketcastsctl login
   pocketcastsctl auth login [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com]
   pocketcastsctl auth sync [--browser <name>] [--browser-app <app>] [--url-contains needle]
   pocketcastsctl auth tabs [--browser <name>] [--browser-app <app>]
@@ -132,6 +174,86 @@ Usage:
   pocketcastsctl har redact <in.har> <out.har>
   pocketcastsctl config init
   pocketcastsctl help
+
+Deprecated shortcuts (use canonical commands above):
+  pocketcastsctl login
+  pocketcastsctl ls
+  pocketcastsctl pick
+  pocketcastsctl play <index|uuid>
+  pocketcastsctl rm <episode-uuid...>
+  pocketcastsctl toggle|next|prev|pause|status
+`) + "\n")
+}
+
+func printConfigHelp() {
+	fmt.Print(strings.TrimSpace(`
+Usage:
+  pocketcastsctl config init
+`) + "\n")
+}
+
+func printAuthHelp() {
+	fmt.Print(strings.TrimSpace(`
+Usage:
+  pocketcastsctl auth login [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com]
+  pocketcastsctl auth sync [--browser <name>] [--browser-app <app>] [--url-contains needle]
+  pocketcastsctl auth tabs [--browser <name>] [--browser-app <app>]
+  pocketcastsctl auth clear
+`) + "\n")
+}
+
+func printWebHelp() {
+	fmt.Print(strings.TrimSpace(`
+Usage:
+  pocketcastsctl web <play|pause|toggle|next|prev|status> [--browser <name>] [--browser-app <app>] [--url-contains needle]
+`) + "\n")
+}
+
+func printQueueHelp() {
+	fmt.Print(strings.TrimSpace(`
+Usage:
+  pocketcastsctl queue ls [--json] [--browser <name>] [--browser-app <app>] [--url-contains needle]
+  pocketcastsctl queue api ls [--limit N] [--search q] [--json|--raw] [--plain]
+  pocketcastsctl queue api add (--uuid id --podcast id --title t --published rfc3339 --url audioUrl) | (--episode-json json)
+  pocketcastsctl queue api rm <episode-uuid...>
+  pocketcastsctl queue api play <index|uuid> [--browser <name>] [--browser-app <app>] [--url-contains needle]
+  pocketcastsctl queue api pick [--search q] [--browser <name>] [--browser-app <app>] [--url-contains needle]
+`) + "\n")
+}
+
+func printQueueAPIHelp() {
+	fmt.Print(strings.TrimSpace(`
+Usage:
+  pocketcastsctl queue api ls [--limit N] [--search q] [--json|--raw] [--plain]
+  pocketcastsctl queue api add (--uuid id --podcast id --title t --published rfc3339 --url audioUrl) | (--episode-json json)
+  pocketcastsctl queue api rm <episode-uuid...>
+  pocketcastsctl queue api play <index|uuid> [--browser <name>] [--browser-app <app>] [--url-contains needle]
+  pocketcastsctl queue api pick [--search q] [--browser <name>] [--browser-app <app>] [--url-contains needle]
+`) + "\n")
+}
+
+func printLocalHelp() {
+	fmt.Print(strings.TrimSpace(`
+Usage:
+  pocketcastsctl local pick
+  pocketcastsctl local play <index|uuid>
+  pocketcastsctl local pause|resume|stop|status
+`) + "\n")
+}
+
+func printHARHelp() {
+	fmt.Print(strings.TrimSpace(`
+Usage:
+  pocketcastsctl har summarize [--host host] [--json] <file.har>   (use --host= to disable filtering)
+  pocketcastsctl har graphql [--host host] [--json] <file.har>     (use --host= to disable filtering)
+  pocketcastsctl har redact <in.har> <out.har>
+`) + "\n")
+}
+
+func printCompletionHelp() {
+	fmt.Print(strings.TrimSpace(`
+Usage:
+  pocketcastsctl completion <bash|zsh|fish>
 `) + "\n")
 }
 
@@ -140,9 +262,9 @@ func formatVersion() string {
 }
 
 func runConfig(args []string, cfg config.Config) int {
-	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "config requires a subcommand (init)")
-		return 2
+	if len(args) == 0 || isHelpArg(args[0]) {
+		printConfigHelp()
+		return 0
 	}
 
 	switch args[0] {
@@ -160,9 +282,9 @@ func runConfig(args []string, cfg config.Config) int {
 }
 
 func runAuth(args []string, cfg config.Config) int {
-	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "auth requires a subcommand (login/sync/tabs/clear)")
-		return 2
+	if len(args) == 0 || isHelpArg(args[0]) {
+		printAuthHelp()
+		return 0
 	}
 
 	switch args[0] {
@@ -513,9 +635,9 @@ func decodeJWTPart(s string) ([]byte, error) {
 }
 
 func runWeb(args []string, cfg config.Config) int {
-	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "web requires a subcommand (play/pause/toggle/next/prev/status)")
-		return 2
+	if len(args) == 0 || isHelpArg(args[0]) {
+		printWebHelp()
+		return 0
 	}
 
 	fs := flag.NewFlagSet("web", flag.ContinueOnError)
@@ -584,11 +706,15 @@ func runWebAction(ctx context.Context, controller *browsercontrol.Controller, ac
 }
 
 func runQueue(args []string, cfg config.Config) int {
-	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "queue requires a subcommand (ls)")
-		return 2
+	if len(args) == 0 || isHelpArg(args[0]) {
+		printQueueHelp()
+		return 0
 	}
 	if args[0] == "api" {
+		if len(args) > 1 && isHelpArg(args[1]) {
+			printQueueAPIHelp()
+			return 0
+		}
 		return runQueueAPI(args[1:], cfg)
 	}
 	if args[0] != "ls" {
@@ -665,9 +791,9 @@ func runQueue(args []string, cfg config.Config) int {
 }
 
 func runLocal(args []string, cfg config.Config) int {
-	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "local requires a subcommand (pick/play/pause/resume/stop/status)")
-		return 2
+	if len(args) == 0 || isHelpArg(args[0]) {
+		printLocalHelp()
+		return 0
 	}
 	switch args[0] {
 	case "pick":
@@ -889,9 +1015,9 @@ func runLocalStatus(cfg config.Config) int {
 }
 
 func runHAR(args []string) int {
-	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "har requires a subcommand (summarize/redact)")
-		return 2
+	if len(args) == 0 || isHelpArg(args[0]) {
+		printHARHelp()
+		return 0
 	}
 
 	switch args[0] {
@@ -986,6 +1112,10 @@ func runHARGraphQL(args []string) int {
 }
 
 func runCompletion(args []string) int {
+	if len(args) == 0 || isHelpArg(args[0]) {
+		printCompletionHelp()
+		return 0
+	}
 	if len(args) != 1 {
 		fmt.Fprintln(os.Stderr, "usage: pocketcastsctl completion <bash|zsh|fish>")
 		return 2
@@ -1037,9 +1167,9 @@ complete -c pocketcastsctl -f -a "$commands"
 }
 
 func runQueueAPI(args []string, cfg config.Config) int {
-	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "queue api requires a subcommand (ls/add/rm/play/pick)")
-		return 2
+	if len(args) == 0 || isHelpArg(args[0]) {
+		printQueueAPIHelp()
+		return 0
 	}
 
 	client := pocketcasts.New(pocketcasts.Options{
