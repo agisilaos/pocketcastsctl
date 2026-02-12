@@ -173,3 +173,7 @@ The release workflow mirrors [`homepodctl`](https://github.com/agisilaos/homepod
   - Update the Homebrew tap (`agisilaos/homebrew-tap`)
 
 Run the release on macOS with a clean git tree.
+
+## Roadmap
+
+See `ROADMAP.md` for the current milestone plan (`v0.1.3`) and acceptance criteria.
