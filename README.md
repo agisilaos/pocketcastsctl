@@ -39,7 +39,18 @@ Show build metadata:
 ```bash
 ./bin/pocketcastsctl --version
 ./bin/pocketcastsctl help
+./bin/pocketcastsctl help start
 ./bin/pocketcastsctl help queue api
+```
+
+Recommended first-run flow:
+
+```bash
+./bin/pocketcastsctl doctor
+./bin/pocketcastsctl auth login
+./bin/pocketcastsctl auth sync
+./bin/pocketcastsctl queue api ls
+./bin/pocketcastsctl queue api play 1
 ```
 
 ### I/O contract

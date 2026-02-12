@@ -58,6 +58,8 @@ func run(args []string) int {
 	switch args[0] {
 	case "config":
 		return runConfig(args[1:], cfg)
+	case "doctor":
+		return runDoctor(args[1:], cfg)
 	case "auth":
 		return runAuth(args[1:], cfg)
 	case "local":
@@ -216,6 +218,10 @@ func runHelp(args []string) int {
 		}
 	case "completion":
 		printCompletionHelp()
+	case "doctor":
+		printDoctorHelp()
+	case "start", "getting-started":
+		printGettingStartedHelp()
 	default:
 		return unknownHelpTopic(args)
 	}
@@ -266,9 +272,28 @@ func printRootHelp() {
 	fmt.Print(strings.TrimSpace(`
 pocketcastsctl controls the Pocket Casts Web Player (macOS).
 
-Usage:
+Start here:
+  pocketcastsctl doctor
+  pocketcastsctl help start
+
+Common tasks:
+  Sign in and sync auth:
+  pocketcastsctl auth login
+  pocketcastsctl auth sync
+
+  Control playback:
+  pocketcastsctl web status
+  pocketcastsctl web toggle
+  pocketcastsctl web next
+
+  Browse and play queue:
+  pocketcastsctl queue api ls
+  pocketcastsctl queue api play 1
+
+Command reference:
   pocketcastsctl --version
   pocketcastsctl version
+  pocketcastsctl doctor [--json]
   pocketcastsctl auth login [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com]
   pocketcastsctl auth sync [--browser <name>] [--browser-app <app>] [--url-contains needle]
   pocketcastsctl auth tabs [--browser <name>] [--browser-app <app>]
@@ -285,7 +310,7 @@ Usage:
   pocketcastsctl har graphql [--host host] [--json] <file.har>     (use --host= to disable filtering)
   pocketcastsctl har redact <in.har> <out.har>
   pocketcastsctl config init|path|show
-  pocketcastsctl help
+  pocketcastsctl help [start|doctor|auth|web|queue|local|har|config|completion]
 
 Deprecated shortcuts (use canonical commands above):
   pocketcastsctl login
@@ -294,6 +319,20 @@ Deprecated shortcuts (use canonical commands above):
   pocketcastsctl play <index|uuid>
   pocketcastsctl rm <episode-uuid...>
   pocketcastsctl toggle|next|prev|pause|status
+`) + "\n")
+}
+
+func printGettingStartedHelp() {
+	fmt.Print(strings.TrimSpace(`
+Usage:
+  pocketcastsctl help start
+
+Recommended first-run flow:
+  1. pocketcastsctl doctor
+  2. pocketcastsctl auth login
+  3. pocketcastsctl auth sync
+  4. pocketcastsctl queue api ls
+  5. pocketcastsctl queue api play 1
 `) + "\n")
 }
 
@@ -485,6 +524,13 @@ func printCompletionHelp() {
 	fmt.Print(strings.TrimSpace(`
 Usage:
   pocketcastsctl completion <bash|zsh|fish>
+`) + "\n")
+}
+
+func printDoctorHelp() {
+	fmt.Print(strings.TrimSpace(`
+Usage:
+  pocketcastsctl doctor [--json]
 `) + "\n")
 }
 
@@ -720,11 +766,11 @@ func runAuthStatus(args []string, cfg config.Config) int {
 	}
 
 	status := map[string]any{
-		"config_path":          config.Path(),
-		"api_headers_count":    count,
+		"config_path":           config.Path(),
+		"api_headers_count":     count,
 		"authorization_present": authHeader,
-		"browser":              cfg.Browser,
-		"url_contains":         cfg.URLContains,
+		"browser":               cfg.Browser,
+		"url_contains":          cfg.URLContains,
 	}
 
 	if *jsonOut {
@@ -733,16 +779,21 @@ func runAuthStatus(args []string, cfg config.Config) int {
 		return 0
 	}
 
-	fmt.Println("config_path:", status["config_path"])
-	fmt.Println("api_headers_count:", status["api_headers_count"])
+	overall := "OK"
 	if authHeader {
-		fmt.Println("authorization: configured")
+		fmt.Println("auth status:", overall)
+		fmt.Println("[OK] authorization: configured")
 	} else {
-		fmt.Println("authorization: missing")
-		fmt.Fprintln(os.Stderr, "tip: run `pocketcastsctl auth sync` after logging into Pocket Casts web player")
+		overall = "WARN"
+		fmt.Println("auth status:", overall)
+		fmt.Println("[WARN] authorization: missing")
+		fmt.Println("      next: pocketcastsctl auth login")
+		fmt.Println("      next: pocketcastsctl auth sync")
 	}
-	fmt.Println("browser:", status["browser"])
-	fmt.Println("url_contains:", status["url_contains"])
+	fmt.Printf("[OK] api_headers_count: %v\n", status["api_headers_count"])
+	fmt.Printf("[OK] browser: %v\n", status["browser"])
+	fmt.Printf("[OK] url_contains: %v\n", status["url_contains"])
+	fmt.Printf("[OK] config_path: %v\n", status["config_path"])
 	return 0
 }
 
@@ -1510,6 +1561,7 @@ func runCompletion(args []string) int {
 func completionScripts() map[string]string {
 	cmds := []string{
 		"help", "version", "completion",
+		"doctor",
 		"config init",
 		"auth login", "auth sync", "auth tabs", "auth status", "auth clear",
 		"web play", "web pause", "web toggle", "web next", "web prev", "web status",
@@ -1541,6 +1593,197 @@ _pocketcastsctl_completions "$@"
 complete -c pocketcastsctl -f -a "$commands"
 `, strings.Join(cmds, " ")),
 	}
+}
+
+type doctorCheck struct {
+	ID      string `json:"id"`
+	Status  string `json:"status"` // ok|warn|fail
+	Message string `json:"message"`
+	Hint    string `json:"hint,omitempty"`
+}
+
+func runDoctor(args []string, cfg config.Config) int {
+	fs := flag.NewFlagSet("doctor", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	jsonOut := fs.Bool("json", false, "output JSON")
+	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
+		fmt.Fprintf(os.Stderr, "failed to parse flags: %v\n", err)
+		return 2
+	}
+	if fs.NArg() != 0 {
+		fmt.Fprintln(os.Stderr, "usage: pocketcastsctl doctor [--json]")
+		return 2
+	}
+
+	checks := collectDoctorChecks(cfg)
+	okCount, warnCount, failCount := summarizeDoctorChecks(checks)
+	overall := "ok"
+	if failCount > 0 {
+		overall = "fail"
+	} else if warnCount > 0 {
+		overall = "warn"
+	}
+
+	if *jsonOut {
+		out := map[string]any{
+			"status": overall,
+			"counts": map[string]int{
+				"ok":   okCount,
+				"warn": warnCount,
+				"fail": failCount,
+			},
+			"checks": checks,
+		}
+		b, _ := json.MarshalIndent(out, "", "  ")
+		fmt.Println(string(b))
+		if failCount > 0 {
+			return 1
+		}
+		return 0
+	}
+
+	fmt.Println("doctor status:", strings.ToUpper(overall))
+	fmt.Printf("checks: %d ok, %d warn, %d fail\n", okCount, warnCount, failCount)
+	for _, c := range checks {
+		fmt.Printf("[%s] %s: %s\n", strings.ToUpper(c.Status), c.ID, c.Message)
+		if strings.TrimSpace(c.Hint) != "" {
+			fmt.Printf("      next: %s\n", c.Hint)
+		}
+	}
+	if failCount > 0 {
+		return 1
+	}
+	return 0
+}
+
+func collectDoctorChecks(cfg config.Config) []doctorCheck {
+	checks := make([]doctorCheck, 0, 6)
+
+	if _, err := exec.LookPath("osascript"); err != nil {
+		checks = append(checks, doctorCheck{
+			ID:      "macos_automation",
+			Status:  "fail",
+			Message: "osascript not found",
+			Hint:    "run on macOS with AppleScript support",
+		})
+	} else {
+		checks = append(checks, doctorCheck{
+			ID:      "macos_automation",
+			Status:  "ok",
+			Message: "osascript available",
+		})
+	}
+
+	if _, err := browsercontrol.New(browsercontrol.Options{
+		Browser:     cfg.Browser,
+		BrowserApp:  cfg.BrowserApp,
+		URLContains: cfg.URLContains,
+	}); err != nil {
+		checks = append(checks, doctorCheck{
+			ID:      "browser_config",
+			Status:  "fail",
+			Message: err.Error(),
+			Hint:    "set a supported browser via --browser or POCKETCASTS_BROWSER",
+		})
+	} else {
+		checks = append(checks, doctorCheck{
+			ID:      "browser_config",
+			Status:  "ok",
+			Message: fmt.Sprintf("browser=%q url_contains=%q", cfg.Browser, cfg.URLContains),
+		})
+	}
+
+	if _, err := os.Stat(config.Path()); err != nil {
+		checks = append(checks, doctorCheck{
+			ID:      "config_file",
+			Status:  "warn",
+			Message: "config file not found",
+			Hint:    "run `pocketcastsctl config init`",
+		})
+	} else {
+		checks = append(checks, doctorCheck{
+			ID:      "config_file",
+			Status:  "ok",
+			Message: config.Path(),
+		})
+	}
+
+	authConfigured := false
+	for k, v := range cfg.APIHeaders {
+		if strings.EqualFold(strings.TrimSpace(k), "Authorization") && strings.TrimSpace(v) != "" {
+			authConfigured = true
+			break
+		}
+	}
+	if authConfigured {
+		checks = append(checks, doctorCheck{
+			ID:      "auth_header",
+			Status:  "ok",
+			Message: "Authorization header configured",
+		})
+	} else {
+		checks = append(checks, doctorCheck{
+			ID:      "auth_header",
+			Status:  "warn",
+			Message: "Authorization header missing",
+			Hint:    "run `pocketcastsctl auth login` then `pocketcastsctl auth sync`",
+		})
+	}
+
+	if _, err := exec.LookPath("mpv"); err == nil {
+		checks = append(checks, doctorCheck{
+			ID:      "local_player",
+			Status:  "ok",
+			Message: "mpv available",
+		})
+	} else if _, err := exec.LookPath("afplay"); err == nil {
+		checks = append(checks, doctorCheck{
+			ID:      "local_player",
+			Status:  "ok",
+			Message: "afplay available",
+		})
+	} else {
+		checks = append(checks, doctorCheck{
+			ID:      "local_player",
+			Status:  "warn",
+			Message: "no local player found (mpv/afplay)",
+			Hint:    "install mpv for better local playback",
+		})
+	}
+
+	if _, err := exec.LookPath("fzf"); err != nil {
+		checks = append(checks, doctorCheck{
+			ID:      "picker_optional",
+			Status:  "warn",
+			Message: "fzf not found (interactive picker will use basic prompt)",
+			Hint:    "install fzf for a faster picker UX",
+		})
+	} else {
+		checks = append(checks, doctorCheck{
+			ID:      "picker_optional",
+			Status:  "ok",
+			Message: "fzf available",
+		})
+	}
+
+	return checks
+}
+
+func summarizeDoctorChecks(checks []doctorCheck) (okCount, warnCount, failCount int) {
+	for _, c := range checks {
+		switch c.Status {
+		case "ok":
+			okCount++
+		case "warn":
+			warnCount++
+		case "fail":
+			failCount++
+		}
+	}
+	return okCount, warnCount, failCount
 }
 
 func runQueueAPI(args []string, cfg config.Config) int {

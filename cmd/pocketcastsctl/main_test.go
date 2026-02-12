@@ -188,11 +188,17 @@ func TestRunAuthStatusDefault(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0; stderr=%q", code, stderr)
 	}
+	if !strings.Contains(stdout, "auth status: WARN") {
+		t.Fatalf("stdout missing auth status header: %q", stdout)
+	}
 	if !strings.Contains(stdout, "authorization: missing") {
 		t.Fatalf("stdout missing authorization status: %q", stdout)
 	}
-	if !strings.Contains(stderr, "tip: run `pocketcastsctl auth sync`") {
-		t.Fatalf("stderr missing auth tip: %q", stderr)
+	if !strings.Contains(stdout, "next: pocketcastsctl auth sync") {
+		t.Fatalf("stdout missing auth next-step tip: %q", stdout)
+	}
+	if strings.TrimSpace(stderr) != "" {
+		t.Fatalf("stderr expected empty, got: %q", stderr)
 	}
 }
 
@@ -249,6 +255,41 @@ func TestIsRetryableTransientError(t *testing.T) {
 	}
 	if isRetryableTransientError(fmt.Errorf("invalid browser options")) {
 		t.Fatalf("expected non-retryable error")
+	}
+}
+
+func TestSummarizeDoctorChecks(t *testing.T) {
+	ok, warn, fail := summarizeDoctorChecks([]doctorCheck{
+		{Status: "ok"},
+		{Status: "warn"},
+		{Status: "warn"},
+		{Status: "fail"},
+	})
+	if ok != 1 || warn != 2 || fail != 1 {
+		t.Fatalf("counts = (%d,%d,%d), want (1,2,1)", ok, warn, fail)
+	}
+}
+
+func TestRunHelpStart(t *testing.T) {
+	code, stdout, stderr := runForTest(t, []string{"help", "start"}, "")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr=%q", code, stderr)
+	}
+	if !strings.Contains(stdout, "Recommended first-run flow:") {
+		t.Fatalf("stdout missing start flow: %q", stdout)
+	}
+}
+
+func TestRunDoctorJSON(t *testing.T) {
+	code, stdout, _ := runForTest(t, []string{"doctor", "--json"}, "")
+	if code != 0 && code != 1 {
+		t.Fatalf("exit code = %d, want 0 or 1", code)
+	}
+	if !strings.Contains(stdout, "\"checks\"") {
+		t.Fatalf("stdout missing checks field: %q", stdout)
+	}
+	if !strings.Contains(stdout, "\"status\"") {
+		t.Fatalf("stdout missing status field: %q", stdout)
 	}
 }
 
