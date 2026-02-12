@@ -6,6 +6,15 @@ The format is based on *Keep a Changelog*, and this project adheres to *Semantic
 
 ## [Unreleased]
 
+## [v0.1.2] - 2026-02-12
+
+- feat(cli): add leaf-level help topics for subcommands (6a8851b)
+- docs: update CLI help, safety, and env override usage (2fcdd82)
+- feat(config): support POCKETCASTS_* env overrides (5b7c706)
+- feat(cli): add safe confirmation flow for queue api rm (bb1a53e)
+- feat(cli): add config path/show with secret redaction (cc5947f)
+- feat(cli): add structured help and deprecate top-level shortcuts (16b0833)
+
 ## [v0.1.1] - 2026-02-12
 
 - chore: remove trailing whitespace in queue types (9e83d3f)
