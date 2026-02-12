@@ -8,6 +8,14 @@ import (
 	"path/filepath"
 )
 
+const (
+	EnvConfigPath  = "POCKETCASTS_CONFIG"
+	EnvBrowser     = "POCKETCASTS_BROWSER"
+	EnvBrowserApp  = "POCKETCASTS_BROWSER_APP"
+	EnvURLContains = "POCKETCASTS_URL_CONTAINS"
+	EnvAPIBaseURL  = "POCKETCASTS_API_BASE_URL"
+)
+
 type Config struct {
 	Browser     string            `json:"browser"`
 	BrowserApp  string            `json:"browser_app"`
@@ -27,6 +35,9 @@ func Default() Config {
 }
 
 func Path() string {
+	if p := os.Getenv(EnvConfigPath); p != "" {
+		return p
+	}
 	dir, err := os.UserConfigDir()
 	if err != nil {
 		return "pocketcastsctl-config.json"
@@ -71,6 +82,20 @@ func Load() (Config, error) {
 	if cfg.APIHeaders == nil {
 		cfg.APIHeaders = map[string]string{}
 	}
+
+	if v := os.Getenv(EnvBrowser); v != "" {
+		cfg.Browser = v
+	}
+	if v := os.Getenv(EnvBrowserApp); v != "" {
+		cfg.BrowserApp = v
+	}
+	if v := os.Getenv(EnvURLContains); v != "" {
+		cfg.URLContains = v
+	}
+	if v := os.Getenv(EnvAPIBaseURL); v != "" {
+		cfg.APIBaseURL = v
+	}
+
 	return cfg, nil
 }
 
