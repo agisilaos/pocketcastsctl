@@ -6,6 +6,15 @@ The format is based on *Keep a Changelog*, and this project adheres to *Semantic
 
 ## [Unreleased]
 
+## [v0.1.1] - 2026-02-12
+
+- chore: remove trailing whitespace in queue types (9e83d3f)
+- feat: headless queue api with serverModified and headers (cb14b2c)
+- chore: harden token discovery (d1bc0b7)
+- fix: prefer fresh tokens and add api defaults (caf74f2)
+- feat: output polish and ci (c5491d5)
+- chore: fix tap formula path quoting (88d7a46)
+
 ## [v0.1.0] - 2026-01-12
 
 ### Added
