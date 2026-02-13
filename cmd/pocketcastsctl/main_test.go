@@ -309,6 +309,19 @@ func TestRunHelpAuthRefresh(t *testing.T) {
 	if !strings.Contains(stdout, "pocketcastsctl auth refresh") {
 		t.Fatalf("stdout missing auth refresh usage: %q", stdout)
 	}
+	if !strings.Contains(stdout, "--sync-only") {
+		t.Fatalf("stdout missing --sync-only option: %q", stdout)
+	}
+}
+
+func TestRunAuthRefreshNoInputRequiresSyncOnly(t *testing.T) {
+	code, _, stderr := runForTest(t, []string{"auth", "refresh", "--no-input"}, "")
+	if code != 2 {
+		t.Fatalf("exit code = %d, want 2", code)
+	}
+	if !strings.Contains(stderr, "--no-input requires --sync-only") {
+		t.Fatalf("stderr missing validation message: %q", stderr)
+	}
 }
 
 func TestRunDoctorJSON(t *testing.T) {

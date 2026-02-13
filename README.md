@@ -133,6 +133,12 @@ This path calls Pocket Casts’ private API (currently `up_next/list`, `up_next/
 `auth refresh` is a guided flow: open login page, sync token, then verify.
 `auth status` shows whether a token exists and, when possible, token expiry signals.
 
+For automation/non-interactive use:
+
+```bash
+./bin/pocketcastsctl auth refresh --sync-only --no-input
+```
+
 Deprecated short aliases (still work for now, but print warnings):
 
 ```bash

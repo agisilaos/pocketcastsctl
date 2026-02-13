@@ -378,7 +378,7 @@ func printAuthLoginHelp() {
 }
 
 func printAuthRefreshHelp() {
-	fmt.Println("Usage:\n  pocketcastsctl auth refresh [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--url-contains needle] [--key-contains q]")
+	fmt.Println("Usage:\n  pocketcastsctl auth refresh [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--url-contains needle] [--key-contains q] [--sync-only] [--no-input]")
 }
 
 func printAuthSyncHelp() {
@@ -839,6 +839,8 @@ func runAuthRefresh(args []string, cfg config.Config) int {
 	openURL := fs.String("url", "https://pocketcasts.com/podcasts", "URL to open for login")
 	urlContains := fs.String("url-contains", cfg.URLContains, `substring to match the Pocket Casts tab URL`)
 	keyContains := fs.String("key-contains", "", "prefer tokens whose sourceKey contains this substring")
+	syncOnly := fs.Bool("sync-only", false, "skip login/open flow; sync token from current browser session")
+	noInput := fs.Bool("no-input", false, "disable interactive prompts (requires --sync-only)")
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0
@@ -847,37 +849,55 @@ func runAuthRefresh(args []string, cfg config.Config) int {
 		return 2
 	}
 	if fs.NArg() != 0 {
-		fmt.Fprintln(os.Stderr, "usage: pocketcastsctl auth refresh [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--url-contains needle] [--key-contains q]")
+		fmt.Fprintln(os.Stderr, "usage: pocketcastsctl auth refresh [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--url-contains needle] [--key-contains q] [--sync-only] [--no-input]")
+		return 2
+	}
+	if *noInput && !*syncOnly {
+		fmt.Fprintln(os.Stderr, "auth refresh: --no-input requires --sync-only")
 		return 2
 	}
 
-	fmt.Fprintln(os.Stderr, "refresh step 1/3: open login page and sync token")
-	loginArgs := []string{
+	syncArgs := []string{
+		"sync",
 		"--browser", *browser,
 		"--browser-app", *browserApp,
-		"--url", *openURL,
 		"--url-contains", *urlContains,
 	}
-	if code := runAuthLogin(loginArgs, cfg); code != 0 {
-		return code
+	if strings.TrimSpace(*keyContains) != "" {
+		syncArgs = append(syncArgs, "--key-contains", strings.TrimSpace(*keyContains))
 	}
 
-	if strings.TrimSpace(*keyContains) != "" {
-		fmt.Fprintln(os.Stderr, "refresh step 2/3: resync with key filter")
-		syncArgs := []string{
-			"sync",
-			"--browser", *browser,
-			"--browser-app", *browserApp,
-			"--url-contains", *urlContains,
-			"--key-contains", strings.TrimSpace(*keyContains),
-		}
+	if *syncOnly {
+		fmt.Fprintln(os.Stderr, "refresh step 1/2: sync token from current browser session")
 		cfg2, _ := config.Load()
 		if code := runAuth(syncArgs, cfg2); code != 0 {
 			return code
 		}
+	} else {
+		fmt.Fprintln(os.Stderr, "refresh step 1/3: open login page and sync token")
+		loginArgs := []string{
+			"--browser", *browser,
+			"--browser-app", *browserApp,
+			"--url", *openURL,
+			"--url-contains", *urlContains,
+		}
+		if code := runAuthLogin(loginArgs, cfg); code != 0 {
+			return code
+		}
+		if strings.TrimSpace(*keyContains) != "" {
+			fmt.Fprintln(os.Stderr, "refresh step 2/3: resync with key filter")
+			cfg2, _ := config.Load()
+			if code := runAuth(syncArgs, cfg2); code != 0 {
+				return code
+			}
+		}
 	}
 
-	fmt.Fprintln(os.Stderr, "refresh step 3/3: verify auth")
+	if *syncOnly {
+		fmt.Fprintln(os.Stderr, "refresh step 2/2: verify auth")
+	} else {
+		fmt.Fprintln(os.Stderr, "refresh step 3/3: verify auth")
+	}
 	cfg3, _ := config.Load()
 	if ok, err := verifyAuthWithAPI(cfg3); err != nil {
 		fmt.Fprintf(os.Stderr, "auth refresh: verify failed: %v\n", err)
