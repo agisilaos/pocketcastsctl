@@ -47,13 +47,21 @@ Recommended first-run flow:
 
 ```bash
 ./bin/pocketcastsctl doctor
-./bin/pocketcastsctl auth login
-./bin/pocketcastsctl auth sync
+./bin/pocketcastsctl auth refresh
 ./bin/pocketcastsctl queue api ls
 ./bin/pocketcastsctl queue api play 1
 ```
 
 `doctor` validates setup (browser automation, config, auth presence, and API auth validity when configured) and suggests next actions.
+
+Doctor modes:
+
+```bash
+./bin/pocketcastsctl doctor --quick
+./bin/pocketcastsctl doctor --full
+./bin/pocketcastsctl doctor --fix      # suggestions only; no changes made
+./bin/pocketcastsctl doctor --json
+```
 
 ### I/O contract
 
@@ -116,10 +124,14 @@ This path calls Pocket Casts’ private API (currently `up_next/list`, `up_next/
 
 ```bash
 ./bin/pocketcastsctl login
+./bin/pocketcastsctl auth refresh
 ./bin/pocketcastsctl auth status
 ./bin/pocketcastsctl queue api ls
 ./bin/pocketcastsctl queue api play 1
 ```
+
+`auth refresh` is a guided flow: open login page, sync token, then verify.
+`auth status` shows whether a token exists and, when possible, token expiry signals.
 
 Deprecated short aliases (still work for now, but print warnings):
 
