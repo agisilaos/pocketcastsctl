@@ -61,6 +61,8 @@ func run(args []string) int {
 		return runConfig(args[1:], cfg)
 	case "start", "getting-started":
 		return runStart(args[1:], cfg)
+	case "now":
+		return runNow(args[1:], cfg)
 	case "doctor":
 		return runDoctor(args[1:], cfg)
 	case "auth":
@@ -238,6 +240,8 @@ func runHelp(args []string) int {
 		}
 	case "start", "getting-started":
 		printGettingStartedHelp()
+	case "now":
+		printNowHelp()
 	default:
 		return unknownHelpTopic(args)
 	}
@@ -289,10 +293,15 @@ func printRootHelp() {
 pocketcastsctl controls the Pocket Casts Web Player (macOS).
 
 Start here:
+  pocketcastsctl now
   pocketcastsctl doctor
   pocketcastsctl help start
 
 Common tasks:
+  Open the now-playing cockpit:
+  pocketcastsctl now
+  pocketcastsctl now --watch
+
   Run guided setup:
   pocketcastsctl start
 
@@ -314,6 +323,7 @@ Common tasks:
 Command reference:
   pocketcastsctl --version
   pocketcastsctl version
+  pocketcastsctl now [--watch] [--interval 5s] [--verify-auth] [--json|--plain]
   pocketcastsctl doctor [--json|--plain] [--quick|--full] [--fix]
   pocketcastsctl doctor explain <code> [--json]
   pocketcastsctl start [--no-input] [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--url-contains needle]
@@ -335,7 +345,7 @@ Command reference:
   pocketcastsctl har graphql [--host host] [--json] <file.har>     (use --host= to disable filtering)
   pocketcastsctl har redact <in.har> <out.har>
   pocketcastsctl config init|path|show
-  pocketcastsctl help [start|doctor|auth|web|queue|local|har|config|completion]
+  pocketcastsctl help [now|start|doctor|auth|web|queue|local|har|config|completion]
 
 Deprecated shortcuts (use canonical commands above):
   pocketcastsctl login
@@ -357,6 +367,19 @@ Recommended first-run flow:
   1. pocketcastsctl start
   2. pocketcastsctl queue api ls
   3. pocketcastsctl queue api play 1
+`) + "\n")
+}
+
+func printNowHelp() {
+	fmt.Print(strings.TrimSpace(`
+Usage:
+  pocketcastsctl now [--watch] [--interval 5s] [--verify-auth] [--json|--plain]
+
+Examples:
+  pocketcastsctl now
+  pocketcastsctl now --watch
+  pocketcastsctl now --watch --interval 3s
+  pocketcastsctl now --json
 `) + "\n")
 }
 
@@ -638,6 +661,133 @@ func runConfig(args []string, cfg config.Config) int {
 		fmt.Fprintf(os.Stderr, "unknown config subcommand: %s\n", args[0])
 		return 2
 	}
+}
+
+func runNow(args []string, cfg config.Config) int {
+	fs := flag.NewFlagSet("now", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	jsonOut := fs.Bool("json", false, "output JSON")
+	plain := fs.Bool("plain", false, "plain tab-separated output")
+	watch := fs.Bool("watch", false, "refresh continuously")
+	interval := fs.Duration("interval", 5*time.Second, "refresh interval in watch mode")
+	verifyAuth := fs.Bool("verify-auth", false, "verify auth with API (slower)")
+	maxUpdates := fs.Int("max-updates", 0, "max snapshots in watch mode (0 = unlimited)")
+	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
+		fmt.Fprintf(os.Stderr, "failed to parse flags: %v\n", err)
+		return 2
+	}
+	if fs.NArg() != 0 {
+		fmt.Fprintln(os.Stderr, "usage: pocketcastsctl now [--watch] [--interval 5s] [--verify-auth] [--json|--plain]")
+		return 2
+	}
+	if *interval <= 0 {
+		fmt.Fprintln(os.Stderr, "now: --interval must be > 0")
+		return 2
+	}
+	if *watch && (*jsonOut || *plain) {
+		fmt.Fprintln(os.Stderr, "now: --watch supports human output only (omit --json/--plain)")
+		return 2
+	}
+
+	render := func(s app.NowSnapshot) {
+		switch {
+		case *jsonOut:
+			b, _ := json.MarshalIndent(s, "", "  ")
+			fmt.Println(string(b))
+		case *plain:
+			printNowPlain(s)
+		default:
+			printNowHuman(s)
+		}
+	}
+
+	updates := 0
+	for {
+		ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
+		s := app.CollectNowSnapshot(ctx, cfg, app.NowOptions{VerifyAuth: *verifyAuth})
+		cancel()
+
+		if *watch && stdoutIsTTY() {
+			fmt.Print("\033[H\033[2J")
+		}
+		render(s)
+		updates++
+		if !*watch {
+			return 0
+		}
+		if *maxUpdates > 0 && updates >= *maxUpdates {
+			return 0
+		}
+		time.Sleep(*interval)
+	}
+}
+
+func printNowHuman(s app.NowSnapshot) {
+	fmt.Println("POCKETCASTS NOW")
+	fmt.Println(strings.Repeat("=", 72))
+	fmt.Printf("Updated: %s\n", s.GeneratedAt.Local().Format("2006-01-02 15:04:05"))
+	fmt.Printf("Web    : %s%s\n", strings.ToUpper(s.Web.Status), formatInlineErr(s.Web.Error))
+	local := strings.ToUpper(s.Local.Status)
+	if strings.TrimSpace(s.Local.Title) != "" {
+		local += " - " + strings.TrimSpace(s.Local.Title)
+	}
+	fmt.Printf("Local  : %s%s\n", local, formatInlineErr(s.Local.Error))
+	queue := fmt.Sprintf("%s (%d items", strings.ToUpper(s.Queue.Status), s.Queue.Total)
+	if s.Queue.InProgressCount > 0 {
+		queue += fmt.Sprintf(", %d in progress", s.Queue.InProgressCount)
+	}
+	queue += ")"
+	if strings.TrimSpace(s.Queue.NextTitle) != "" {
+		queue += " | next: " + strings.TrimSpace(s.Queue.NextTitle)
+	}
+	fmt.Printf("Queue  : %s%s\n", queue, formatInlineErr(s.Queue.Error))
+	authLine := fmt.Sprintf("%s", strings.ToUpper(s.Auth.Status))
+	if s.Auth.TokenExpiryKnown {
+		authLine += fmt.Sprintf(" | expiry %s", formatRelativeExpiry(s.Auth.TokenExpiryUnix))
+	}
+	fmt.Printf("Auth   : %s%s\n", authLine, formatInlineErr(s.Auth.Error))
+	fmt.Println(strings.Repeat("-", 72))
+	fmt.Println("Recommended next actions:")
+	for i, a := range s.Actions {
+		fmt.Printf("  %d. %s\n", i+1, a)
+		if i >= 4 {
+			break
+		}
+	}
+}
+
+func printNowPlain(s app.NowSnapshot) {
+	fmt.Printf("generated_at\t%s\n", s.GeneratedAt.Format(time.RFC3339))
+	fmt.Printf("web_status\t%s\n", s.Web.Status)
+	if strings.TrimSpace(s.Web.Error) != "" {
+		fmt.Printf("web_error\t%s\n", s.Web.Error)
+	}
+	fmt.Printf("local_status\t%s\n", s.Local.Status)
+	if strings.TrimSpace(s.Local.Title) != "" {
+		fmt.Printf("local_title\t%s\n", s.Local.Title)
+	}
+	fmt.Printf("queue_status\t%s\n", s.Queue.Status)
+	fmt.Printf("queue_total\t%d\n", s.Queue.Total)
+	fmt.Printf("queue_in_progress\t%d\n", s.Queue.InProgressCount)
+	if strings.TrimSpace(s.Queue.NextTitle) != "" {
+		fmt.Printf("queue_next_title\t%s\n", s.Queue.NextTitle)
+	}
+	fmt.Printf("auth_status\t%s\n", s.Auth.Status)
+	fmt.Printf("auth_present\t%v\n", s.Auth.AuthorizationExists)
+	for i, a := range s.Actions {
+		fmt.Printf("action_%d\t%s\n", i+1, a)
+	}
+}
+
+func formatInlineErr(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return ""
+	}
+	return " (" + s + ")"
 }
 
 func runStart(args []string, cfg config.Config) int {
@@ -2048,6 +2198,7 @@ func runCompletion(args []string) int {
 func completionScripts() map[string]string {
 	cmds := []string{
 		"help", "version", "completion",
+		"now",
 		"doctor",
 		"doctor explain",
 		"start",
@@ -2748,6 +2899,14 @@ func stdinIsTTY() bool {
 	return fi.Mode()&os.ModeCharDevice != 0
 }
 
+func stdoutIsTTY() bool {
+	fi, err := os.Stdout.Stat()
+	if err != nil {
+		return false
+	}
+	return fi.Mode()&os.ModeCharDevice != 0
+}
+
 func runQueueAPIPlay(args []string, cfg config.Config, client *pocketcasts.Client, ctx context.Context) int {
 	fs := flag.NewFlagSet("queue api play", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
@@ -3113,6 +3272,20 @@ func formatHMS(total int) string {
 		return fmt.Sprintf("%d:%02d:%02d", h, m, s)
 	}
 	return fmt.Sprintf("%d:%02d", m, s)
+}
+
+func formatRelativeExpiry(unix int64) string {
+	if unix <= 0 {
+		return ""
+	}
+	d := time.Until(time.Unix(unix, 0)).Round(time.Minute)
+	if d <= 0 {
+		return "expired"
+	}
+	if d < time.Hour {
+		return fmt.Sprintf("in %dm", int(d.Minutes()))
+	}
+	return fmt.Sprintf("in %dh", int(d.Hours()))
 }
 
 func max(a, b int) int {

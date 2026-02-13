@@ -39,6 +39,8 @@ Show build metadata:
 ```bash
 ./bin/pocketcastsctl --version
 ./bin/pocketcastsctl help
+./bin/pocketcastsctl now
+./bin/pocketcastsctl now --watch
 ./bin/pocketcastsctl help start
 ./bin/pocketcastsctl help queue api
 ```
@@ -70,6 +72,7 @@ Doctor modes:
   - Prefer `--json` where available for structured output.
   - Prefer `--plain` for stable tab/line-oriented output.
 - Read/status commands now support machine-friendly output modes consistently:
+  - `now --json|--plain`
   - `doctor --json|--plain`
   - `auth tabs --json|--plain`
   - `auth status --json|--plain`
@@ -88,6 +91,19 @@ Open `https://play.pocketcasts.com` and sign in. Then:
 ./bin/pocketcastsctl web toggle
 ./bin/pocketcastsctl web next
 ```
+
+### Now-playing cockpit
+
+Use `now` as the main dashboard command:
+
+```bash
+./bin/pocketcastsctl now
+./bin/pocketcastsctl now --watch --interval 3s
+./bin/pocketcastsctl now --verify-auth
+./bin/pocketcastsctl now --json
+```
+
+`now` merges web status, local status, queue health, auth state, and next-action suggestions in one view.
 
 Deprecated short aliases (still work for now, but print warnings):
 

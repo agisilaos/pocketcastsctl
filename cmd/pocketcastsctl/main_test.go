@@ -269,6 +269,39 @@ func TestRunAuthVerifyJSONMissingAuth(t *testing.T) {
 	}
 }
 
+func TestRunNowJSON(t *testing.T) {
+	code, stdout, stderr := runForTest(t, []string{"now", "--json"}, "")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr=%q", code, stderr)
+	}
+	if !strings.Contains(stdout, "\"web\"") {
+		t.Fatalf("stdout missing web field: %q", stdout)
+	}
+	if !strings.Contains(stdout, "\"actions\"") {
+		t.Fatalf("stdout missing actions field: %q", stdout)
+	}
+}
+
+func TestRunNowPlain(t *testing.T) {
+	code, stdout, stderr := runForTest(t, []string{"now", "--plain"}, "")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr=%q", code, stderr)
+	}
+	if !strings.Contains(stdout, "web_status\t") {
+		t.Fatalf("stdout missing plain web status: %q", stdout)
+	}
+}
+
+func TestRunNowWatchWithJSONRejected(t *testing.T) {
+	code, _, stderr := runForTest(t, []string{"now", "--watch", "--json"}, "")
+	if code != 2 {
+		t.Fatalf("exit code = %d, want 2", code)
+	}
+	if !strings.Contains(stderr, "--watch supports human output only") {
+		t.Fatalf("stderr missing watch/json validation: %q", stderr)
+	}
+}
+
 func TestRunAuthStatusPlain(t *testing.T) {
 	code, stdout, stderr := runForTest(t, []string{"auth", "status", "--plain"}, "")
 	if code != 0 {
@@ -435,6 +468,16 @@ func TestRunHelpStart(t *testing.T) {
 	}
 	if !strings.Contains(stdout, "Recommended first-run flow:") {
 		t.Fatalf("stdout missing start flow: %q", stdout)
+	}
+}
+
+func TestRunHelpNow(t *testing.T) {
+	code, stdout, stderr := runForTest(t, []string{"help", "now"}, "")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr=%q", code, stderr)
+	}
+	if !strings.Contains(stdout, "pocketcastsctl now") {
+		t.Fatalf("stdout missing now usage: %q", stdout)
 	}
 }
 

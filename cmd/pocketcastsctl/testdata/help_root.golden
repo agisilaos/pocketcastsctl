@@ -1,10 +1,15 @@
 pocketcastsctl controls the Pocket Casts Web Player (macOS).
 
 Start here:
+  pocketcastsctl now
   pocketcastsctl doctor
   pocketcastsctl help start
 
 Common tasks:
+  Open the now-playing cockpit:
+  pocketcastsctl now
+  pocketcastsctl now --watch
+
   Run guided setup:
   pocketcastsctl start
 
@@ -26,6 +31,7 @@ Common tasks:
 Command reference:
   pocketcastsctl --version
   pocketcastsctl version
+  pocketcastsctl now [--watch] [--interval 5s] [--verify-auth] [--json|--plain]
   pocketcastsctl doctor [--json|--plain] [--quick|--full] [--fix]
   pocketcastsctl doctor explain <code> [--json]
   pocketcastsctl start [--no-input] [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--url-contains needle]
@@ -47,7 +53,7 @@ Command reference:
   pocketcastsctl har graphql [--host host] [--json] <file.har>     (use --host= to disable filtering)
   pocketcastsctl har redact <in.har> <out.har>
   pocketcastsctl config init|path|show
-  pocketcastsctl help [start|doctor|auth|web|queue|local|har|config|completion]
+  pocketcastsctl help [now|start|doctor|auth|web|queue|local|har|config|completion]
 
 Deprecated shortcuts (use canonical commands above):
   pocketcastsctl login
