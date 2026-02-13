@@ -93,13 +93,25 @@ Deprecated short aliases (still work for now, but print warnings):
 ### Playback (Local, no browser)
 
 This plays the episode audio directly on your machine (uses `mpv` if installed; otherwise downloads and uses macOS `afplay`).
+By default, `local play` starts from Pocket Casts progress (`playedUpTo`) when available.
 
 ```bash
 ./bin/pocketcastsctl local pick
 ./bin/pocketcastsctl local play 3
+./bin/pocketcastsctl local play --from-start 3
 ./bin/pocketcastsctl local pause
 ./bin/pocketcastsctl local resume
 ./bin/pocketcastsctl local stop
+```
+
+Resume/start-offset behavior:
+
+- `mpv` supports starting at saved progress (`playedUpTo`).
+- `afplay` does not support seek-on-start; playback starts at the beginning.
+- If you want reliable resume-from-progress, install `mpv`:
+
+```bash
+brew install mpv
 ```
 
 Flags:
