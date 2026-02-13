@@ -22,7 +22,7 @@ Common tasks:
 Command reference:
   pocketcastsctl --version
   pocketcastsctl version
-  pocketcastsctl doctor [--json]
+  pocketcastsctl doctor [--json] [--quick|--full] [--fix]
   pocketcastsctl auth login [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com]
   pocketcastsctl auth refresh [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com]
   pocketcastsctl auth sync [--browser <name>] [--browser-app <app>] [--url-contains needle]
