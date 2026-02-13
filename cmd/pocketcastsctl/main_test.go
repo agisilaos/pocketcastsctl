@@ -382,6 +382,24 @@ func TestRunDoctorQuickJSON(t *testing.T) {
 	}
 }
 
+func TestRunDoctorModeMessages(t *testing.T) {
+	codeQuick, _, errQuick := runForTest(t, []string{"doctor", "--quick"}, "")
+	if codeQuick != 0 && codeQuick != 1 {
+		t.Fatalf("quick exit code = %d, want 0 or 1", codeQuick)
+	}
+	if !strings.Contains(errQuick, "running quick checks") {
+		t.Fatalf("quick stderr missing mode message: %q", errQuick)
+	}
+
+	codeFull, _, errFull := runForTest(t, []string{"doctor", "--full"}, "")
+	if codeFull != 0 && codeFull != 1 {
+		t.Fatalf("full exit code = %d, want 0 or 1", codeFull)
+	}
+	if !strings.Contains(errFull, "running full checks") {
+		t.Fatalf("full stderr missing mode message: %q", errFull)
+	}
+}
+
 func TestRunDoctorFixPrintsSuggestions(t *testing.T) {
 	code, stdout, _ := runForTest(t, []string{"doctor", "--quick", "--fix"}, "")
 	if code != 0 && code != 1 {
