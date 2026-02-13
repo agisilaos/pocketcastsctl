@@ -305,6 +305,15 @@ func TestRedactUserPath(t *testing.T) {
 	}
 }
 
+func TestFormatHMS(t *testing.T) {
+	if got := formatHMS(1805); got != "30:05" {
+		t.Fatalf("formatHMS(1805) = %q, want 30:05", got)
+	}
+	if got := formatHMS(3661); got != "1:01:01" {
+		t.Fatalf("formatHMS(3661) = %q, want 1:01:01", got)
+	}
+}
+
 func TestSummarizeDoctorChecks(t *testing.T) {
 	ok, warn, fail := summarizeDoctorChecks([]doctorCheck{
 		{Status: "ok"},

@@ -489,7 +489,7 @@ func printLocalPickHelp() {
 }
 
 func printLocalPlayHelp() {
-	fmt.Println("Usage:\n  pocketcastsctl local play <index|uuid>")
+	fmt.Println("Usage:\n  pocketcastsctl local play [--from-start] <index|uuid>")
 }
 
 func printLocalPauseHelp() {
@@ -1361,6 +1361,7 @@ func runLocalPick(args []string, cfg config.Config) int {
 	fs.SetOutput(os.Stderr)
 	search := fs.String("search", "", "filter by substring in title before showing picker")
 	limit := fs.Int("limit", 0, "limit items in picker (0 = no limit)")
+	fromStart := fs.Bool("from-start", false, "start from beginning instead of Pocket Casts progress")
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0
@@ -1402,12 +1403,27 @@ func runLocalPick(args []string, cfg config.Config) int {
 		fmt.Fprintf(os.Stderr, "local pick: %v\n", err)
 		return 1
 	}
-	return startLocalPlayback(cfg, chosen)
+	startAt := 0
+	if !*fromStart {
+		progress, _ := pocketcasts.ExtractEpisodeProgress(body)
+		startAt = progress[chosen.UUID]
+	}
+	return startLocalPlayback(cfg, chosen, startAt)
 }
 
 func runLocalPlay(args []string, cfg config.Config) int {
-	if len(args) != 1 {
-		fmt.Fprintln(os.Stderr, "usage: pocketcastsctl local play <index|uuid>")
+	fs := flag.NewFlagSet("local play", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	fromStart := fs.Bool("from-start", false, "start from beginning instead of Pocket Casts progress")
+	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
+		fmt.Fprintf(os.Stderr, "failed to parse flags: %v\n", err)
+		return 2
+	}
+	if fs.NArg() != 1 {
+		fmt.Fprintln(os.Stderr, "usage: pocketcastsctl local play [--from-start] <index|uuid>")
 		return 2
 	}
 
@@ -1430,15 +1446,20 @@ func runLocalPlay(args []string, cfg config.Config) int {
 		fmt.Fprintf(os.Stderr, "local play: failed to parse queue: %v\n", err)
 		return 1
 	}
-	target, err := selectEpisode(eps, args[0])
+	target, err := selectEpisode(eps, fs.Arg(0))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "local play: %v\n", err)
 		return 2
 	}
-	return startLocalPlayback(cfg, target)
+	startAt := 0
+	if !*fromStart {
+		progress, _ := pocketcasts.ExtractEpisodeProgress(body)
+		startAt = progress[target.UUID]
+	}
+	return startLocalPlayback(cfg, target, startAt)
 }
 
-func startLocalPlayback(cfg config.Config, ep pocketcasts.UpNextEpisode) int {
+func startLocalPlayback(cfg config.Config, ep pocketcasts.UpNextEpisode, startAt int) int {
 	audioURL := strings.TrimSpace(ep.URL)
 	if audioURL == "" {
 		fmt.Fprintln(os.Stderr, "local playback needs an audio URL but none was found in the Up Next response")
@@ -1460,6 +1481,7 @@ func startLocalPlayback(cfg config.Config, ep pocketcasts.UpNextEpisode) int {
 		Title:     ep.Title,
 		CacheDir:  cacheDir,
 		UserAgent: "pocketcastsctl",
+		StartAt:   startAt,
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "local play failed: %v\n", err)
@@ -1474,7 +1496,20 @@ func startLocalPlayback(cfg config.Config, ep pocketcasts.UpNextEpisode) int {
 		StartedAt:   time.Now(),
 		Paused:      false,
 	})
-	fmt.Printf("playing (local): %s\n", strings.TrimSpace(ep.Title))
+	title := strings.TrimSpace(ep.Title)
+	if title == "" {
+		title = "(untitled)"
+	}
+	if startAt > 0 {
+		if started.StartOffsetApplied {
+			fmt.Printf("playing (local): %s [from %s]\n", title, formatHMS(startAt))
+		} else {
+			fmt.Printf("playing (local): %s [requested from %s]\n", title, formatHMS(startAt))
+			fmt.Fprintf(os.Stderr, "tip: player %q cannot seek on start; install mpv to start from saved progress\n", started.Player)
+		}
+		return 0
+	}
+	fmt.Printf("playing (local): %s\n", title)
 	return 0
 }
 
@@ -2631,6 +2666,19 @@ func redactUserPath(p string) string {
 		return "~" + strings.TrimPrefix(p, home)
 	}
 	return p
+}
+
+func formatHMS(total int) string {
+	if total < 0 {
+		total = 0
+	}
+	h := total / 3600
+	m := (total % 3600) / 60
+	s := total % 60
+	if h > 0 {
+		return fmt.Sprintf("%d:%02d:%02d", h, m, s)
+	}
+	return fmt.Sprintf("%d:%02d", m, s)
 }
 
 func max(a, b int) int {

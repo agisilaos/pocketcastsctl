@@ -163,3 +163,53 @@ func firstString(m map[string]any, keys ...string) string {
 	}
 	return ""
 }
+
+// ExtractEpisodeProgress returns played seconds by episode UUID from
+// Up Next responses that include an episodeSync-like array.
+func ExtractEpisodeProgress(raw []byte) (map[string]int, error) {
+	var v any
+	if err := json.Unmarshal(raw, &v); err != nil {
+		return nil, err
+	}
+
+	out := map[string]int{}
+	var walk func(any)
+	walk = func(x any) {
+		switch xx := x.(type) {
+		case []any:
+			for _, it := range xx {
+				walk(it)
+			}
+		case map[string]any:
+			uuid := firstString(xx, "uuid", "episodeUuid", "episode_uuid")
+			if isUUID(uuid) {
+				if p, ok := firstInt(xx, "playedUpTo", "played_up_to", "position", "playedTo"); ok && p > 0 {
+					out[uuid] = p
+				}
+			}
+			for _, child := range xx {
+				walk(child)
+			}
+		}
+	}
+	walk(v)
+	return out, nil
+}
+
+func firstInt(m map[string]any, keys ...string) (int, bool) {
+	for _, k := range keys {
+		v, ok := m[k]
+		if !ok {
+			continue
+		}
+		switch n := v.(type) {
+		case float64:
+			return int(n), true
+		case int:
+			return n, true
+		case int64:
+			return int(n), true
+		}
+	}
+	return 0, false
+}

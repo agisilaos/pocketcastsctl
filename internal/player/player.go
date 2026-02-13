@@ -19,11 +19,14 @@ type StartOptions struct {
 	Title     string
 	CacheDir  string
 	UserAgent string
+	StartAt   int
 }
 
 type Started struct {
-	PID     int
-	Command []string
+	PID                int
+	Command            []string
+	Player             string
+	StartOffsetApplied bool
 }
 
 func Start(ctx context.Context, opts StartOptions) (Started, error) {
@@ -33,13 +36,23 @@ func Start(ctx context.Context, opts StartOptions) (Started, error) {
 	}
 
 	if mpv, _ := exec.LookPath("mpv"); mpv != "" {
-		cmd := exec.CommandContext(ctx, mpv, "--no-video", "--force-window=no", "--quiet", urlStr)
+		args := []string{"--no-video", "--force-window=no", "--quiet"}
+		if opts.StartAt > 0 {
+			args = append(args, fmt.Sprintf("--start=%d", opts.StartAt))
+		}
+		args = append(args, urlStr)
+		cmd := exec.CommandContext(ctx, mpv, args...)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		if err := cmd.Start(); err != nil {
 			return Started{}, err
 		}
-		return Started{PID: cmd.Process.Pid, Command: cmd.Args}, nil
+		return Started{
+			PID:                cmd.Process.Pid,
+			Command:            cmd.Args,
+			Player:             "mpv",
+			StartOffsetApplied: opts.StartAt > 0,
+		}, nil
 	}
 
 	// Fallback: download and use afplay (present on macOS).
@@ -67,7 +80,12 @@ func Start(ctx context.Context, opts StartOptions) (Started, error) {
 	if err := cmd.Start(); err != nil {
 		return Started{}, err
 	}
-	return Started{PID: cmd.Process.Pid, Command: cmd.Args}, nil
+	return Started{
+		PID:                cmd.Process.Pid,
+		Command:            cmd.Args,
+		Player:             "afplay",
+		StartOffsetApplied: false,
+	}, nil
 }
 
 func Pause(pid int) error  { return signal(pid, syscall.SIGSTOP) }

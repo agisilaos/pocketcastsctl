@@ -23,3 +23,23 @@ func TestExtractUpNextEpisodes(t *testing.T) {
 		t.Fatalf("unexpected first: %+v", eps[0])
 	}
 }
+
+func TestExtractEpisodeProgress(t *testing.T) {
+	raw := []byte(`{
+  "episodes":[{"uuid":"94c87775-4f63-42db-9684-e3b1b5fbac08","title":"Ep 1"}],
+  "episodeSync":[
+    {"uuid":"94c87775-4f63-42db-9684-e3b1b5fbac08","playedUpTo":1805,"duration":4831},
+    {"uuid":"826f30b0-adce-4f3b-b200-eacb1aa711eb","duration":1200}
+  ]
+}`)
+	progress, err := ExtractEpisodeProgress(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := progress["94c87775-4f63-42db-9684-e3b1b5fbac08"]; got != 1805 {
+		t.Fatalf("progress mismatch = %d, want 1805", got)
+	}
+	if _, ok := progress["826f30b0-adce-4f3b-b200-eacb1aa711eb"]; ok {
+		t.Fatalf("expected no progress for episode without playedUpTo")
+	}
+}
