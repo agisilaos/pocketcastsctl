@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"pocketcastsctl/internal/browsercontrol"
 	"pocketcastsctl/internal/config"
 )
 
@@ -419,6 +420,20 @@ func TestAuthTokenExpiry(t *testing.T) {
 	}
 	if exp != 4102444800 {
 		t.Fatalf("exp = %d, want 4102444800", exp)
+	}
+}
+
+func TestRankedTokenCandidatesPrefersKeyContains(t *testing.T) {
+	cands := []browsercontrol.TokenCandidate{
+		{SourceKey: "session_token", Token: "abc.def.ghi"},
+		{SourceKey: "access_token", Token: "aaa.bbb.ccc"},
+	}
+	ranked := rankedTokenCandidates(cands, "access")
+	if len(ranked) != 2 {
+		t.Fatalf("ranked len = %d, want 2", len(ranked))
+	}
+	if ranked[0].SourceKey != "access_token" {
+		t.Fatalf("top candidate = %q, want access_token", ranked[0].SourceKey)
 	}
 }
 

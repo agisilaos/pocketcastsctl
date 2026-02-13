@@ -857,24 +857,10 @@ func runAuthRefresh(args []string, cfg config.Config) int {
 		return 2
 	}
 
-	syncArgs := []string{
-		"sync",
-		"--browser", *browser,
-		"--browser-app", *browserApp,
-		"--url-contains", *urlContains,
-	}
-	if strings.TrimSpace(*keyContains) != "" {
-		syncArgs = append(syncArgs, "--key-contains", strings.TrimSpace(*keyContains))
-	}
-
 	if *syncOnly {
-		fmt.Fprintln(os.Stderr, "refresh step 1/2: sync token from current browser session")
-		cfg2, _ := config.Load()
-		if code := runAuth(syncArgs, cfg2); code != 0 {
-			return code
-		}
+		fmt.Fprintln(os.Stderr, "refresh step 1/2: sync and verify token from current browser session")
 	} else {
-		fmt.Fprintln(os.Stderr, "refresh step 1/3: open login page and sync token")
+		fmt.Fprintln(os.Stderr, "refresh step 1/2: open login page")
 		loginArgs := []string{
 			"--browser", *browser,
 			"--browser-app", *browserApp,
@@ -884,29 +870,15 @@ func runAuthRefresh(args []string, cfg config.Config) int {
 		if code := runAuthLogin(loginArgs, cfg); code != 0 {
 			return code
 		}
-		if strings.TrimSpace(*keyContains) != "" {
-			fmt.Fprintln(os.Stderr, "refresh step 2/3: resync with key filter")
-			cfg2, _ := config.Load()
-			if code := runAuth(syncArgs, cfg2); code != 0 {
-				return code
-			}
-		}
 	}
 
-	if *syncOnly {
-		fmt.Fprintln(os.Stderr, "refresh step 2/2: verify auth")
-	} else {
-		fmt.Fprintln(os.Stderr, "refresh step 3/3: verify auth")
-	}
-	cfg3, _ := config.Load()
-	if ok, err := verifyAuthWithAPI(cfg3); err != nil {
-		fmt.Fprintf(os.Stderr, "auth refresh: verify failed: %v\n", err)
+	fmt.Fprintln(os.Stderr, "refresh step 2/2: sync and verify token")
+	cfgNow, _ := config.Load()
+	if err := syncAndVerifyAuthHeader(cfgNow, *browser, *browserApp, *urlContains, strings.TrimSpace(*keyContains)); err != nil {
+		fmt.Fprintf(os.Stderr, "auth refresh failed: %v\n", err)
 		if isUnauthorizedError(err) {
 			printAuthRecoveryHint()
 		}
-		return 1
-	} else if !ok {
-		fmt.Fprintln(os.Stderr, "auth refresh: verify inconclusive; run `pocketcastsctl doctor`")
 		return 1
 	}
 
@@ -1088,51 +1060,11 @@ func defaultAppForBrowser(browser string) string {
 }
 
 func selectBestToken(cands []browsercontrol.TokenCandidate, keyContains string) string {
-	keyContains = strings.ToLower(strings.TrimSpace(keyContains))
-	bestScore := -1
-	bestToken := ""
-
-	for _, c := range cands {
-		score := 0
-		k := strings.ToLower(c.SourceKey)
-		if keyContains != "" {
-			if strings.Contains(k, keyContains) {
-				score += 1000
-			} else {
-				score -= 1000
-			}
-		}
-		if strings.Contains(k, "access") {
-			score += 30
-		}
-		if strings.Contains(k, "auth") {
-			score += 20
-		}
-		if strings.Contains(k, "token") {
-			score += 10
-		}
-		if strings.Contains(k, "session") {
-			score += 5
-		}
-		if exp, ok := jwtExp(c.Token); ok {
-			now := time.Now().Unix()
-			if exp > now {
-				score += 50
-				// prefer longer-lived tokens slightly
-				score += int((exp - now) / 60)
-			} else {
-				score -= 200
-			}
-		}
-		if len(strings.TrimSpace(c.Token)) >= 40 {
-			score += 5
-		}
-		if score > bestScore {
-			bestScore = score
-			bestToken = strings.TrimSpace(c.Token)
-		}
+	ranked := rankedTokenCandidates(cands, keyContains)
+	if len(ranked) == 0 {
+		return ""
 	}
-
+	bestToken := strings.TrimSpace(ranked[0].Token)
 	bestToken = strings.TrimPrefix(bestToken, "Bearer ")
 	bestToken = strings.TrimPrefix(bestToken, "bearer ")
 	return strings.TrimSpace(bestToken)
@@ -1149,6 +1081,58 @@ func authTokenExpiry(headers map[string]string) (int64, bool) {
 		return jwtExp(raw)
 	}
 	return 0, false
+}
+
+func rankedTokenCandidates(cands []browsercontrol.TokenCandidate, keyContains string) []browsercontrol.TokenCandidate {
+	out := make([]browsercontrol.TokenCandidate, 0, len(cands))
+	for _, c := range cands {
+		if strings.TrimSpace(c.Token) == "" {
+			continue
+		}
+		out = append(out, c)
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		return tokenCandidateScore(out[i], keyContains) > tokenCandidateScore(out[j], keyContains)
+	})
+	return out
+}
+
+func tokenCandidateScore(c browsercontrol.TokenCandidate, keyContains string) int {
+	keyContains = strings.ToLower(strings.TrimSpace(keyContains))
+	score := 0
+	k := strings.ToLower(c.SourceKey)
+	if keyContains != "" {
+		if strings.Contains(k, keyContains) {
+			score += 1000
+		} else {
+			score -= 1000
+		}
+	}
+	if strings.Contains(k, "access") {
+		score += 30
+	}
+	if strings.Contains(k, "auth") {
+		score += 20
+	}
+	if strings.Contains(k, "token") {
+		score += 10
+	}
+	if strings.Contains(k, "session") {
+		score += 5
+	}
+	if exp, ok := jwtExp(c.Token); ok {
+		now := time.Now().Unix()
+		if exp > now {
+			score += 50
+			score += int((exp - now) / 60)
+		} else {
+			score -= 200
+		}
+	}
+	if len(strings.TrimSpace(c.Token)) >= 40 {
+		score += 5
+	}
+	return score
 }
 
 func jwtExp(tok string) (int64, bool) {
@@ -2038,6 +2022,74 @@ func verifyAuthWithAPI(cfg config.Config) (bool, error) {
 		return false, err
 	}
 	return true, nil
+}
+
+func syncAndVerifyAuthHeader(cfg config.Config, browser, browserApp, urlContains, keyContains string) error {
+	controller, err := browsercontrol.New(browsercontrol.Options{
+		Browser:     browser,
+		BrowserApp:  browserApp,
+		URLContains: urlContains,
+	})
+	if err != nil {
+		return fmt.Errorf("invalid browser options: %w", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
+	defer cancel()
+	var cands []browsercontrol.TokenCandidate
+	err = retryTransient(ctx, 3, 150*time.Millisecond, func() error {
+		var tokenErr error
+		cands, tokenErr = controller.TokenCandidates(ctx)
+		return tokenErr
+	})
+	if err != nil {
+		return fmt.Errorf("token discovery failed: %w", err)
+	}
+	ranked := rankedTokenCandidates(cands, keyContains)
+	if len(ranked) == 0 {
+		return fmt.Errorf("no token candidates found")
+	}
+
+	if cfg.APIHeaders == nil {
+		cfg.APIHeaders = map[string]string{}
+	}
+	cfg.Browser = browser
+	cfg.BrowserApp = strings.TrimSpace(browserApp)
+	cfg.URLContains = urlContains
+
+	var lastErr error
+	for _, c := range ranked {
+		token := strings.TrimSpace(c.Token)
+		token = strings.TrimPrefix(token, "Bearer ")
+		token = strings.TrimPrefix(token, "bearer ")
+		if token == "" {
+			continue
+		}
+		tryCfg := cfg
+		tryHeaders := make(map[string]string, len(cfg.APIHeaders))
+		for k, v := range cfg.APIHeaders {
+			tryHeaders[k] = v
+		}
+		tryCfg.APIHeaders = tryHeaders
+		tryCfg.APIHeaders["Authorization"] = "Bearer " + token
+
+		ok, err := verifyAuthWithAPI(tryCfg)
+		if err == nil && ok {
+			if saveErr := config.Save(tryCfg); saveErr != nil {
+				return fmt.Errorf("failed to save config: %w", saveErr)
+			}
+			fmt.Printf("stored %q header in: %s\n", "Authorization", config.Path())
+			return nil
+		}
+		lastErr = err
+		if err != nil && !isUnauthorizedError(err) {
+			return fmt.Errorf("verification failed: %w", err)
+		}
+	}
+	if lastErr == nil {
+		lastErr = fmt.Errorf("no candidate produced a verified token")
+	}
+	return fmt.Errorf("all token candidates were rejected: %w", lastErr)
 }
 
 func runQueueAPI(args []string, cfg config.Config) int {
