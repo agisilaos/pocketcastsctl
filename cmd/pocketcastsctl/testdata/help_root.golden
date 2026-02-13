@@ -1,0 +1,51 @@
+pocketcastsctl controls the Pocket Casts Web Player (macOS).
+
+Start here:
+  pocketcastsctl doctor
+  pocketcastsctl help start
+
+Common tasks:
+  Sign in and sync auth:
+  pocketcastsctl auth login
+  pocketcastsctl auth refresh
+  pocketcastsctl auth sync
+
+  Control playback:
+  pocketcastsctl web status
+  pocketcastsctl web toggle
+  pocketcastsctl web next
+
+  Browse and play queue:
+  pocketcastsctl queue api ls
+  pocketcastsctl queue api play 1
+
+Command reference:
+  pocketcastsctl --version
+  pocketcastsctl version
+  pocketcastsctl doctor [--json]
+  pocketcastsctl auth login [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com]
+  pocketcastsctl auth refresh [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com]
+  pocketcastsctl auth sync [--browser <name>] [--browser-app <app>] [--url-contains needle]
+  pocketcastsctl auth tabs [--browser <name>] [--browser-app <app>]
+  pocketcastsctl auth status [--json]
+  pocketcastsctl auth clear
+  pocketcastsctl web <play|pause|toggle|next|prev|status> [--browser <name>] [--browser-app <app>] [--url-contains needle]
+  pocketcastsctl queue ls [--json] [--browser <name>] [--browser-app <app>] [--url-contains needle]
+  pocketcastsctl queue api ls [--limit N] [--search q] [--json|--raw] [--plain]
+  pocketcastsctl queue api add (--uuid id --podcast id --title t --published rfc3339 --url audioUrl) | (--episode-json json)
+  pocketcastsctl queue api rm [--dry-run] [--force|--no-input] <episode-uuid...>
+  pocketcastsctl queue api play <index|uuid> [--browser <name>] [--browser-app <app>] [--url-contains needle]
+  pocketcastsctl queue api pick [--search q] [--browser <name>] [--browser-app <app>] [--url-contains needle]
+  pocketcastsctl har summarize [--host host] [--json] <file.har>   (use --host= to disable filtering)
+  pocketcastsctl har graphql [--host host] [--json] <file.har>     (use --host= to disable filtering)
+  pocketcastsctl har redact <in.har> <out.har>
+  pocketcastsctl config init|path|show
+  pocketcastsctl help [start|doctor|auth|web|queue|local|har|config|completion]
+
+Deprecated shortcuts (use canonical commands above):
+  pocketcastsctl login
+  pocketcastsctl ls
+  pocketcastsctl pick
+  pocketcastsctl play <index|uuid>
+  pocketcastsctl rm <episode-uuid...>
+  pocketcastsctl toggle|next|prev|pause|status

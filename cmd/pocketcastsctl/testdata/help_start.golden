@@ -1,0 +1,9 @@
+Usage:
+  pocketcastsctl help start
+
+Recommended first-run flow:
+  1. pocketcastsctl doctor
+  2. pocketcastsctl auth login
+  3. pocketcastsctl auth sync
+  4. pocketcastsctl queue api ls
+  5. pocketcastsctl queue api play 1

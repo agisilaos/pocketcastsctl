@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"os"
@@ -300,6 +301,16 @@ func TestRunHelpStart(t *testing.T) {
 	}
 }
 
+func TestRunHelpAuthRefresh(t *testing.T) {
+	code, stdout, stderr := runForTest(t, []string{"help", "auth", "refresh"}, "")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr=%q", code, stderr)
+	}
+	if !strings.Contains(stdout, "pocketcastsctl auth refresh") {
+		t.Fatalf("stdout missing auth refresh usage: %q", stdout)
+	}
+}
+
 func TestRunDoctorJSON(t *testing.T) {
 	code, stdout, _ := runForTest(t, []string{"doctor", "--json"}, "")
 	if code != 0 && code != 1 {
@@ -313,9 +324,63 @@ func TestRunDoctorJSON(t *testing.T) {
 	}
 }
 
+func TestRunDoctorModeConflict(t *testing.T) {
+	code, _, stderr := runForTest(t, []string{"doctor", "--quick", "--full"}, "")
+	if code != 2 {
+		t.Fatalf("exit code = %d, want 2", code)
+	}
+	if !strings.Contains(stderr, "use only one of --quick or --full") {
+		t.Fatalf("stderr missing mode conflict message: %q", stderr)
+	}
+}
+
+func TestRunDoctorQuickJSON(t *testing.T) {
+	code, stdout, _ := runForTest(t, []string{"doctor", "--json", "--quick"}, "")
+	if code != 0 && code != 1 {
+		t.Fatalf("exit code = %d, want 0 or 1", code)
+	}
+	if !strings.Contains(stdout, `"mode": "quick"`) {
+		t.Fatalf("stdout missing quick mode: %q", stdout)
+	}
+}
+
+func TestRunDoctorFixPrintsSuggestions(t *testing.T) {
+	code, stdout, _ := runForTest(t, []string{"doctor", "--quick", "--fix"}, "")
+	if code != 0 && code != 1 {
+		t.Fatalf("exit code = %d, want 0 or 1", code)
+	}
+	if !strings.Contains(stdout, "suggested fixes") {
+		t.Fatalf("stdout missing suggested fixes section: %q", stdout)
+	}
+}
+
+func TestAuthTokenExpiry(t *testing.T) {
+	payload := `{"exp":4102444800}`
+	tok := "x." + base64.RawURLEncoding.EncodeToString([]byte(payload)) + ".y"
+	exp, ok := authTokenExpiry(map[string]string{"Authorization": "Bearer " + tok})
+	if !ok {
+		t.Fatalf("expected token expiry to be detected")
+	}
+	if exp != 4102444800 {
+		t.Fatalf("exp = %d, want 4102444800", exp)
+	}
+}
+
+func TestGoldenHelpRoot(t *testing.T) {
+	_, stdout, _ := runForTest(t, []string{"help"}, "")
+	assertGolden(t, "help_root.golden", stdout)
+}
+
+func TestGoldenHelpStart(t *testing.T) {
+	_, stdout, _ := runForTest(t, []string{"help", "start"}, "")
+	assertGolden(t, "help_start.golden", stdout)
+}
+
 func runForTest(t *testing.T, args []string, stdin string) (int, string, string) {
 	t.Helper()
-	t.Setenv(config.EnvConfigPath, filepath.Join(t.TempDir(), "config.json"))
+	if os.Getenv(config.EnvConfigPath) == "" {
+		t.Setenv(config.EnvConfigPath, filepath.Join(t.TempDir(), "config.json"))
+	}
 
 	origStdout := os.Stdout
 	origStderr := os.Stderr
@@ -362,4 +427,17 @@ func runForTest(t *testing.T, args []string, stdin string) (int, string, string)
 	_ = inR.Close()
 
 	return code, string(outBytes), string(errBytes)
+}
+
+func assertGolden(t *testing.T, fileName, got string) {
+	t.Helper()
+	path := filepath.Join("testdata", fileName)
+	wantBytes, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read golden %s: %v", path, err)
+	}
+	want := string(wantBytes)
+	if got != want {
+		t.Fatalf("golden mismatch for %s\n--- want ---\n%s\n--- got ---\n%s", fileName, want, got)
+	}
 }
