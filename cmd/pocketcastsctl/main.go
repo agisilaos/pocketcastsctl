@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"pocketcastsctl/internal/app"
 	"pocketcastsctl/internal/browsercontrol"
 	"pocketcastsctl/internal/config"
 	"pocketcastsctl/internal/har"
@@ -58,6 +59,8 @@ func run(args []string) int {
 	switch args[0] {
 	case "config":
 		return runConfig(args[1:], cfg)
+	case "start", "getting-started":
+		return runStart(args[1:], cfg)
 	case "doctor":
 		return runDoctor(args[1:], cfg)
 	case "auth":
@@ -125,6 +128,8 @@ func runHelp(args []string) int {
 			printAuthTabsHelp()
 		case "status":
 			printAuthStatusHelp()
+		case "verify":
+			printAuthVerifyHelp()
 		case "clear":
 			printAuthClearHelp()
 		default:
@@ -279,10 +284,14 @@ Start here:
   pocketcastsctl help start
 
 Common tasks:
+  Run guided setup:
+  pocketcastsctl start
+
   Sign in and sync auth:
   pocketcastsctl auth login
   pocketcastsctl auth refresh
   pocketcastsctl auth sync
+  pocketcastsctl auth verify
 
   Control playback:
   pocketcastsctl web status
@@ -297,11 +306,13 @@ Command reference:
   pocketcastsctl --version
   pocketcastsctl version
   pocketcastsctl doctor [--json] [--quick|--full] [--fix]
+  pocketcastsctl start [--no-input] [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--url-contains needle]
   pocketcastsctl auth login [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com]
-  pocketcastsctl auth refresh [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com]
+  pocketcastsctl auth refresh [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--candidate-passes N]
   pocketcastsctl auth sync [--browser <name>] [--browser-app <app>] [--url-contains needle]
   pocketcastsctl auth tabs [--browser <name>] [--browser-app <app>]
   pocketcastsctl auth status [--json]
+  pocketcastsctl auth verify [--json]
   pocketcastsctl auth clear
   pocketcastsctl web <play|pause|toggle|next|prev|status> [--browser <name>] [--browser-app <app>] [--url-contains needle]
   pocketcastsctl queue ls [--json] [--browser <name>] [--browser-app <app>] [--url-contains needle]
@@ -329,14 +340,13 @@ Deprecated shortcuts (use canonical commands above):
 func printGettingStartedHelp() {
 	fmt.Print(strings.TrimSpace(`
 Usage:
+  pocketcastsctl start [--no-input] [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--url-contains needle]
   pocketcastsctl help start
 
 Recommended first-run flow:
-  1. pocketcastsctl doctor
-  2. pocketcastsctl auth login
-  3. pocketcastsctl auth sync
-  4. pocketcastsctl queue api ls
-  5. pocketcastsctl queue api play 1
+  1. pocketcastsctl start
+  2. pocketcastsctl queue api ls
+  3. pocketcastsctl queue api play 1
 `) + "\n")
 }
 
@@ -365,10 +375,11 @@ func printAuthHelp() {
 	fmt.Print(strings.TrimSpace(`
 Usage:
   pocketcastsctl auth login [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com]
-  pocketcastsctl auth refresh [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com]
+  pocketcastsctl auth refresh [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--candidate-passes N]
   pocketcastsctl auth sync [--browser <name>] [--browser-app <app>] [--url-contains needle]
   pocketcastsctl auth tabs [--browser <name>] [--browser-app <app>]
   pocketcastsctl auth status [--json]
+  pocketcastsctl auth verify [--json]
   pocketcastsctl auth clear
 `) + "\n")
 }
@@ -378,7 +389,7 @@ func printAuthLoginHelp() {
 }
 
 func printAuthRefreshHelp() {
-	fmt.Println("Usage:\n  pocketcastsctl auth refresh [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--url-contains needle] [--key-contains q] [--sync-only] [--no-input]")
+	fmt.Println("Usage:\n  pocketcastsctl auth refresh [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--url-contains needle] [--key-contains q] [--candidate-passes N] [--sync-only] [--no-input]")
 }
 
 func printAuthSyncHelp() {
@@ -391,6 +402,10 @@ func printAuthTabsHelp() {
 
 func printAuthStatusHelp() {
 	fmt.Println("Usage:\n  pocketcastsctl auth status [--json]")
+}
+
+func printAuthVerifyHelp() {
+	fmt.Println("Usage:\n  pocketcastsctl auth verify [--json]")
 }
 
 func printAuthClearHelp() {
@@ -610,6 +625,82 @@ func runConfig(args []string, cfg config.Config) int {
 	}
 }
 
+func runStart(args []string, cfg config.Config) int {
+	fs := flag.NewFlagSet("start", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	noInput := fs.Bool("no-input", false, "disable interactive prompts")
+	browser := fs.String("browser", cfg.Browser, `browser name`)
+	browserApp := fs.String("browser-app", cfg.BrowserApp, `macOS application name (optional)`)
+	openURL := fs.String("url", "https://pocketcasts.com/podcasts", "URL to open for login")
+	urlContains := fs.String("url-contains", cfg.URLContains, `substring to match the Pocket Casts tab URL`)
+	keyContains := fs.String("key-contains", "", "prefer tokens whose sourceKey contains this substring")
+	candidatePasses := fs.Int("candidate-passes", 1, "number of candidate verification passes")
+	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
+		fmt.Fprintf(os.Stderr, "failed to parse flags: %v\n", err)
+		return 2
+	}
+	if fs.NArg() != 0 {
+		fmt.Fprintln(os.Stderr, "usage: pocketcastsctl start [--no-input] [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--url-contains needle]")
+		return 2
+	}
+
+	fmt.Fprintln(os.Stderr, "start step 1/4: run quick environment checks")
+	checks := collectDoctorChecks(cfg, false)
+	_, warnCount, failCount := summarizeDoctorChecks(checks)
+	if failCount > 0 {
+		fmt.Fprintln(os.Stderr, "start: environment has blocking issues; run `pocketcastsctl doctor --full --fix`")
+		return 1
+	}
+	if warnCount > 0 {
+		fmt.Fprintln(os.Stderr, "start: quick checks passed with warnings")
+	} else {
+		fmt.Fprintln(os.Stderr, "start: quick checks passed")
+	}
+
+	cfgNow, _ := config.Load()
+	fmt.Fprintln(os.Stderr, "start step 2/4: ensure auth is configured")
+	if !hasAuthorizationHeader(cfgNow.APIHeaders) {
+		if *noInput {
+			fmt.Fprintln(os.Stderr, "start: auth not configured and --no-input is set")
+			fmt.Fprintln(os.Stderr, "next: run `pocketcastsctl auth refresh --sync-only --no-input` after you log in to Pocket Casts in your browser")
+			return 1
+		}
+		fmt.Fprint(os.Stderr, "Run `pocketcastsctl auth refresh` now? [Y/n]: ")
+		line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+		answer := strings.ToLower(strings.TrimSpace(line))
+		if answer != "" && answer != "y" && answer != "yes" {
+			fmt.Fprintln(os.Stderr, "start: skipped auth refresh")
+			fmt.Fprintln(os.Stderr, "next: run `pocketcastsctl auth refresh`")
+			return 1
+		}
+		refreshArgs := []string{
+			"--browser", *browser,
+			"--browser-app", *browserApp,
+			"--url", *openURL,
+			"--url-contains", *urlContains,
+			"--key-contains", *keyContains,
+			"--candidate-passes", strconv.Itoa(*candidatePasses),
+		}
+		if code := runAuthRefresh(refreshArgs, cfgNow); code != 0 {
+			return code
+		}
+	}
+
+	cfgNow, _ = config.Load()
+	fmt.Fprintln(os.Stderr, "start step 3/4: verify auth with API")
+	if code := runAuthVerify(nil, cfgNow); code != 0 {
+		return code
+	}
+
+	fmt.Fprintln(os.Stderr, "start step 4/4: ready")
+	fmt.Println("next: pocketcastsctl queue api ls")
+	fmt.Println("next: pocketcastsctl queue api play 1")
+	return 0
+}
+
 func redactedConfig(cfg config.Config, reveal bool) config.Config {
 	out := cfg
 	if out.APIHeaders == nil {
@@ -643,6 +734,8 @@ func runAuth(args []string, cfg config.Config) int {
 		return runAuthRefresh(args[1:], cfg)
 	case "status":
 		return runAuthStatus(args[1:], cfg)
+	case "verify":
+		return runAuthVerify(args[1:], cfg)
 	case "sync":
 		fs := flag.NewFlagSet("auth sync", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
@@ -769,12 +862,7 @@ func runAuthStatus(args []string, cfg config.Config) int {
 		}
 	}
 	authHeader := false
-	for k, v := range headers {
-		if strings.EqualFold(strings.TrimSpace(k), "Authorization") && strings.TrimSpace(v) != "" {
-			authHeader = true
-			break
-		}
-	}
+	authHeader = hasAuthorizationHeader(headers)
 
 	status := map[string]any{
 		"config_path":            redactUserPath(config.Path()),
@@ -831,6 +919,80 @@ func runAuthStatus(args []string, cfg config.Config) int {
 	return 0
 }
 
+func runAuthVerify(args []string, cfg config.Config) int {
+	fs := flag.NewFlagSet("auth verify", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	jsonOut := fs.Bool("json", false, "output JSON")
+	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
+		fmt.Fprintf(os.Stderr, "failed to parse flags: %v\n", err)
+		return 2
+	}
+	if fs.NArg() != 0 {
+		fmt.Fprintln(os.Stderr, "usage: pocketcastsctl auth verify [--json]")
+		return 2
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+	err := app.VerifyAuth(ctx, cfg, app.VerifyOptions{Attempts: 3, BaseDelay: 200 * time.Millisecond})
+
+	status := map[string]any{
+		"verified": false,
+		"status":   "fail",
+	}
+	switch app.KindOf(err) {
+	case "":
+		status["verified"] = true
+		status["status"] = "ok"
+	case app.KindUnauthorized:
+		status["status"] = "unauthorized"
+		status["error"] = strings.TrimSpace(err.Error())
+	case app.KindTransient:
+		status["status"] = "unverified"
+		status["error"] = strings.TrimSpace(err.Error())
+	default:
+		if err != nil {
+			status["error"] = strings.TrimSpace(err.Error())
+		}
+	}
+
+	if *jsonOut {
+		b, _ := json.MarshalIndent(status, "", "  ")
+		fmt.Println(string(b))
+		if err != nil {
+			return 1
+		}
+		return 0
+	}
+
+	if err == nil {
+		fmt.Println("auth verify: OK")
+		fmt.Println("[OK] authorization: accepted by API")
+		return 0
+	}
+
+	switch app.KindOf(err) {
+	case app.KindUnauthorized:
+		fmt.Println("auth verify: FAIL")
+		fmt.Println("[FAIL] authorization: rejected by API (401 Unauthorized)")
+		fmt.Println("next: pocketcastsctl auth refresh")
+		return 1
+	case app.KindTransient:
+		fmt.Println("auth verify: WARN")
+		fmt.Printf("[WARN] authorization: unable to verify now (%v)\n", err)
+		fmt.Println("next: retry `pocketcastsctl auth verify`")
+		return 1
+	default:
+		fmt.Println("auth verify: FAIL")
+		fmt.Printf("[FAIL] authorization: %v\n", err)
+		fmt.Println("next: pocketcastsctl auth refresh")
+		return 1
+	}
+}
+
 func runAuthRefresh(args []string, cfg config.Config) int {
 	fs := flag.NewFlagSet("auth refresh", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
@@ -839,6 +1001,7 @@ func runAuthRefresh(args []string, cfg config.Config) int {
 	openURL := fs.String("url", "https://pocketcasts.com/podcasts", "URL to open for login")
 	urlContains := fs.String("url-contains", cfg.URLContains, `substring to match the Pocket Casts tab URL`)
 	keyContains := fs.String("key-contains", "", "prefer tokens whose sourceKey contains this substring")
+	candidatePasses := fs.Int("candidate-passes", 1, "number of token-candidate verification passes")
 	syncOnly := fs.Bool("sync-only", false, "skip login/open flow; sync token from current browser session")
 	noInput := fs.Bool("no-input", false, "disable interactive prompts (requires --sync-only)")
 	if err := fs.Parse(args); err != nil {
@@ -849,7 +1012,7 @@ func runAuthRefresh(args []string, cfg config.Config) int {
 		return 2
 	}
 	if fs.NArg() != 0 {
-		fmt.Fprintln(os.Stderr, "usage: pocketcastsctl auth refresh [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--url-contains needle] [--key-contains q] [--sync-only] [--no-input]")
+		fmt.Fprintln(os.Stderr, "usage: pocketcastsctl auth refresh [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--url-contains needle] [--key-contains q] [--candidate-passes N] [--sync-only] [--no-input]")
 		return 2
 	}
 	if *noInput && !*syncOnly {
@@ -874,12 +1037,36 @@ func runAuthRefresh(args []string, cfg config.Config) int {
 
 	fmt.Fprintln(os.Stderr, "refresh step 2/2: sync and verify token")
 	cfgNow, _ := config.Load()
-	if err := syncAndVerifyAuthHeader(cfgNow, *browser, *browserApp, *urlContains, strings.TrimSpace(*keyContains)); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	updatedCfg, result, err := app.SyncAndVerifyAuth(ctx, cfgNow, app.SyncVerifyOptions{
+		Browser:         *browser,
+		BrowserApp:      *browserApp,
+		URLContains:     *urlContains,
+		KeyContains:     strings.TrimSpace(*keyContains),
+		CandidatePasses: *candidatePasses,
+		VerifyOptions: app.VerifyOptions{
+			Attempts:  3,
+			BaseDelay: 200 * time.Millisecond,
+		},
+	})
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "auth refresh failed: %v\n", err)
-		if isUnauthorizedError(err) {
+		for _, f := range result.Failures {
+			fmt.Fprintf(os.Stderr, "  candidate %q: %s\n", f.SourceKey, f.Reason)
+		}
+		if app.KindOf(err) == app.KindUnauthorized {
 			printAuthRecoveryHint()
 		}
 		return 1
+	}
+	if saveErr := config.Save(updatedCfg); saveErr != nil {
+		fmt.Fprintf(os.Stderr, "auth refresh failed: failed to save config: %v\n", saveErr)
+		return 1
+	}
+	fmt.Printf("stored %q header in: %s\n", "Authorization", config.Path())
+	if strings.TrimSpace(result.SourceKey) != "" {
+		fmt.Fprintf(os.Stderr, "selected token source: %s\n", strings.TrimSpace(result.SourceKey))
 	}
 
 	fmt.Println("auth refresh: complete")
@@ -1081,6 +1268,15 @@ func authTokenExpiry(headers map[string]string) (int64, bool) {
 		return jwtExp(raw)
 	}
 	return 0, false
+}
+
+func hasAuthorizationHeader(headers map[string]string) bool {
+	for k, v := range headers {
+		if strings.EqualFold(strings.TrimSpace(k), "Authorization") && strings.TrimSpace(v) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func rankedTokenCandidates(cands []browsercontrol.TokenCandidate, keyContains string) []browsercontrol.TokenCandidate {
@@ -1711,8 +1907,9 @@ func completionScripts() map[string]string {
 	cmds := []string{
 		"help", "version", "completion",
 		"doctor",
+		"start",
 		"config init",
-		"auth login", "auth refresh", "auth sync", "auth tabs", "auth status", "auth clear",
+		"auth login", "auth refresh", "auth sync", "auth tabs", "auth status", "auth verify", "auth clear",
 		"web play", "web pause", "web toggle", "web next", "web prev", "web status",
 		"queue ls",
 		"queue api ls", "queue api add", "queue api rm", "queue api play", "queue api pick",
@@ -1898,13 +2095,7 @@ func collectDoctorChecks(cfg config.Config, includeAPIValidation bool) []doctorC
 		})
 	}
 
-	authConfigured := false
-	for k, v := range cfg.APIHeaders {
-		if strings.EqualFold(strings.TrimSpace(k), "Authorization") && strings.TrimSpace(v) != "" {
-			authConfigured = true
-			break
-		}
-	}
+	authConfigured := hasAuthorizationHeader(cfg.APIHeaders)
 	if authConfigured {
 		checks = append(checks, doctorCheck{
 			ID:      "auth_header",
@@ -2046,85 +2237,13 @@ func doctorSuggestedFixes(checks []doctorCheck) []string {
 }
 
 func verifyAuthWithAPI(cfg config.Config) (bool, error) {
-	client := pocketcasts.New(pocketcasts.Options{
-		BaseURL: cfg.APIBaseURL,
-		Headers: cfg.APIHeaders,
-	})
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
-	_, err := fetchUpNextWithRetry(ctx, client, "0")
+	err := app.VerifyAuth(ctx, cfg, app.VerifyOptions{Attempts: 3, BaseDelay: 200 * time.Millisecond})
 	if err != nil {
 		return false, err
 	}
 	return true, nil
-}
-
-func syncAndVerifyAuthHeader(cfg config.Config, browser, browserApp, urlContains, keyContains string) error {
-	controller, err := browsercontrol.New(browsercontrol.Options{
-		Browser:     browser,
-		BrowserApp:  browserApp,
-		URLContains: urlContains,
-	})
-	if err != nil {
-		return fmt.Errorf("invalid browser options: %w", err)
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
-	defer cancel()
-	var cands []browsercontrol.TokenCandidate
-	err = retryTransient(ctx, 3, 150*time.Millisecond, func() error {
-		var tokenErr error
-		cands, tokenErr = controller.TokenCandidates(ctx)
-		return tokenErr
-	})
-	if err != nil {
-		return fmt.Errorf("token discovery failed: %w", err)
-	}
-	ranked := rankedTokenCandidates(cands, keyContains)
-	if len(ranked) == 0 {
-		return fmt.Errorf("no token candidates found")
-	}
-
-	if cfg.APIHeaders == nil {
-		cfg.APIHeaders = map[string]string{}
-	}
-	cfg.Browser = browser
-	cfg.BrowserApp = strings.TrimSpace(browserApp)
-	cfg.URLContains = urlContains
-
-	var lastErr error
-	for _, c := range ranked {
-		token := strings.TrimSpace(c.Token)
-		token = strings.TrimPrefix(token, "Bearer ")
-		token = strings.TrimPrefix(token, "bearer ")
-		if token == "" {
-			continue
-		}
-		tryCfg := cfg
-		tryHeaders := make(map[string]string, len(cfg.APIHeaders))
-		for k, v := range cfg.APIHeaders {
-			tryHeaders[k] = v
-		}
-		tryCfg.APIHeaders = tryHeaders
-		tryCfg.APIHeaders["Authorization"] = "Bearer " + token
-
-		ok, err := verifyAuthWithAPI(tryCfg)
-		if err == nil && ok {
-			if saveErr := config.Save(tryCfg); saveErr != nil {
-				return fmt.Errorf("failed to save config: %w", saveErr)
-			}
-			fmt.Printf("stored %q header in: %s\n", "Authorization", config.Path())
-			return nil
-		}
-		lastErr = err
-		if err != nil && !isUnauthorizedError(err) {
-			return fmt.Errorf("verification failed: %w", err)
-		}
-	}
-	if lastErr == nil {
-		lastErr = fmt.Errorf("no candidate produced a verified token")
-	}
-	return fmt.Errorf("all token candidates were rejected: %w", lastErr)
 }
 
 func runQueueAPI(args []string, cfg config.Config) int {
@@ -2650,8 +2769,7 @@ func isUnauthorizedError(err error) bool {
 }
 
 func printAuthRecoveryHint() {
-	fmt.Fprintln(os.Stderr, "tip: refresh credentials with `pocketcastsctl auth sync`")
-	fmt.Fprintln(os.Stderr, "tip: if needed, run `pocketcastsctl auth login` then `pocketcastsctl auth sync`")
+	fmt.Fprintln(os.Stderr, "next: run `pocketcastsctl auth refresh`")
 }
 
 func redactUserPath(p string) string {

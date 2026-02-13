@@ -46,8 +46,7 @@ Show build metadata:
 Recommended first-run flow:
 
 ```bash
-./bin/pocketcastsctl doctor
-./bin/pocketcastsctl auth refresh
+./bin/pocketcastsctl start
 ./bin/pocketcastsctl queue api ls
 ./bin/pocketcastsctl queue api play 1
 ```
@@ -138,17 +137,25 @@ This path calls Pocket Casts’ private API (currently `up_next/list`, `up_next/
 ./bin/pocketcastsctl login
 ./bin/pocketcastsctl auth refresh
 ./bin/pocketcastsctl auth status
+./bin/pocketcastsctl auth verify
 ./bin/pocketcastsctl queue api ls
 ./bin/pocketcastsctl queue api play 1
 ```
 
 `auth refresh` is a guided flow: open login page, sync token, then verify.
 `auth status` shows whether a token exists and, when possible, token expiry signals.
+`auth verify` performs an explicit API verification check for the stored token.
 
 For automation/non-interactive use:
 
 ```bash
 ./bin/pocketcastsctl auth refresh --sync-only --no-input
+```
+
+To retry token selection and verification with multiple candidate passes:
+
+```bash
+./bin/pocketcastsctl auth refresh --candidate-passes 2
 ```
 
 Deprecated short aliases (still work for now, but print warnings):
@@ -173,10 +180,7 @@ If it finds the wrong thing, use:
 If `queue api` commands return `401 Unauthorized`, refresh credentials:
 
 ```bash
-./bin/pocketcastsctl auth sync
-# if still failing:
-./bin/pocketcastsctl auth login
-./bin/pocketcastsctl auth sync
+./bin/pocketcastsctl auth refresh
 ```
 
 Note: some setups appear to work without an explicit stored auth header; `queue api ls` will attempt the request either way.

@@ -1,9 +1,8 @@
 Usage:
+  pocketcastsctl start [--no-input] [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--url-contains needle]
   pocketcastsctl help start
 
 Recommended first-run flow:
-  1. pocketcastsctl doctor
-  2. pocketcastsctl auth login
-  3. pocketcastsctl auth sync
-  4. pocketcastsctl queue api ls
-  5. pocketcastsctl queue api play 1
+  1. pocketcastsctl start
+  2. pocketcastsctl queue api ls
+  3. pocketcastsctl queue api play 1

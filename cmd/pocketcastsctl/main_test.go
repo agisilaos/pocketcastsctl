@@ -242,6 +242,42 @@ func TestRunAuthStatusConfiguredStillWarnsUnverified(t *testing.T) {
 	}
 }
 
+func TestRunAuthVerifyMissingAuth(t *testing.T) {
+	code, stdout, stderr := runForTest(t, []string{"auth", "verify"}, "")
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1; stderr=%q", code, stderr)
+	}
+	if !strings.Contains(stdout, "auth verify: FAIL") {
+		t.Fatalf("stdout missing FAIL status: %q", stdout)
+	}
+	if !strings.Contains(stdout, "next: pocketcastsctl auth refresh") {
+		t.Fatalf("stdout missing recovery command: %q", stdout)
+	}
+}
+
+func TestRunAuthVerifyJSONMissingAuth(t *testing.T) {
+	code, stdout, stderr := runForTest(t, []string{"auth", "verify", "--json"}, "")
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1; stderr=%q", code, stderr)
+	}
+	if !strings.Contains(stdout, "\"verified\": false") {
+		t.Fatalf("stdout missing verified=false: %q", stdout)
+	}
+	if !strings.Contains(stdout, "\"status\": \"unauthorized\"") {
+		t.Fatalf("stdout missing unauthorized status: %q", stdout)
+	}
+}
+
+func TestRunStartNoInputMissingAuth(t *testing.T) {
+	code, _, stderr := runForTest(t, []string{"start", "--no-input"}, "")
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
+	}
+	if !strings.Contains(stderr, "auth not configured and --no-input is set") {
+		t.Fatalf("stderr missing no-input auth message: %q", stderr)
+	}
+}
+
 func TestRetryTransientSuccessAfterRetry(t *testing.T) {
 	attempts := 0
 	err := retryTransient(context.Background(), 3, time.Millisecond, func() error {
