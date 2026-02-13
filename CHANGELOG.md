@@ -6,6 +6,26 @@ The format is based on *Keep a Changelog*, and this project adheres to *Semantic
 
 ## [Unreleased]
 
+## [v0.1.3] - 2026-02-13
+
+- docs: clarify local playback resume behavior and mpv requirement (69035c2)
+- feat(local): start local playback from Pocket Casts progress (39ef803)
+- fix(auth): make refresh select API-verified token candidates (9fb3e36)
+- ux(doctor): add explicit quick/full progress messaging (cccacd5)
+- fix(auth): make status warn when token validity is unverified (bf415aa)
+- feat(auth): add non-interactive auth refresh mode (1775b4d)
+- docs(cli): surface full doctor flags in root help (177afca)
+- test(cli): add golden snapshots and doctor/auth ux coverage (ad7387b)
+- feat(ux): add doctor modes and guided auth refresh flow (e303036)
+- fix(ux): validate auth in doctor and add 401 recovery guidance (2bcbd28)
+- feat(ux): add doctor, task-based help, and consistent status output (6066877)
+- feat(cli): retry read-only browser control operations (b379ba8)
+- feat(cli): add transient retries for web status and queue fetches (f3013d6)
+- feat(auth): add safe auth status diagnostics command (065f095)
+- test(cli): enforce stdout/stderr contract for core flows (9ba6472)
+- docs: add v0.1.3 roadmap with acceptance criteria (1eca4f9)
+- test(cli): add regression tests for help, aliases, and safe rm (48cbff2)
+
 ## [v0.1.2] - 2026-02-12
 
 - feat(cli): add leaf-level help topics for subcommands (6a8851b)
