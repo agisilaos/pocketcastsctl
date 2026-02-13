@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"pocketcastsctl/internal/authutil"
 	"pocketcastsctl/internal/browsercontrol"
 	"pocketcastsctl/internal/config"
 	"pocketcastsctl/internal/pocketcasts"
@@ -38,14 +39,14 @@ type SyncVerifyResult struct {
 
 func VerifyAuth(ctx context.Context, cfg config.Config, opts VerifyOptions) error {
 	op := "auth verify"
-	if !hasAuthorizationHeader(cfg.APIHeaders) {
+	if !authutil.HasAuthorizationHeader(cfg.APIHeaders) {
 		return Wrap(KindUnauthorized, op, fmt.Errorf("Authorization header missing"))
 	}
 
 	client := pocketcasts.New(pocketcasts.Options{BaseURL: cfg.APIBaseURL, Headers: cfg.APIHeaders})
 	_, err := fetchUpNextWithRetry(ctx, client, opts)
 	if err != nil {
-		if isUnauthorizedError(err) {
+		if authutil.IsUnauthorizedError(err) {
 			return Wrap(KindUnauthorized, op, err)
 		}
 		return Wrap(KindTransient, op, err)
@@ -140,20 +141,8 @@ func SyncAndVerifyAuth(ctx context.Context, cfg config.Config, opts SyncVerifyOp
 	return cfg, SyncVerifyResult{Failures: failures}, Wrap(KindTransient, op, fmt.Errorf("could not verify token due to transient/API errors"))
 }
 
-func hasAuthorizationHeader(headers map[string]string) bool {
-	for k, v := range headers {
-		if strings.EqualFold(strings.TrimSpace(k), "Authorization") && strings.TrimSpace(v) != "" {
-			return true
-		}
-	}
-	return false
-}
-
 func normalizeToken(token string) string {
-	token = strings.TrimSpace(token)
-	token = strings.TrimPrefix(token, "Bearer ")
-	token = strings.TrimPrefix(token, "bearer ")
-	return strings.TrimSpace(token)
+	return authutil.NormalizeToken(token)
 }
 
 func fetchUpNextWithRetry(ctx context.Context, client *pocketcasts.Client, opts VerifyOptions) ([]byte, error) {
@@ -257,12 +246,4 @@ func isRetryableTransientError(err error) bool {
 		}
 	}
 	return false
-}
-
-func isUnauthorizedError(err error) bool {
-	if err == nil {
-		return false
-	}
-	s := strings.ToLower(err.Error())
-	return strings.Contains(s, "401") && strings.Contains(s, "unauthorized")
 }

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"pocketcastsctl/internal/authutil"
 	"pocketcastsctl/internal/browsercontrol"
 	"pocketcastsctl/internal/config"
 	"pocketcastsctl/internal/pocketcasts"
@@ -302,6 +304,34 @@ func TestRunNowWatchWithJSONRejected(t *testing.T) {
 	}
 }
 
+func TestRunNowWatchMaxUpdatesOne(t *testing.T) {
+	code, stdout, stderr := runForTest(t, []string{"now", "--watch", "--interval", "1ms", "--max-updates", "1"}, "")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr=%q", code, stderr)
+	}
+	if !strings.Contains(stdout, "POCKETCASTS NOW") {
+		t.Fatalf("stdout missing now dashboard header: %q", stdout)
+	}
+}
+
+func TestRunNowVerifyAuthMissingIsGraceful(t *testing.T) {
+	code, stdout, stderr := runForTest(t, []string{"now", "--verify-auth", "--json"}, "")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr=%q", code, stderr)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(stdout), &payload); err != nil {
+		t.Fatalf("invalid json: %v\n%s", err, stdout)
+	}
+	auth, ok := payload["auth"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing auth object: %v", payload)
+	}
+	if auth["status"] != "missing" {
+		t.Fatalf("auth.status = %v, want missing", auth["status"])
+	}
+}
+
 func TestRunAuthStatusPlain(t *testing.T) {
 	code, stdout, stderr := runForTest(t, []string{"auth", "status", "--plain"}, "")
 	if code != 0 {
@@ -309,6 +339,71 @@ func TestRunAuthStatusPlain(t *testing.T) {
 	}
 	if !strings.Contains(stdout, "authorization_present\tfalse") {
 		t.Fatalf("stdout missing plain auth status: %q", stdout)
+	}
+}
+
+func TestPlainContracts(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		keys []string
+		code int
+	}{
+		{
+			name: "now plain",
+			args: []string{"now", "--plain"},
+			keys: []string{"generated_at", "web_status", "local_status", "queue_status", "auth_status"},
+			code: 0,
+		},
+		{
+			name: "doctor plain",
+			args: []string{"doctor", "--plain", "--quick"},
+			keys: []string{"macos_automation", "browser_config"},
+			code: -1, // 0 or 1 depending env
+		},
+		{
+			name: "auth status plain",
+			args: []string{"auth", "status", "--plain"},
+			keys: []string{"authorization_present", "api_headers_count", "config_path"},
+			code: 0,
+		},
+		{
+			name: "auth verify plain",
+			args: []string{"auth", "verify", "--plain"},
+			keys: []string{"verified", "status"},
+			code: 1,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			code, stdout, stderr := runForTest(t, tt.args, "")
+			if tt.code == -1 {
+				if code != 0 && code != 1 {
+					t.Fatalf("exit code = %d, want 0 or 1; stderr=%q", code, stderr)
+				}
+			} else if code != tt.code {
+				t.Fatalf("exit code = %d, want %d; stderr=%q", code, tt.code, stderr)
+			}
+			for _, key := range tt.keys {
+				if !strings.Contains(stdout, key) {
+					t.Fatalf("stdout missing key %q: %q", key, stdout)
+				}
+			}
+		})
+	}
+}
+
+func TestLocalStatusJSONContract(t *testing.T) {
+	code, stdout, stderr := runForTest(t, []string{"local", "status", "--json"}, "")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr=%q", code, stderr)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(stdout), &payload); err != nil {
+		t.Fatalf("invalid json: %v\n%s", err, stdout)
+	}
+	if _, ok := payload["status"]; !ok {
+		t.Fatalf("json missing status field: %v", payload)
 	}
 }
 
@@ -421,10 +516,10 @@ func TestIsRetryableTransientError(t *testing.T) {
 }
 
 func TestIsUnauthorizedError(t *testing.T) {
-	if !isUnauthorizedError(fmt.Errorf("http 401: Unauthorized")) {
+	if !authutil.IsUnauthorizedError(fmt.Errorf("http 401: Unauthorized")) {
 		t.Fatalf("expected unauthorized error to be detected")
 	}
-	if isUnauthorizedError(fmt.Errorf("http 500: internal error")) {
+	if authutil.IsUnauthorizedError(fmt.Errorf("http 500: internal error")) {
 		t.Fatalf("did not expect non-401 error to be detected as unauthorized")
 	}
 }
@@ -568,7 +663,7 @@ func TestRunDoctorFixPrintsSuggestions(t *testing.T) {
 func TestAuthTokenExpiry(t *testing.T) {
 	payload := `{"exp":4102444800}`
 	tok := "x." + base64.RawURLEncoding.EncodeToString([]byte(payload)) + ".y"
-	exp, ok := authTokenExpiry(map[string]string{"Authorization": "Bearer " + tok})
+	exp, ok := authutil.TokenExpiryUnix(map[string]string{"Authorization": "Bearer " + tok})
 	if !ok {
 		t.Fatalf("expected token expiry to be detected")
 	}

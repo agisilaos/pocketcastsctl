@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -18,6 +17,7 @@ import (
 	"time"
 
 	"pocketcastsctl/internal/app"
+	"pocketcastsctl/internal/authutil"
 	"pocketcastsctl/internal/browsercontrol"
 	"pocketcastsctl/internal/config"
 	"pocketcastsctl/internal/har"
@@ -827,7 +827,7 @@ func runStart(args []string, cfg config.Config) int {
 
 	cfgNow, _ := config.Load()
 	fmt.Fprintln(os.Stderr, "start step 2/4: ensure auth is configured")
-	if !hasAuthorizationHeader(cfgNow.APIHeaders) {
+	if !authutil.HasAuthorizationHeader(cfgNow.APIHeaders) {
 		if *noInput {
 			fmt.Fprintln(os.Stderr, "start: auth not configured and --no-input is set")
 			fmt.Fprintln(os.Stderr, "next: run `pocketcastsctl auth refresh --sync-only --no-input` after you log in to Pocket Casts in your browser")
@@ -1028,7 +1028,7 @@ func runAuthStatus(args []string, cfg config.Config) int {
 		}
 	}
 	authHeader := false
-	authHeader = hasAuthorizationHeader(headers)
+	authHeader = authutil.HasAuthorizationHeader(headers)
 
 	status := map[string]any{
 		"config_path":            redactUserPath(config.Path()),
@@ -1040,7 +1040,7 @@ func runAuthStatus(args []string, cfg config.Config) int {
 		"url_contains":           cfg.URLContains,
 	}
 	var tokenExpiryText string
-	if exp, ok := authTokenExpiry(headers); ok {
+	if exp, ok := authutil.TokenExpiryUnix(headers); ok {
 		status["token_expiry_known"] = true
 		status["token_expiry_unix"] = exp
 		remaining := exp - time.Now().Unix()
@@ -1470,28 +1470,6 @@ func selectBestToken(cands []browsercontrol.TokenCandidate, keyContains string) 
 	return strings.TrimSpace(bestToken)
 }
 
-func authTokenExpiry(headers map[string]string) (int64, bool) {
-	for k, v := range headers {
-		if !strings.EqualFold(strings.TrimSpace(k), "Authorization") {
-			continue
-		}
-		raw := strings.TrimSpace(v)
-		raw = strings.TrimPrefix(raw, "Bearer ")
-		raw = strings.TrimPrefix(raw, "bearer ")
-		return jwtExp(raw)
-	}
-	return 0, false
-}
-
-func hasAuthorizationHeader(headers map[string]string) bool {
-	for k, v := range headers {
-		if strings.EqualFold(strings.TrimSpace(k), "Authorization") && strings.TrimSpace(v) != "" {
-			return true
-		}
-	}
-	return false
-}
-
 func rankedTokenCandidates(cands []browsercontrol.TokenCandidate, keyContains string) []browsercontrol.TokenCandidate {
 	out := make([]browsercontrol.TokenCandidate, 0, len(cands))
 	for _, c := range cands {
@@ -1529,7 +1507,7 @@ func tokenCandidateScore(c browsercontrol.TokenCandidate, keyContains string) in
 	if strings.Contains(k, "session") {
 		score += 5
 	}
-	if exp, ok := jwtExp(c.Token); ok {
+	if exp, ok := authutil.TokenExpFromToken(c.Token); ok {
 		now := time.Now().Unix()
 		if exp > now {
 			score += 50
@@ -1542,37 +1520,6 @@ func tokenCandidateScore(c browsercontrol.TokenCandidate, keyContains string) in
 		score += 5
 	}
 	return score
-}
-
-func jwtExp(tok string) (int64, bool) {
-	parts := strings.Split(strings.TrimSpace(tok), ".")
-	if len(parts) != 3 {
-		return 0, false
-	}
-	payload, err := decodeJWTPart(parts[1])
-	if err != nil {
-		return 0, false
-	}
-	var m map[string]any
-	if err := json.Unmarshal(payload, &m); err != nil {
-		return 0, false
-	}
-	switch v := m["exp"].(type) {
-	case float64:
-		return int64(v), true
-	case int64:
-		return v, true
-	case int:
-		return int64(v), true
-	}
-	return 0, false
-}
-
-func decodeJWTPart(s string) ([]byte, error) {
-	if l := len(s) % 4; l != 0 {
-		s += strings.Repeat("=", 4-l)
-	}
-	return base64.RawURLEncoding.DecodeString(s)
 }
 
 func runWeb(args []string, cfg config.Config) int {
@@ -2403,7 +2350,7 @@ func collectDoctorChecks(cfg config.Config, includeAPIValidation bool) []doctorC
 		})
 	}
 
-	authConfigured := hasAuthorizationHeader(cfg.APIHeaders)
+	authConfigured := authutil.HasAuthorizationHeader(cfg.APIHeaders)
 	if authConfigured {
 		checks = append(checks, doctorCheck{
 			ID:      "auth_header",
@@ -2422,7 +2369,7 @@ func collectDoctorChecks(cfg config.Config, includeAPIValidation bool) []doctorC
 
 	if authConfigured && includeAPIValidation {
 		if ok, err := verifyAuthWithAPI(cfg); err != nil || !ok {
-			if isUnauthorizedError(err) {
+			if authutil.IsUnauthorizedError(err) {
 				checks = append(checks, doctorCheck{
 					ID:      "auth_validation",
 					Status:  "fail",
@@ -2696,7 +2643,7 @@ func runQueueAPILS(args []string, client *pocketcasts.Client, ctx context.Contex
 	body, err := fetchUpNextWithRetry(ctx, client, serverModified)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "queue api ls failed: %v\n", err)
-		if isUnauthorizedError(err) {
+		if authutil.IsUnauthorizedError(err) {
 			printAuthRecoveryHint()
 		}
 		return 1
@@ -2930,7 +2877,7 @@ func runQueueAPIPlay(args []string, cfg config.Config, client *pocketcasts.Clien
 	body, err := fetchUpNextWithRetry(ctx, client, "0")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "queue api play: failed to fetch queue: %v\n", err)
-		if isUnauthorizedError(err) {
+		if authutil.IsUnauthorizedError(err) {
 			printAuthRecoveryHint()
 		}
 		return 1
@@ -2987,7 +2934,7 @@ func runQueueAPIPick(args []string, cfg config.Config, client *pocketcasts.Clien
 	body, err := fetchUpNextWithRetry(ctx, client, "0")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "queue api pick: failed to fetch queue: %v\n", err)
-		if isUnauthorizedError(err) {
+		if authutil.IsUnauthorizedError(err) {
 			printAuthRecoveryHint()
 		}
 		return 1
@@ -3233,14 +3180,6 @@ func isRetryableTransientError(err error) bool {
 		}
 	}
 	return false
-}
-
-func isUnauthorizedError(err error) bool {
-	if err == nil {
-		return false
-	}
-	s := strings.ToLower(err.Error())
-	return strings.Contains(s, "401") && strings.Contains(s, "unauthorized")
 }
 
 func printAuthRecoveryHint() {

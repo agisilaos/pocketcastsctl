@@ -2,14 +2,11 @@ package app
 
 import (
 	"context"
-	"encoding/base64"
-	"encoding/json"
-	"fmt"
-	"os"
 	"os/exec"
 	"strings"
 	"time"
 
+	"pocketcastsctl/internal/authutil"
 	"pocketcastsctl/internal/browsercontrol"
 	"pocketcastsctl/internal/config"
 	"pocketcastsctl/internal/player"
@@ -123,7 +120,7 @@ func collectLocalStatus(cfg config.Config) NowLocalStatus {
 }
 
 func collectQueueStatus(ctx context.Context, cfg config.Config) NowQueueStatus {
-	if !hasAuthorizationHeader(cfg.APIHeaders) {
+	if !authutil.HasAuthorizationHeader(cfg.APIHeaders) {
 		return NowQueueStatus{Status: "unauthorized", Error: "Authorization header missing"}
 	}
 	client := pocketcasts.New(pocketcasts.Options{BaseURL: cfg.APIBaseURL, Headers: cfg.APIHeaders})
@@ -136,7 +133,7 @@ func collectQueueStatus(ctx context.Context, cfg config.Config) NowQueueStatus {
 		Version:        2,
 	})
 	if err != nil {
-		if isUnauthorizedError(err) {
+		if authutil.IsUnauthorizedError(err) {
 			return NowQueueStatus{Status: "unauthorized", Error: "API returned 401 Unauthorized"}
 		}
 		return NowQueueStatus{Status: "unavailable", Error: err.Error()}
@@ -164,12 +161,12 @@ func collectQueueStatus(ctx context.Context, cfg config.Config) NowQueueStatus {
 }
 
 func collectAuthStatus(ctx context.Context, cfg config.Config, opts NowOptions) NowAuthStatus {
-	auth := NowAuthStatus{Status: "missing", AuthorizationExists: hasAuthorizationHeader(cfg.APIHeaders)}
+	auth := NowAuthStatus{Status: "missing", AuthorizationExists: authutil.HasAuthorizationHeader(cfg.APIHeaders)}
 	if !auth.AuthorizationExists {
 		return auth
 	}
 	auth.Status = "configured"
-	if exp, ok := authTokenExpiry(cfg.APIHeaders); ok {
+	if exp, ok := authutil.TokenExpiryUnix(cfg.APIHeaders); ok {
 		auth.TokenExpiryKnown = true
 		auth.TokenExpiryUnix = exp
 	}
@@ -191,41 +188,6 @@ func collectAuthStatus(ctx context.Context, cfg config.Config, opts NowOptions) 
 	}
 	auth.Error = err.Error()
 	return auth
-}
-
-func authTokenExpiry(headers map[string]string) (int64, bool) {
-	for k, v := range headers {
-		if !strings.EqualFold(strings.TrimSpace(k), "Authorization") {
-			continue
-		}
-		raw := strings.TrimSpace(v)
-		raw = strings.TrimPrefix(raw, "Bearer ")
-		raw = strings.TrimPrefix(raw, "bearer ")
-		parts := strings.Split(raw, ".")
-		if len(parts) != 3 {
-			return 0, false
-		}
-		payload, err := decodeJWTPart(parts[1])
-		if err != nil {
-			return 0, false
-		}
-		var m map[string]any
-		if err := json.Unmarshal(payload, &m); err != nil {
-			return 0, false
-		}
-		if f, ok := m["exp"].(float64); ok {
-			return int64(f), true
-		}
-		return 0, false
-	}
-	return 0, false
-}
-
-func decodeJWTPart(s string) ([]byte, error) {
-	if l := len(s) % 4; l != 0 {
-		s += strings.Repeat("=", 4-l)
-	}
-	return base64.RawURLEncoding.DecodeString(s)
 }
 
 func suggestNowActions(s NowSnapshot) []string {
@@ -264,37 +226,4 @@ func suggestNowActions(s NowSnapshot) []string {
 		add("pocketcastsctl queue api ls")
 	}
 	return actions
-}
-
-func formatRelativeExpiry(unix int64) string {
-	if unix <= 0 {
-		return ""
-	}
-	d := time.Until(time.Unix(unix, 0)).Round(time.Minute)
-	if d <= 0 {
-		return "expired"
-	}
-	if d < time.Hour {
-		return fmt.Sprintf("in %dm", int(d.Minutes()))
-	}
-	return fmt.Sprintf("in %dh", int(d.Hours()))
-}
-
-func shortTitle(s string, n int) string {
-	s = strings.TrimSpace(s)
-	if n <= 0 || len(s) <= n {
-		return s
-	}
-	if n <= 3 {
-		return s[:n]
-	}
-	return s[:n-3] + "..."
-}
-
-func stdoutIsTTY() bool {
-	fi, err := os.Stdout.Stat()
-	if err != nil {
-		return false
-	}
-	return fi.Mode()&os.ModeCharDevice != 0
 }

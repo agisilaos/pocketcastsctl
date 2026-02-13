@@ -1,16 +1,19 @@
 package main
 
-import "testing"
+import (
+	"testing"
 
-func TestDecodeJWTPart(t *testing.T) {
-	// header for {"alg":"HS256","typ":"JWT"}
-	part := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"
-	got, err := decodeJWTPart(part)
-	if err != nil {
-		t.Fatalf("decodeJWTPart error: %v", err)
+	"pocketcastsctl/internal/authutil"
+)
+
+func TestTokenExpFromToken(t *testing.T) {
+	// payload for {"exp":1735689600}
+	token := "x.eyJleHAiOjE3MzU2ODk2MDB9.y"
+	got, ok := authutil.TokenExpFromToken(token)
+	if !ok {
+		t.Fatalf("TokenExpFromToken should parse exp")
 	}
-	if string(got) != `{"alg":"HS256","typ":"JWT"}` {
-		t.Fatalf("unexpected payload: %s", string(got))
+	if got != 1735689600 {
+		t.Fatalf("exp = %d, want 1735689600", got)
 	}
 }
-

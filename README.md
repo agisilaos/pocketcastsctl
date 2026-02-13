@@ -72,14 +72,20 @@ Doctor modes:
   - Prefer `--json` where available for structured output.
   - Prefer `--plain` for stable tab/line-oriented output.
 - Read/status commands now support machine-friendly output modes consistently:
-  - `now --json|--plain`
-  - `doctor --json|--plain`
-  - `auth tabs --json|--plain`
-  - `auth status --json|--plain`
-  - `auth verify --json|--plain`
-  - `web status --json|--plain`
-  - `local status --json|--plain`
+  - See the contract table below.
 - Destructive safety checks (for example `queue api rm` without `--force` in non-interactive mode) fail with a non-zero exit code and error text on `stderr`.
+
+Output contract table:
+
+| Command | Human | `--plain` | `--json` |
+| --- | --- | --- | --- |
+| `now` | dashboard | key/value lines | full snapshot object |
+| `doctor` | checklist | tab-separated checks | structured checks + counts |
+| `auth tabs` | URL list | URL list | JSON array of URLs |
+| `auth status` | checklist | key/value lines | status object |
+| `auth verify` | checklist | key/value lines | verification object |
+| `web status` | single state line | single state line | `{ \"state\": ... }` |
+| `local status` | human status line | key/value lines | `{ \"status\": ... }` |
 
 ### Playback (Web Player tab)
 
@@ -104,6 +110,23 @@ Use `now` as the main dashboard command:
 ```
 
 `now` merges web status, local status, queue health, auth state, and next-action suggestions in one view.
+
+Sample output:
+
+```text
+POCKETCASTS NOW
+========================================================================
+Updated: 2026-02-13 22:39:30
+Web    : PAUSED
+Local  : STOPPED
+Queue  : READY (4 items, 1 in progress) | next: Ep. 6 – On Being God
+Auth   : CONFIGURED
+------------------------------------------------------------------------
+Recommended next actions:
+  1. pocketcastsctl web toggle
+  2. pocketcastsctl local pick --in-progress --recent
+  3. pocketcastsctl queue api pick --recent
+```
 
 Deprecated short aliases (still work for now, but print warnings):
 
