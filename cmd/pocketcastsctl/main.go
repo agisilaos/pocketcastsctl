@@ -807,7 +807,7 @@ func runAuthStatus(args []string, cfg config.Config) int {
 		return 0
 	}
 
-	overall := "OK"
+	overall := "WARN"
 	if authHeader {
 		fmt.Println("auth status:", overall)
 		fmt.Println("[OK] authorization: configured")

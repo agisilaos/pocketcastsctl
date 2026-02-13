@@ -216,6 +216,31 @@ func TestRunAuthStatusJSON(t *testing.T) {
 	}
 }
 
+func TestRunAuthStatusConfiguredStillWarnsUnverified(t *testing.T) {
+	cfgPath := filepath.Join(t.TempDir(), "config.json")
+	t.Setenv(config.EnvConfigPath, cfgPath)
+	err := os.WriteFile(cfgPath, []byte(`{
+  "browser":"chrome",
+  "url_contains":"pocketcasts.com",
+  "api_base_url":"https://api.pocketcasts.com",
+  "api_headers":{"Authorization":"Bearer not-a-jwt"}
+}`), 0o600)
+	if err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	code, stdout, stderr := runForTest(t, []string{"auth", "status"}, "")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr=%q", code, stderr)
+	}
+	if !strings.Contains(stdout, "auth status: WARN") {
+		t.Fatalf("stdout missing WARN status: %q", stdout)
+	}
+	if !strings.Contains(stdout, "authorization validity: not verified") {
+		t.Fatalf("stdout missing unverified warning: %q", stdout)
+	}
+}
+
 func TestRetryTransientSuccessAfterRetry(t *testing.T) {
 	attempts := 0
 	err := retryTransient(context.Background(), 3, time.Millisecond, func() error {
