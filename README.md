@@ -69,6 +69,13 @@ Doctor modes:
 - For scripting:
   - Prefer `--json` where available for structured output.
   - Prefer `--plain` for stable tab/line-oriented output.
+- Read/status commands now support machine-friendly output modes consistently:
+  - `doctor --json|--plain`
+  - `auth tabs --json|--plain`
+  - `auth status --json|--plain`
+  - `auth verify --json|--plain`
+  - `web status --json|--plain`
+  - `local status --json|--plain`
 - Destructive safety checks (for example `queue api rm` without `--force` in non-interactive mode) fail with a non-zero exit code and error text on `stderr`.
 
 ### Playback (Web Player tab)
@@ -77,6 +84,7 @@ Open `https://play.pocketcasts.com` and sign in. Then:
 
 ```bash
 ./bin/pocketcastsctl web status
+./bin/pocketcastsctl web status --json
 ./bin/pocketcastsctl web toggle
 ./bin/pocketcastsctl web next
 ```
@@ -101,6 +109,7 @@ By default, `local play` starts from Pocket Casts progress (`playedUpTo`) when a
 ./bin/pocketcastsctl local pause
 ./bin/pocketcastsctl local resume
 ./bin/pocketcastsctl local stop
+./bin/pocketcastsctl local status --json
 ```
 
 Resume/start-offset behavior:
@@ -140,11 +149,20 @@ This path calls Pocket Casts’ private API (currently `up_next/list`, `up_next/
 ./bin/pocketcastsctl auth verify
 ./bin/pocketcastsctl queue api ls
 ./bin/pocketcastsctl queue api play 1
+./bin/pocketcastsctl queue api pick --in-progress --recent
 ```
 
 `auth refresh` is a guided flow: open login page, sync token, then verify.
 `auth status` shows whether a token exists and, when possible, token expiry signals.
 `auth verify` performs an explicit API verification check for the stored token.
+`doctor explain <code>` explains specific doctor failure/warning codes and the fastest fix.
+
+Examples:
+
+```bash
+./bin/pocketcastsctl doctor explain doctor.auth.invalid
+./bin/pocketcastsctl doctor explain doctor.auth.invalid --json
+```
 
 For automation/non-interactive use:
 
@@ -168,6 +186,13 @@ Deprecated short aliases (still work for now, but print warnings):
 ```
 
 `pick` uses `fzf` if it’s installed (nice arrow-key selector). If not, it falls back to a simple numbered prompt.
+Picker filters:
+
+- `--recent`: sort episodes by publish time (newest first)
+- `--unplayed`: only episodes without saved progress
+- `--in-progress`: only episodes with saved progress
+
+These are available on both `queue api pick` and `local pick`.
 
 If `auth sync` can’t find a token, reload `https://play.pocketcasts.com` while logged in and try again.
 If it finds the wrong thing, use:

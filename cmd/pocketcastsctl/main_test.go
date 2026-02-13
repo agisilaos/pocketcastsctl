@@ -14,6 +14,7 @@ import (
 
 	"pocketcastsctl/internal/browsercontrol"
 	"pocketcastsctl/internal/config"
+	"pocketcastsctl/internal/pocketcasts"
 )
 
 func TestFormatVersion(t *testing.T) {
@@ -265,6 +266,71 @@ func TestRunAuthVerifyJSONMissingAuth(t *testing.T) {
 	}
 	if !strings.Contains(stdout, "\"status\": \"unauthorized\"") {
 		t.Fatalf("stdout missing unauthorized status: %q", stdout)
+	}
+}
+
+func TestRunAuthStatusPlain(t *testing.T) {
+	code, stdout, stderr := runForTest(t, []string{"auth", "status", "--plain"}, "")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr=%q", code, stderr)
+	}
+	if !strings.Contains(stdout, "authorization_present\tfalse") {
+		t.Fatalf("stdout missing plain auth status: %q", stdout)
+	}
+}
+
+func TestRunDoctorExplainKnownCode(t *testing.T) {
+	code, stdout, stderr := runForTest(t, []string{"doctor", "explain", "doctor.auth.invalid"}, "")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr=%q", code, stderr)
+	}
+	if !strings.Contains(stdout, "Stored auth rejected") {
+		t.Fatalf("stdout missing doctor explain title: %q", stdout)
+	}
+	if !strings.Contains(stdout, "pocketcastsctl auth refresh") {
+		t.Fatalf("stdout missing doctor explain fix: %q", stdout)
+	}
+}
+
+func TestRunDoctorExplainUnknownCode(t *testing.T) {
+	code, _, stderr := runForTest(t, []string{"doctor", "explain", "doctor.unknown"}, "")
+	if code != 2 {
+		t.Fatalf("exit code = %d, want 2", code)
+	}
+	if !strings.Contains(stderr, "unknown code") {
+		t.Fatalf("stderr missing unknown code message: %q", stderr)
+	}
+}
+
+func TestApplyEpisodeSelectionFilters(t *testing.T) {
+	eps := []struct {
+		uuid      string
+		title     string
+		published string
+	}{
+		{"a1111111-1111-1111-1111-111111111111", "Old", "2025-01-01T00:00:00Z"},
+		{"b2222222-2222-2222-2222-222222222222", "Mid", "2025-06-01T00:00:00Z"},
+		{"c3333333-3333-3333-3333-333333333333", "New", "2025-12-01T00:00:00Z"},
+	}
+	input := make([]pocketcasts.UpNextEpisode, 0, len(eps))
+	for _, ep := range eps {
+		input = append(input, pocketcasts.UpNextEpisode{UUID: ep.uuid, Title: ep.title, Published: ep.published})
+	}
+	progress := map[string]int{
+		"b2222222-2222-2222-2222-222222222222": 120,
+	}
+
+	unplayed := applyEpisodeSelection(input, progress, "", false, true, false)
+	if len(unplayed) != 2 {
+		t.Fatalf("unplayed len = %d, want 2", len(unplayed))
+	}
+	inProgress := applyEpisodeSelection(input, progress, "", false, false, true)
+	if len(inProgress) != 1 || inProgress[0].UUID != "b2222222-2222-2222-2222-222222222222" {
+		t.Fatalf("inProgress unexpected: %+v", inProgress)
+	}
+	recent := applyEpisodeSelection(input, progress, "", true, false, false)
+	if len(recent) != 3 || recent[0].Title != "New" {
+		t.Fatalf("recent ordering unexpected: %+v", recent)
 	}
 }
 

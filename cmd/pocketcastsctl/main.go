@@ -226,7 +226,16 @@ func runHelp(args []string) int {
 	case "completion":
 		printCompletionHelp()
 	case "doctor":
-		printDoctorHelp()
+		if len(args) == 1 {
+			printDoctorHelp()
+			return 0
+		}
+		switch args[1] {
+		case "explain":
+			printDoctorExplainHelp()
+		default:
+			return unknownHelpTopic(args)
+		}
 	case "start", "getting-started":
 		printGettingStartedHelp()
 	default:
@@ -305,14 +314,15 @@ Common tasks:
 Command reference:
   pocketcastsctl --version
   pocketcastsctl version
-  pocketcastsctl doctor [--json] [--quick|--full] [--fix]
+  pocketcastsctl doctor [--json|--plain] [--quick|--full] [--fix]
+  pocketcastsctl doctor explain <code> [--json]
   pocketcastsctl start [--no-input] [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--url-contains needle]
   pocketcastsctl auth login [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com]
   pocketcastsctl auth refresh [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--candidate-passes N]
   pocketcastsctl auth sync [--browser <name>] [--browser-app <app>] [--url-contains needle]
-  pocketcastsctl auth tabs [--browser <name>] [--browser-app <app>]
-  pocketcastsctl auth status [--json]
-  pocketcastsctl auth verify [--json]
+  pocketcastsctl auth tabs [--browser <name>] [--browser-app <app>] [--json] [--plain]
+  pocketcastsctl auth status [--json] [--plain]
+  pocketcastsctl auth verify [--json] [--plain]
   pocketcastsctl auth clear
   pocketcastsctl web <play|pause|toggle|next|prev|status> [--browser <name>] [--browser-app <app>] [--url-contains needle]
   pocketcastsctl queue ls [--json] [--browser <name>] [--browser-app <app>] [--url-contains needle]
@@ -320,7 +330,7 @@ Command reference:
   pocketcastsctl queue api add (--uuid id --podcast id --title t --published rfc3339 --url audioUrl) | (--episode-json json)
   pocketcastsctl queue api rm [--dry-run] [--force|--no-input] <episode-uuid...>
   pocketcastsctl queue api play <index|uuid> [--browser <name>] [--browser-app <app>] [--url-contains needle]
-  pocketcastsctl queue api pick [--search q] [--browser <name>] [--browser-app <app>] [--url-contains needle]
+  pocketcastsctl queue api pick [--search q] [--recent] [--unplayed|--in-progress] [--browser <name>] [--browser-app <app>] [--url-contains needle]
   pocketcastsctl har summarize [--host host] [--json] <file.har>   (use --host= to disable filtering)
   pocketcastsctl har graphql [--host host] [--json] <file.har>     (use --host= to disable filtering)
   pocketcastsctl har redact <in.har> <out.har>
@@ -377,9 +387,9 @@ Usage:
   pocketcastsctl auth login [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com]
   pocketcastsctl auth refresh [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--candidate-passes N]
   pocketcastsctl auth sync [--browser <name>] [--browser-app <app>] [--url-contains needle]
-  pocketcastsctl auth tabs [--browser <name>] [--browser-app <app>]
-  pocketcastsctl auth status [--json]
-  pocketcastsctl auth verify [--json]
+  pocketcastsctl auth tabs [--browser <name>] [--browser-app <app>] [--json] [--plain]
+  pocketcastsctl auth status [--json] [--plain]
+  pocketcastsctl auth verify [--json] [--plain]
   pocketcastsctl auth clear
 `) + "\n")
 }
@@ -397,15 +407,15 @@ func printAuthSyncHelp() {
 }
 
 func printAuthTabsHelp() {
-	fmt.Println("Usage:\n  pocketcastsctl auth tabs [--browser <name>] [--browser-app <app>]")
+	fmt.Println("Usage:\n  pocketcastsctl auth tabs [--browser <name>] [--browser-app <app>] [--json] [--plain]")
 }
 
 func printAuthStatusHelp() {
-	fmt.Println("Usage:\n  pocketcastsctl auth status [--json]")
+	fmt.Println("Usage:\n  pocketcastsctl auth status [--json] [--plain]")
 }
 
 func printAuthVerifyHelp() {
-	fmt.Println("Usage:\n  pocketcastsctl auth verify [--json]")
+	fmt.Println("Usage:\n  pocketcastsctl auth verify [--json] [--plain]")
 }
 
 func printAuthClearHelp() {
@@ -440,7 +450,7 @@ func printWebPrevHelp() {
 }
 
 func printWebStatusHelp() {
-	fmt.Println("Usage:\n  pocketcastsctl web status [--browser <name>] [--browser-app <app>] [--url-contains needle]")
+	fmt.Println("Usage:\n  pocketcastsctl web status [--json] [--plain] [--browser <name>] [--browser-app <app>] [--url-contains needle]")
 }
 
 func printQueueHelp() {
@@ -451,7 +461,7 @@ Usage:
   pocketcastsctl queue api add (--uuid id --podcast id --title t --published rfc3339 --url audioUrl) | (--episode-json json)
   pocketcastsctl queue api rm [--dry-run] [--force|--no-input] <episode-uuid...>
   pocketcastsctl queue api play <index|uuid> [--browser <name>] [--browser-app <app>] [--url-contains needle]
-  pocketcastsctl queue api pick [--search q] [--browser <name>] [--browser-app <app>] [--url-contains needle]
+  pocketcastsctl queue api pick [--search q] [--recent] [--unplayed|--in-progress] [--browser <name>] [--browser-app <app>] [--url-contains needle]
 `) + "\n")
 }
 
@@ -466,7 +476,7 @@ Usage:
   pocketcastsctl queue api add (--uuid id --podcast id --title t --published rfc3339 --url audioUrl) | (--episode-json json)
   pocketcastsctl queue api rm [--dry-run] [--force|--no-input] <episode-uuid...>
   pocketcastsctl queue api play <index|uuid> [--browser <name>] [--browser-app <app>] [--url-contains needle]
-  pocketcastsctl queue api pick [--search q] [--browser <name>] [--browser-app <app>] [--url-contains needle]
+  pocketcastsctl queue api pick [--search q] [--recent] [--unplayed|--in-progress] [--browser <name>] [--browser-app <app>] [--url-contains needle]
 `) + "\n")
 }
 
@@ -487,20 +497,20 @@ func printQueueAPIPlayHelp() {
 }
 
 func printQueueAPIPickHelp() {
-	fmt.Println("Usage:\n  pocketcastsctl queue api pick [--search q] [--limit N] [--no-play] [--browser <name>] [--browser-app <app>] [--url-contains needle] [--web-base url]")
+	fmt.Println("Usage:\n  pocketcastsctl queue api pick [--search q] [--limit N] [--recent] [--unplayed|--in-progress] [--no-play] [--browser <name>] [--browser-app <app>] [--url-contains needle] [--web-base url]")
 }
 
 func printLocalHelp() {
 	fmt.Print(strings.TrimSpace(`
 Usage:
-  pocketcastsctl local pick
+  pocketcastsctl local pick [--search q] [--limit N] [--recent] [--unplayed|--in-progress]
   pocketcastsctl local play <index|uuid>
   pocketcastsctl local pause|resume|stop|status
 `) + "\n")
 }
 
 func printLocalPickHelp() {
-	fmt.Println("Usage:\n  pocketcastsctl local pick [--search q] [--limit N]")
+	fmt.Println("Usage:\n  pocketcastsctl local pick [--search q] [--limit N] [--recent] [--unplayed|--in-progress]")
 }
 
 func printLocalPlayHelp() {
@@ -520,7 +530,7 @@ func printLocalStopHelp() {
 }
 
 func printLocalStatusHelp() {
-	fmt.Println("Usage:\n  pocketcastsctl local status")
+	fmt.Println("Usage:\n  pocketcastsctl local status [--json] [--plain]")
 }
 
 func printHARHelp() {
@@ -554,8 +564,13 @@ Usage:
 func printDoctorHelp() {
 	fmt.Print(strings.TrimSpace(`
 Usage:
-  pocketcastsctl doctor [--json] [--quick|--full] [--fix]
+  pocketcastsctl doctor [--json|--plain] [--quick|--full] [--fix]
+  pocketcastsctl doctor explain <code> [--json]
 `) + "\n")
+}
+
+func printDoctorExplainHelp() {
+	fmt.Println("Usage:\n  pocketcastsctl doctor explain <code> [--json]")
 }
 
 func formatVersion() string {
@@ -839,6 +854,7 @@ func runAuthStatus(args []string, cfg config.Config) int {
 	fs := flag.NewFlagSet("auth status", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	jsonOut := fs.Bool("json", false, "output JSON")
+	plain := fs.Bool("plain", false, "plain line-oriented output")
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0
@@ -847,7 +863,7 @@ func runAuthStatus(args []string, cfg config.Config) int {
 		return 2
 	}
 	if fs.NArg() != 0 {
-		fmt.Fprintln(os.Stderr, "usage: pocketcastsctl auth status [--json]")
+		fmt.Fprintln(os.Stderr, "usage: pocketcastsctl auth status [--json] [--plain]")
 		return 2
 	}
 
@@ -894,6 +910,27 @@ func runAuthStatus(args []string, cfg config.Config) int {
 		fmt.Println(string(b))
 		return 0
 	}
+	if *plain {
+		keys := []string{
+			"config_path",
+			"api_headers_count",
+			"authorization_present",
+			"authorization_verified",
+			"token_expiry_known",
+			"browser",
+			"url_contains",
+		}
+		for _, k := range keys {
+			fmt.Printf("%s\t%v\n", k, status[k])
+		}
+		if exp, ok := status["token_expiry_unix"]; ok {
+			fmt.Printf("token_expiry_unix\t%v\n", exp)
+		}
+		if rem, ok := status["token_seconds_remaining"]; ok {
+			fmt.Printf("token_seconds_remaining\t%v\n", rem)
+		}
+		return 0
+	}
 
 	overall := "WARN"
 	if authHeader {
@@ -923,6 +960,7 @@ func runAuthVerify(args []string, cfg config.Config) int {
 	fs := flag.NewFlagSet("auth verify", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	jsonOut := fs.Bool("json", false, "output JSON")
+	plain := fs.Bool("plain", false, "plain line-oriented output")
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0
@@ -931,7 +969,7 @@ func runAuthVerify(args []string, cfg config.Config) int {
 		return 2
 	}
 	if fs.NArg() != 0 {
-		fmt.Fprintln(os.Stderr, "usage: pocketcastsctl auth verify [--json]")
+		fmt.Fprintln(os.Stderr, "usage: pocketcastsctl auth verify [--json] [--plain]")
 		return 2
 	}
 
@@ -962,6 +1000,17 @@ func runAuthVerify(args []string, cfg config.Config) int {
 	if *jsonOut {
 		b, _ := json.MarshalIndent(status, "", "  ")
 		fmt.Println(string(b))
+		if err != nil {
+			return 1
+		}
+		return 0
+	}
+	if *plain {
+		fmt.Printf("verified\t%v\n", status["verified"])
+		fmt.Printf("status\t%v\n", status["status"])
+		if e, ok := status["error"]; ok {
+			fmt.Printf("error\t%v\n", e)
+		}
 		if err != nil {
 			return 1
 		}
@@ -1140,6 +1189,8 @@ func runAuthTabs(args []string, cfg config.Config) int {
 	fs.SetOutput(os.Stderr)
 	browser := fs.String("browser", cfg.Browser, `browser name`)
 	browserApp := fs.String("browser-app", cfg.BrowserApp, `macOS application name (optional)`)
+	jsonOut := fs.Bool("json", false, "output JSON")
+	plain := fs.Bool("plain", false, "plain line-oriented output")
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0
@@ -1170,7 +1221,19 @@ func runAuthTabs(args []string, cfg config.Config) int {
 		return 1
 	}
 	if len(urls) == 0 {
+		if *jsonOut {
+			fmt.Println("[]")
+			return 0
+		}
+		if *plain {
+			return 0
+		}
 		fmt.Println("(no tabs found)")
+		return 0
+	}
+	if *jsonOut {
+		b, _ := json.MarshalIndent(urls, "", "  ")
+		fmt.Println(string(b))
 		return 0
 	}
 	for _, u := range urls {
@@ -1370,6 +1433,8 @@ func runWeb(args []string, cfg config.Config) int {
 
 	fs := flag.NewFlagSet("web", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
+	jsonOut := fs.Bool("json", false, "output JSON (status only)")
+	plain := fs.Bool("plain", false, "plain output (status only)")
 	browser := fs.String("browser", cfg.Browser, `browser name`)
 	browserApp := fs.String("browser-app", cfg.BrowserApp, `macOS application name (optional)`)
 	urlContains := fs.String("url-contains", cfg.URLContains, `substring to match the Pocket Casts tab URL`)
@@ -1415,6 +1480,15 @@ func runWeb(args []string, cfg config.Config) int {
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "status failed: %v\n", err)
 			return 1
+		}
+		if *jsonOut {
+			b, _ := json.MarshalIndent(map[string]string{"state": st.State}, "", "  ")
+			fmt.Println(string(b))
+			return 0
+		}
+		if *plain {
+			fmt.Println(st.State)
+			return 0
 		}
 		fmt.Println(st.State)
 		return 0
@@ -1545,7 +1619,7 @@ func runLocal(args []string, cfg config.Config) int {
 	case "stop":
 		return runLocalStop(cfg)
 	case "status":
-		return runLocalStatus(cfg)
+		return runLocalStatus(args[1:], cfg)
 	default:
 		fmt.Fprintf(os.Stderr, "unknown local subcommand: %s\n", args[0])
 		return 2
@@ -1557,12 +1631,19 @@ func runLocalPick(args []string, cfg config.Config) int {
 	fs.SetOutput(os.Stderr)
 	search := fs.String("search", "", "filter by substring in title before showing picker")
 	limit := fs.Int("limit", 0, "limit items in picker (0 = no limit)")
+	recent := fs.Bool("recent", false, "sort candidate episodes by published date (newest first)")
+	unplayed := fs.Bool("unplayed", false, "show only episodes with no saved progress")
+	inProgress := fs.Bool("in-progress", false, "show only episodes with saved progress")
 	fromStart := fs.Bool("from-start", false, "start from beginning instead of Pocket Casts progress")
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0
 		}
 		fmt.Fprintf(os.Stderr, "failed to parse flags: %v\n", err)
+		return 2
+	}
+	if *unplayed && *inProgress {
+		fmt.Fprintln(os.Stderr, "local pick: use only one of --unplayed or --in-progress")
 		return 2
 	}
 
@@ -1585,7 +1666,8 @@ func runLocalPick(args []string, cfg config.Config) int {
 		fmt.Fprintf(os.Stderr, "local pick: failed to parse queue: %v\n", err)
 		return 1
 	}
-	eps = filterEpisodes(eps, *search)
+	progress, _ := pocketcasts.ExtractEpisodeProgress(body)
+	eps = applyEpisodeSelection(eps, progress, *search, *recent, *unplayed, *inProgress)
 	if *limit > 0 && *limit < len(eps) {
 		eps = eps[:*limit]
 	}
@@ -1601,7 +1683,6 @@ func runLocalPick(args []string, cfg config.Config) int {
 	}
 	startAt := 0
 	if !*fromStart {
-		progress, _ := pocketcasts.ExtractEpisodeProgress(body)
 		startAt = progress[chosen.UUID]
 	}
 	return startLocalPlayback(cfg, chosen, startAt)
@@ -1764,23 +1845,84 @@ func runLocalStop(cfg config.Config) int {
 	return 0
 }
 
-func runLocalStatus(cfg config.Config) int {
+func runLocalStatus(args []string, cfg config.Config) int {
+	fs := flag.NewFlagSet("local status", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	jsonOut := fs.Bool("json", false, "output JSON")
+	plain := fs.Bool("plain", false, "plain line-oriented output")
+	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
+		fmt.Fprintf(os.Stderr, "failed to parse flags: %v\n", err)
+		return 2
+	}
+	if fs.NArg() != 0 {
+		fmt.Fprintln(os.Stderr, "usage: pocketcastsctl local status [--json] [--plain]")
+		return 2
+	}
+
 	st, ok, err := state.Load(config.StatePath())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "local status: %v\n", err)
 		return 1
 	}
+	status := map[string]any{
+		"status": "stopped",
+	}
 	if !ok {
+		if *jsonOut {
+			b, _ := json.MarshalIndent(status, "", "  ")
+			fmt.Println(string(b))
+			return 0
+		}
+		if *plain {
+			fmt.Println("status\tstopped")
+			return 0
+		}
 		fmt.Println("stopped")
 		return 0
 	}
 	if !player.Alive(st.PID) {
 		_ = state.Clear(config.StatePath())
+		if *jsonOut {
+			b, _ := json.MarshalIndent(status, "", "  ")
+			fmt.Println(string(b))
+			return 0
+		}
+		if *plain {
+			fmt.Println("status\tstopped")
+			return 0
+		}
 		fmt.Println("stopped")
 		return 0
 	}
 	if st.Paused {
+		status["status"] = "paused"
+		status["title"] = strings.TrimSpace(st.Title)
+		if *jsonOut {
+			b, _ := json.MarshalIndent(status, "", "  ")
+			fmt.Println(string(b))
+			return 0
+		}
+		if *plain {
+			fmt.Printf("status\tpaused\n")
+			fmt.Printf("title\t%s\n", strings.TrimSpace(st.Title))
+			return 0
+		}
 		fmt.Printf("paused: %s\n", strings.TrimSpace(st.Title))
+		return 0
+	}
+	status["status"] = "playing"
+	status["title"] = strings.TrimSpace(st.Title)
+	if *jsonOut {
+		b, _ := json.MarshalIndent(status, "", "  ")
+		fmt.Println(string(b))
+		return 0
+	}
+	if *plain {
+		fmt.Printf("status\tplaying\n")
+		fmt.Printf("title\t%s\n", strings.TrimSpace(st.Title))
 		return 0
 	}
 	fmt.Printf("playing: %s\n", strings.TrimSpace(st.Title))
@@ -1907,6 +2049,7 @@ func completionScripts() map[string]string {
 	cmds := []string{
 		"help", "version", "completion",
 		"doctor",
+		"doctor explain",
 		"start",
 		"config init",
 		"auth login", "auth refresh", "auth sync", "auth tabs", "auth status", "auth verify", "auth clear",
@@ -1950,9 +2093,14 @@ type doctorCheck struct {
 }
 
 func runDoctor(args []string, cfg config.Config) int {
+	if len(args) > 0 && args[0] == "explain" {
+		return runDoctorExplain(args[1:])
+	}
+
 	fs := flag.NewFlagSet("doctor", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	jsonOut := fs.Bool("json", false, "output JSON")
+	plain := fs.Bool("plain", false, "plain tab-separated output")
 	quick := fs.Bool("quick", false, "skip API validation checks")
 	full := fs.Bool("full", false, "run full checks including API validation")
 	fix := fs.Bool("fix", false, "print suggested fix commands (no changes are made)")
@@ -1968,7 +2116,7 @@ func runDoctor(args []string, cfg config.Config) int {
 		return 2
 	}
 	if fs.NArg() != 0 {
-		fmt.Fprintln(os.Stderr, "usage: pocketcastsctl doctor [--json] [--quick|--full] [--fix]")
+		fmt.Fprintln(os.Stderr, "usage: pocketcastsctl doctor [--json|--plain] [--quick|--full] [--fix]")
 		return 2
 	}
 	includeAPIValidation := true
@@ -2004,6 +2152,15 @@ func runDoctor(args []string, cfg config.Config) int {
 		}
 		b, _ := json.MarshalIndent(out, "", "  ")
 		fmt.Println(string(b))
+		if failCount > 0 {
+			return 1
+		}
+		return 0
+	}
+	if *plain {
+		for _, c := range checks {
+			fmt.Printf("%s\t%s\t%s\t%s\n", c.Status, c.ID, c.Code, c.Message)
+		}
 		if failCount > 0 {
 			return 1
 		}
@@ -2234,6 +2391,96 @@ func doctorSuggestedFixes(checks []doctorCheck) []string {
 		}
 	}
 	return out
+}
+
+func runDoctorExplain(args []string) int {
+	fs := flag.NewFlagSet("doctor explain", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	jsonOut := fs.Bool("json", false, "output JSON")
+	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
+		fmt.Fprintf(os.Stderr, "failed to parse flags: %v\n", err)
+		return 2
+	}
+	if fs.NArg() != 1 {
+		fmt.Fprintln(os.Stderr, "usage: pocketcastsctl doctor explain <code> [--json]")
+		return 2
+	}
+	code := strings.TrimSpace(fs.Arg(0))
+	entry, ok := doctorCodeCatalog()[code]
+	if !ok {
+		fmt.Fprintf(os.Stderr, "doctor explain: unknown code %q\n", code)
+		return 2
+	}
+	if *jsonOut {
+		out := map[string]string{
+			"code":        code,
+			"title":       entry.Title,
+			"description": entry.Description,
+			"fix":         entry.Fix,
+		}
+		b, _ := json.MarshalIndent(out, "", "  ")
+		fmt.Println(string(b))
+		return 0
+	}
+	fmt.Printf("code: %s\n", code)
+	fmt.Printf("title: %s\n", entry.Title)
+	fmt.Printf("description: %s\n", entry.Description)
+	fmt.Printf("fix: %s\n", entry.Fix)
+	return 0
+}
+
+type doctorCodeEntry struct {
+	Title       string
+	Description string
+	Fix         string
+}
+
+func doctorCodeCatalog() map[string]doctorCodeEntry {
+	return map[string]doctorCodeEntry{
+		"doctor.macos.automation.missing": {
+			Title:       "AppleScript unavailable",
+			Description: "The `osascript` executable is missing, so browser automation commands cannot run.",
+			Fix:         "run on macOS with AppleScript support",
+		},
+		"doctor.browser.invalid_config": {
+			Title:       "Invalid browser configuration",
+			Description: "Configured browser or app name is not supported for automation.",
+			Fix:         "set a supported browser via --browser or POCKETCASTS_BROWSER",
+		},
+		"doctor.config.missing": {
+			Title:       "Config file missing",
+			Description: "No config file was found at the expected location.",
+			Fix:         "pocketcastsctl config init",
+		},
+		"doctor.auth.header_missing": {
+			Title:       "Authorization header missing",
+			Description: "No API auth token is stored in config.",
+			Fix:         "pocketcastsctl auth refresh",
+		},
+		"doctor.auth.invalid": {
+			Title:       "Stored auth rejected",
+			Description: "The API returned 401 for the stored Authorization header.",
+			Fix:         "pocketcastsctl auth refresh",
+		},
+		"doctor.auth.unverified": {
+			Title:       "Auth not verified",
+			Description: "Auth could not be validated due to transient/API issues right now.",
+			Fix:         "retry `pocketcastsctl auth verify`",
+		},
+		"doctor.local_player.missing": {
+			Title:       "No local player found",
+			Description: "Neither `mpv` nor `afplay` was found on PATH.",
+			Fix:         "brew install mpv",
+		},
+		"doctor.picker.fzf_missing": {
+			Title:       "fzf not installed",
+			Description: "Interactive picker falls back to a basic prompt without `fzf`.",
+			Fix:         "brew install fzf",
+		},
+	}
 }
 
 func verifyAuthWithAPI(cfg config.Config) (bool, error) {
@@ -2558,6 +2805,9 @@ func runQueueAPIPick(args []string, cfg config.Config, client *pocketcasts.Clien
 	webBase := fs.String("web-base", "https://play.pocketcasts.com", "web player base URL")
 	search := fs.String("search", "", "filter by substring in title before showing picker")
 	limit := fs.Int("limit", 0, "limit items in picker (0 = no limit)")
+	recent := fs.Bool("recent", false, "sort candidate episodes by published date (newest first)")
+	unplayed := fs.Bool("unplayed", false, "show only episodes with no saved progress")
+	inProgress := fs.Bool("in-progress", false, "show only episodes with saved progress")
 	noPlay := fs.Bool("no-play", false, "only print selected UUID (do not start playback)")
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -2567,7 +2817,11 @@ func runQueueAPIPick(args []string, cfg config.Config, client *pocketcasts.Clien
 		return 2
 	}
 	if fs.NArg() != 0 {
-		fmt.Fprintln(os.Stderr, "usage: pocketcastsctl queue api pick [--search q] [--limit N] [--no-play] [--browser chrome|safari] [--url-contains needle]")
+		fmt.Fprintln(os.Stderr, "usage: pocketcastsctl queue api pick [--search q] [--limit N] [--recent] [--unplayed|--in-progress] [--no-play] [--browser chrome|safari] [--url-contains needle]")
+		return 2
+	}
+	if *unplayed && *inProgress {
+		fmt.Fprintln(os.Stderr, "queue api pick: use only one of --unplayed or --in-progress")
 		return 2
 	}
 
@@ -2584,7 +2838,8 @@ func runQueueAPIPick(args []string, cfg config.Config, client *pocketcasts.Clien
 		fmt.Fprintf(os.Stderr, "queue api pick: failed to parse queue: %v\n", err)
 		return 1
 	}
-	eps = filterEpisodes(eps, *search)
+	progress, _ := pocketcasts.ExtractEpisodeProgress(body)
+	eps = applyEpisodeSelection(eps, progress, *search, *recent, *unplayed, *inProgress)
 	if *limit > 0 && *limit < len(eps) {
 		eps = eps[:*limit]
 	}
@@ -2646,6 +2901,67 @@ func filterEpisodes(eps []pocketcasts.UpNextEpisode, search string) []pocketcast
 		}
 	}
 	return out
+}
+
+func applyEpisodeSelection(
+	eps []pocketcasts.UpNextEpisode,
+	progress map[string]int,
+	search string,
+	recent bool,
+	unplayed bool,
+	inProgress bool,
+) []pocketcasts.UpNextEpisode {
+	eps = filterEpisodes(eps, search)
+	if unplayed || inProgress {
+		filtered := make([]pocketcasts.UpNextEpisode, 0, len(eps))
+		for _, ep := range eps {
+			played := progress[strings.TrimSpace(ep.UUID)]
+			if unplayed && played > 0 {
+				continue
+			}
+			if inProgress && played <= 0 {
+				continue
+			}
+			filtered = append(filtered, ep)
+		}
+		eps = filtered
+	}
+	if recent {
+		eps = sortEpisodesByPublishedRecent(eps)
+	}
+	return eps
+}
+
+func sortEpisodesByPublishedRecent(eps []pocketcasts.UpNextEpisode) []pocketcasts.UpNextEpisode {
+	out := make([]pocketcasts.UpNextEpisode, len(eps))
+	copy(out, eps)
+	sort.SliceStable(out, func(i, j int) bool {
+		ti, okI := parsePublishedTime(out[i].Published)
+		tj, okJ := parsePublishedTime(out[j].Published)
+		switch {
+		case okI && okJ:
+			return ti.After(tj)
+		case okI && !okJ:
+			return true
+		case !okI && okJ:
+			return false
+		default:
+			return false
+		}
+	})
+	return out
+}
+
+func parsePublishedTime(v string) (time.Time, bool) {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return time.Time{}, false
+	}
+	t, err := time.Parse(time.RFC3339, v)
+	if err == nil {
+		return t, true
+	}
+	return time.Time{}, false
 }
 
 func filterQueueItems(items []browsercontrol.QueueItem, search string) []browsercontrol.QueueItem {
