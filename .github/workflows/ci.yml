@@ -15,6 +15,11 @@ jobs:
           go-version-file: go.mod
       - name: Vet
         run: go vet ./...
+      - name: Format Check
+        run: make fmt-check
       - name: Test
         run: go test ./...
-
+      - name: Help/Docs Drift Check
+        run: make check-help-docs
+      - name: Release Preflight Smoke
+        run: ./scripts/release_preflight.sh v0.0.0

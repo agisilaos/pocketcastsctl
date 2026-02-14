@@ -95,4 +95,3 @@ func toJSArray(ss []string) string {
 	out += "]"
 	return out
 }
-

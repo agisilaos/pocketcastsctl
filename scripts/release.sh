@@ -367,7 +367,8 @@ main() {
   ensure_git_repo
   ensure_github_repo
   ensure_origin_remote
-  require_clean_tree
+  print -- "Running release preflight checks..."
+  ./scripts/release_preflight.sh "${version}"
 
   if git rev-parse "${version}" >/dev/null 2>&1; then
     die "tag already exists: ${version}"
