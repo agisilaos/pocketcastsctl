@@ -6,6 +6,14 @@ The format is based on *Keep a Changelog*, and this project adheres to *Semantic
 
 ## [Unreleased]
 
+## [v0.1.4] - 2026-02-14
+
+- chore: add release preflight, docs drift checks, and core package tests (7863c48)
+- test+refactor: harden now flow, stabilize output contracts, dedupe auth helpers (4835f6b)
+- feat(now): add beautiful now-playing cockpit with watch mode (ec94198)
+- feat(cli): add doctor explain, picker filters, and plain output modes (1bd48c9)
+- feat(cli): add start flow and auth verify with typed auth service (35f1138)
+
 ## [v0.1.3] - 2026-02-13
 
 - docs: clarify local playback resume behavior and mpv requirement (69035c2)
