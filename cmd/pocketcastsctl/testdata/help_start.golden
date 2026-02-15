@@ -1,5 +1,5 @@
 Usage:
-  pocketcastsctl start [--no-input] [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--url-contains needle]
+  pocketcastsctl start [--json] [--no-input] [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--url-contains needle]
   pocketcastsctl help start
 
 Recommended first-run flow:

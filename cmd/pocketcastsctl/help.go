@@ -27,10 +27,10 @@ var usageText = map[string]string{
 	"queue api ls":   "pocketcastsctl queue api ls [--limit N] [--search q] [--json|--raw] [--plain]",
 	"queue api add":  "pocketcastsctl queue api add (--uuid id --podcast id --title t --published rfc3339 --url audioUrl) | (--episode-json json) [--raw]",
 	"queue api rm":   "pocketcastsctl queue api rm [--dry-run] [--force|--no-input] [--raw] <episode-uuid...>",
-	"queue api play": "pocketcastsctl queue api play <index|uuid> [--search q] [--browser <name>] [--browser-app <app>] [--url-contains needle] [--web-base url]",
+	"queue api play": "pocketcastsctl queue api play <index|uuid> [--search q] [--dry-run] [--browser <name>] [--browser-app <app>] [--url-contains needle] [--web-base url]",
 	"queue api pick": "pocketcastsctl queue api pick [--search q] [--limit N] [--recent] [--unplayed|--in-progress] [--no-play] [--browser <name>] [--browser-app <app>] [--url-contains needle] [--web-base url]",
 	"local pick":     "pocketcastsctl local pick [--search q] [--limit N] [--recent] [--unplayed|--in-progress]",
-	"local play":     "pocketcastsctl local play [--from-start] <index|uuid>",
+	"local play":     "pocketcastsctl local play [--from-start] [--dry-run] <index|uuid>",
 	"local pause":    "pocketcastsctl local pause",
 	"local resume":   "pocketcastsctl local resume",
 	"local stop":     "pocketcastsctl local stop",
@@ -39,8 +39,8 @@ var usageText = map[string]string{
 	"har graphql":    "pocketcastsctl har graphql [--host host] [--json] <file.har>",
 	"har redact":     "pocketcastsctl har redact <in.har> <out.har>",
 	"doctor explain": "pocketcastsctl doctor explain <code> [--json]",
-	"start":          "pocketcastsctl start [--no-input] [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--url-contains needle]",
-	"now":            "pocketcastsctl now [--watch] [--interval 5s] [--verify-auth] [--json|--plain]",
+	"start":          "pocketcastsctl start [--json] [--no-input] [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--url-contains needle]",
+	"now":            "pocketcastsctl now [--watch] [--interactive] [--interval 5s] [--verify-auth] [--json|--plain]",
 	"completion":     "pocketcastsctl completion [zsh|bash|fish]",
 	"doctor":         "pocketcastsctl doctor [--json|--plain] [--quick|--full] [--fix]",
 	"auth":           "pocketcastsctl auth <login|refresh|sync|tabs|status|verify|clear>",
@@ -306,10 +306,10 @@ Common tasks:
 Command reference:
   pocketcastsctl --version
   pocketcastsctl version
-  pocketcastsctl now [--watch] [--interval 5s] [--verify-auth] [--json|--plain]
+  pocketcastsctl now [--watch] [--interactive] [--interval 5s] [--verify-auth] [--json|--plain]
   pocketcastsctl doctor [--json|--plain] [--quick|--full] [--fix]
   pocketcastsctl doctor explain <code> [--json]
-  pocketcastsctl start [--no-input] [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--url-contains needle]
+  pocketcastsctl start [--json] [--no-input] [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--url-contains needle]
   pocketcastsctl auth login [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com]
   pocketcastsctl auth refresh [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--candidate-passes N]
   pocketcastsctl auth sync [--browser <name>] [--browser-app <app>] [--url-contains needle]
@@ -322,7 +322,7 @@ Command reference:
   pocketcastsctl queue api ls [--limit N] [--search q] [--json|--raw] [--plain]
   pocketcastsctl queue api add (--uuid id --podcast id --title t --published rfc3339 --url audioUrl) | (--episode-json json)
   pocketcastsctl queue api rm [--dry-run] [--force|--no-input] <episode-uuid...>
-  pocketcastsctl queue api play <index|uuid> [--browser <name>] [--browser-app <app>] [--url-contains needle]
+  pocketcastsctl queue api play <index|uuid> [--dry-run] [--browser <name>] [--browser-app <app>] [--url-contains needle]
   pocketcastsctl queue api pick [--search q] [--recent] [--unplayed|--in-progress] [--browser <name>] [--browser-app <app>] [--url-contains needle]
   pocketcastsctl har summarize [--host host] [--json] <file.har>   (use --host= to disable filtering)
   pocketcastsctl har graphql [--host host] [--json] <file.har>     (use --host= to disable filtering)
@@ -343,7 +343,7 @@ Deprecated shortcuts (use canonical commands above):
 func printGettingStartedHelp() {
 	fmt.Print(strings.TrimSpace(`
 Usage:
-  pocketcastsctl start [--no-input] [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--url-contains needle]
+  pocketcastsctl start [--json] [--no-input] [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--url-contains needle]
   pocketcastsctl help start
 
 Recommended first-run flow:
@@ -356,7 +356,7 @@ Recommended first-run flow:
 func printNowHelp() {
 	fmt.Print(strings.TrimSpace(`
 Usage:
-  pocketcastsctl now [--watch] [--interval 5s] [--verify-auth] [--json|--plain]
+  pocketcastsctl now [--watch] [--interactive] [--interval 5s] [--verify-auth] [--json|--plain]
 
 Examples:
   pocketcastsctl now

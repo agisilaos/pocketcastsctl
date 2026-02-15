@@ -206,12 +206,13 @@ func collectDoctorChecks(cfg config.Config, includeAPIValidation bool) []doctorC
 					Hint:    "run `pocketcastsctl auth sync` (or `auth login` then `auth sync`)",
 				})
 			} else {
+				code, msg, hint := classifyAuthValidationError(err)
 				checks = append(checks, doctorCheck{
 					ID:      "auth_validation",
 					Status:  "warn",
-					Code:    "doctor.auth.unverified",
-					Message: fmt.Sprintf("unable to validate auth now (%v)", err),
-					Hint:    "retry later; if queue commands fail, run `pocketcastsctl auth sync`",
+					Code:    code,
+					Message: msg,
+					Hint:    hint,
 				})
 			}
 		} else {
@@ -398,6 +399,21 @@ func doctorCodeCatalog() map[string]doctorCodeEntry {
 			Description: "Auth could not be validated due to transient/API issues right now.",
 			Fix:         "retry `pocketcastsctl auth verify`",
 		},
+		"doctor.auth.network.timeout": {
+			Title:       "Auth validation timeout",
+			Description: "API validation timed out before a response was received.",
+			Fix:         "check connectivity/VPN and retry `pocketcastsctl auth verify`",
+		},
+		"doctor.auth.network.unreachable": {
+			Title:       "Auth validation network issue",
+			Description: "API validation failed due to DNS/connectivity/network transport errors.",
+			Fix:         "check network access and retry `pocketcastsctl auth verify`",
+		},
+		"doctor.auth.api.unavailable": {
+			Title:       "Auth validation API unavailable",
+			Description: "Pocket Casts API returned transient server errors during auth validation.",
+			Fix:         "retry later; inspect with `pocketcastsctl queue api ls --raw` if persistent",
+		},
 		"doctor.local_player.missing": {
 			Title:       "No local player found",
 			Description: "Neither `mpv` nor `afplay` was found on PATH.",
@@ -419,4 +435,21 @@ func verifyAuthWithAPI(cfg config.Config) (bool, error) {
 		return false, err
 	}
 	return true, nil
+}
+
+func classifyAuthValidationError(err error) (code, message, hint string) {
+	if err == nil {
+		return "doctor.auth.unverified", "unable to validate auth now", "retry later; if queue commands fail, run `pocketcastsctl auth sync`"
+	}
+	s := strings.ToLower(strings.TrimSpace(err.Error()))
+	switch {
+	case strings.Contains(s, "timeout"):
+		return "doctor.auth.network.timeout", "auth validation timed out", "check connectivity/VPN and retry `pocketcastsctl auth verify`"
+	case strings.Contains(s, "connection refused"), strings.Contains(s, "no such host"), strings.Contains(s, "network is unreachable"), strings.Contains(s, "connection reset"):
+		return "doctor.auth.network.unreachable", "auth validation failed due to network/connectivity", "check network access to Pocket Casts API and retry"
+	case strings.Contains(s, "http 5"):
+		return "doctor.auth.api.unavailable", "Pocket Casts API unavailable during auth validation", "retry later; if persistent, inspect with `pocketcastsctl queue api ls --raw`"
+	default:
+		return "doctor.auth.unverified", fmt.Sprintf("unable to validate auth now (%v)", err), "retry later; if queue commands fail, run `pocketcastsctl auth sync`"
+	}
 }

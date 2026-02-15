@@ -154,6 +154,7 @@ func runNow(args []string, cfg config.Config) int {
 	jsonOut := fs.Bool("json", false, "output JSON")
 	plain := fs.Bool("plain", false, "plain tab-separated output")
 	watch := fs.Bool("watch", false, "refresh continuously")
+	interactive := fs.Bool("interactive", false, "prompt to run a suggested next action")
 	interval := fs.Duration("interval", 5*time.Second, "refresh interval in watch mode")
 	verifyAuth := fs.Bool("verify-auth", false, "verify auth with API (slower)")
 	maxUpdates := fs.Int("max-updates", 0, "max snapshots in watch mode (0 = unlimited)")
@@ -165,7 +166,7 @@ func runNow(args []string, cfg config.Config) int {
 		return 2
 	}
 	if fs.NArg() != 0 {
-		fmt.Fprintln(os.Stderr, "usage: pocketcastsctl now [--watch] [--interval 5s] [--verify-auth] [--json|--plain]")
+		fmt.Fprintln(os.Stderr, "usage: pocketcastsctl now [--watch] [--interactive] [--interval 5s] [--verify-auth] [--json|--plain]")
 		return 2
 	}
 	if *interval <= 0 {
@@ -174,6 +175,10 @@ func runNow(args []string, cfg config.Config) int {
 	}
 	if *watch && (*jsonOut || *plain) {
 		fmt.Fprintln(os.Stderr, "now: --watch supports human output only (omit --json/--plain)")
+		return 2
+	}
+	if *interactive && (*jsonOut || *plain || *watch) {
+		fmt.Fprintln(os.Stderr, "now: --interactive requires non-watch human output (omit --json/--plain/--watch)")
 		return 2
 	}
 
@@ -201,6 +206,9 @@ func runNow(args []string, cfg config.Config) int {
 		render(s)
 		updates++
 		if !*watch {
+			if *interactive {
+				return runNowInteractive(s.Actions)
+			}
 			return 0
 		}
 		if *maxUpdates > 0 && updates >= *maxUpdates {
@@ -208,6 +216,34 @@ func runNow(args []string, cfg config.Config) int {
 		}
 		time.Sleep(*interval)
 	}
+}
+
+func runNowInteractive(actions []string) int {
+	if len(actions) == 0 {
+		fmt.Fprintln(os.Stderr, "now: no suggested actions available")
+		return 0
+	}
+	fmt.Fprint(os.Stderr, "Run suggested action number (or press Enter to skip): ")
+	line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+	sel := strings.TrimSpace(line)
+	if sel == "" {
+		fmt.Fprintln(os.Stderr, "now: skipped")
+		return 0
+	}
+	n, err := strconv.Atoi(sel)
+	if err != nil || n <= 0 || n > len(actions) {
+		fmt.Fprintln(os.Stderr, "now: invalid selection")
+		return 2
+	}
+	action := strings.TrimSpace(actions[n-1])
+	action = strings.TrimPrefix(action, "pocketcastsctl ")
+	actionArgs := strings.Fields(action)
+	if len(actionArgs) == 0 {
+		fmt.Fprintln(os.Stderr, "now: selected action is empty")
+		return 2
+	}
+	fmt.Fprintf(os.Stderr, "now: running `%s`\n", strings.Join(actionArgs, " "))
+	return run(actionArgs)
 }
 
 func printNowHuman(s app.NowSnapshot) {
@@ -278,6 +314,7 @@ func formatInlineErr(s string) string {
 func runStart(args []string, cfg config.Config) int {
 	fs := flag.NewFlagSet("start", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
+	jsonOut := fs.Bool("json", false, "output JSON onboarding report")
 	noInput := fs.Bool("no-input", false, "disable interactive prompts")
 	browser := fs.String("browser", cfg.Browser, `browser name`)
 	browserApp := fs.String("browser-app", cfg.BrowserApp, `macOS application name (optional)`)
@@ -293,30 +330,71 @@ func runStart(args []string, cfg config.Config) int {
 		return 2
 	}
 	if fs.NArg() != 0 {
-		fmt.Fprintln(os.Stderr, "usage: pocketcastsctl start [--no-input] [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--url-contains needle]")
+		fmt.Fprintln(os.Stderr, "usage: pocketcastsctl start [--json] [--no-input] [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--url-contains needle]")
 		return 2
+	}
+	if *jsonOut {
+		*noInput = true
+	}
+
+	type startStep struct {
+		ID      string `json:"id"`
+		Status  string `json:"status"`
+		Message string `json:"message"`
+		Hint    string `json:"hint,omitempty"`
+	}
+	type startReport struct {
+		Status string      `json:"status"`
+		Steps  []startStep `json:"steps"`
+		Next   []string    `json:"next,omitempty"`
+		Error  string      `json:"error,omitempty"`
+	}
+	report := startReport{Status: "ok", Steps: make([]startStep, 0, 4)}
+	addStep := func(id, status, message, hint string) {
+		report.Steps = append(report.Steps, startStep{
+			ID:      id,
+			Status:  status,
+			Message: message,
+			Hint:    strings.TrimSpace(hint),
+		})
+	}
+	fail := func(id, message, hint string) int {
+		report.Status = "fail"
+		report.Error = message
+		addStep(id, "fail", message, hint)
+		if *jsonOut {
+			if err := printJSON(report); err != nil {
+				errf("failed to render start JSON: %v\n", err)
+				return 1
+			}
+		} else {
+			fmt.Fprintf(os.Stderr, "start: %s\n", message)
+			if strings.TrimSpace(hint) != "" {
+				fmt.Fprintf(os.Stderr, "next: %s\n", hint)
+			}
+		}
+		return 1
 	}
 
 	fmt.Fprintln(os.Stderr, "start step 1/4: run quick environment checks")
 	checks := collectDoctorChecks(cfg, false)
 	_, warnCount, failCount := summarizeDoctorChecks(checks)
 	if failCount > 0 {
-		fmt.Fprintln(os.Stderr, "start: environment has blocking issues; run `pocketcastsctl doctor --full --fix`")
-		return 1
+		return fail("quick_checks", "environment has blocking issues", "run `pocketcastsctl doctor --full --fix`")
 	}
 	if warnCount > 0 {
 		fmt.Fprintln(os.Stderr, "start: quick checks passed with warnings")
+		addStep("quick_checks", "warn", "quick checks passed with warnings", "")
 	} else {
 		fmt.Fprintln(os.Stderr, "start: quick checks passed")
+		addStep("quick_checks", "ok", "quick checks passed", "")
 	}
 
 	cfgNow, _ := config.Load()
 	fmt.Fprintln(os.Stderr, "start step 2/4: ensure auth is configured")
 	if !authutil.HasAuthorizationHeader(cfgNow.APIHeaders) {
 		if *noInput {
-			fmt.Fprintln(os.Stderr, "start: auth not configured and --no-input is set")
-			fmt.Fprintln(os.Stderr, "next: run `pocketcastsctl auth refresh --sync-only --no-input` after you log in to Pocket Casts in your browser")
-			return 1
+			return fail("auth_config", "auth not configured and --no-input is set", "run `pocketcastsctl auth refresh --sync-only --no-input` after logging in")
 		}
 		fmt.Fprint(os.Stderr, "Run `pocketcastsctl auth refresh` now? [Y/n]: ")
 		line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
@@ -324,7 +402,7 @@ func runStart(args []string, cfg config.Config) int {
 		if answer != "" && answer != "y" && answer != "yes" {
 			fmt.Fprintln(os.Stderr, "start: skipped auth refresh")
 			fmt.Fprintln(os.Stderr, "next: run `pocketcastsctl auth refresh`")
-			return 1
+			return fail("auth_config", "auth refresh skipped", "run `pocketcastsctl auth refresh`")
 		}
 		refreshArgs := []string{
 			"--browser", *browser,
@@ -335,19 +413,47 @@ func runStart(args []string, cfg config.Config) int {
 			"--candidate-passes", strconv.Itoa(*candidatePasses),
 		}
 		if code := runAuthRefresh(refreshArgs, cfgNow); code != 0 {
+			report.Status = "fail"
+			report.Error = "auth refresh failed"
+			addStep("auth_config", "fail", "auth refresh failed", "run `pocketcastsctl auth refresh`")
+			if *jsonOut {
+				_ = printJSON(report)
+			}
 			return code
 		}
 	}
+	addStep("auth_config", "ok", "auth configured", "")
 
 	cfgNow, _ = config.Load()
 	fmt.Fprintln(os.Stderr, "start step 3/4: verify auth with API")
-	if code := runAuthVerify(nil, cfgNow); code != 0 {
+	if *jsonOut {
+		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+		err := app.VerifyAuth(ctx, cfgNow, app.VerifyOptions{Attempts: 3, BaseDelay: 200 * time.Millisecond})
+		cancel()
+		if err != nil {
+			hint := "run `pocketcastsctl auth refresh`"
+			if app.KindOf(err) == app.KindTransient {
+				hint = "retry `pocketcastsctl auth verify` after checking network"
+			}
+			return fail("auth_verify", strings.TrimSpace(err.Error()), hint)
+		}
+	} else if code := runAuthVerify(nil, cfgNow); code != 0 {
 		return code
 	}
+	addStep("auth_verify", "ok", "auth accepted by API", "")
 
 	fmt.Fprintln(os.Stderr, "start step 4/4: ready")
-	fmt.Println("next: pocketcastsctl queue api ls")
-	fmt.Println("next: pocketcastsctl queue api play 1")
+	report.Next = []string{"pocketcastsctl queue api ls", "pocketcastsctl queue api play 1"}
+	addStep("ready", "ok", "setup complete", "")
+	if *jsonOut {
+		if err := printJSON(report); err != nil {
+			errf("failed to render start JSON: %v\n", err)
+			return 1
+		}
+		return 0
+	}
+	fmt.Println("next: " + report.Next[0])
+	fmt.Println("next: " + report.Next[1])
 	return 0
 }
 
@@ -575,42 +681,241 @@ func runCompletion(args []string) int {
 }
 
 func completionScripts() map[string]string {
-	cmds := []string{
-		"help", "version", "completion",
-		"now",
-		"doctor",
-		"doctor explain",
-		"start",
-		"config init",
-		"auth login", "auth refresh", "auth sync", "auth tabs", "auth status", "auth verify", "auth clear",
-		"web play", "web pause", "web toggle", "web next", "web prev", "web status",
-		"queue ls",
-		"queue api ls", "queue api add", "queue api rm", "queue api play", "queue api pick",
-		"local pick", "local play", "local pause", "local resume", "local stop", "local status",
-		"har summarize", "har graphql", "har redact",
-	}
-	join := strings.Join(cmds, " ")
 	return map[string]string{
-		"bash": fmt.Sprintf(`#!/usr/bin/env bash
+		"bash": `#!/usr/bin/env bash
 _pocketcastsctl_completions() {
-    local cur prev opts
-    cur="${COMP_WORDS[COMP_CWORD]}"
-    opts="%s"
-    COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+  local cur prev cmd sub
+  cur="${COMP_WORDS[COMP_CWORD]}"
+  prev="${COMP_WORDS[COMP_CWORD-1]}"
+  cmd="${COMP_WORDS[1]}"
+  sub="${COMP_WORDS[2]}"
+
+  if [[ $COMP_CWORD -eq 1 ]]; then
+    COMPREPLY=( $(compgen -W "help version completion now doctor start config auth web queue local har" -- "$cur") )
+    return 0
+  fi
+
+  case "$cmd" in
+    completion)
+      COMPREPLY=( $(compgen -W "bash zsh fish" -- "$cur") )
+      return 0
+      ;;
+    now)
+      COMPREPLY=( $(compgen -W "--json --plain --watch --interactive --verify-auth --interval --max-updates" -- "$cur") )
+      return 0
+      ;;
+    start)
+      COMPREPLY=( $(compgen -W "--json --no-input --browser --browser-app --url --url-contains --key-contains --candidate-passes" -- "$cur") )
+      return 0
+      ;;
+    doctor)
+      if [[ $COMP_CWORD -eq 2 ]]; then
+        COMPREPLY=( $(compgen -W "explain --json --plain --quick --full --fix" -- "$cur") )
+      else
+        COMPREPLY=( $(compgen -W "--json --plain --quick --full --fix doctor.auth.invalid doctor.auth.unverified doctor.auth.header_missing" -- "$cur") )
+      fi
+      return 0
+      ;;
+    auth)
+      if [[ $COMP_CWORD -eq 2 ]]; then
+        COMPREPLY=( $(compgen -W "login refresh sync tabs status verify clear" -- "$cur") )
+      else
+        case "$sub" in
+          login) COMPREPLY=( $(compgen -W "--browser --browser-app --url --url-contains" -- "$cur") ) ;;
+          refresh) COMPREPLY=( $(compgen -W "--browser --browser-app --url --url-contains --key-contains --candidate-passes --sync-only --no-input" -- "$cur") ) ;;
+          sync) COMPREPLY=( $(compgen -W "--browser --browser-app --url-contains --header --prefix --key-contains --dry-run" -- "$cur") ) ;;
+          tabs) COMPREPLY=( $(compgen -W "--browser --browser-app --json --plain" -- "$cur") ) ;;
+          status|verify) COMPREPLY=( $(compgen -W "--json --plain" -- "$cur") ) ;;
+          clear) COMPREPLY=() ;;
+        esac
+      fi
+      return 0
+      ;;
+    config)
+      if [[ $COMP_CWORD -eq 2 ]]; then
+        COMPREPLY=( $(compgen -W "init path show" -- "$cur") )
+      else
+        [[ "$sub" == "show" ]] && COMPREPLY=( $(compgen -W "--json --reveal-secrets" -- "$cur") ) || COMPREPLY=()
+      fi
+      return 0
+      ;;
+    web)
+      if [[ $COMP_CWORD -eq 2 ]]; then
+        COMPREPLY=( $(compgen -W "play pause toggle next prev status" -- "$cur") )
+      else
+        COMPREPLY=( $(compgen -W "--browser --browser-app --url-contains --json --plain" -- "$cur") )
+      fi
+      return 0
+      ;;
+    queue)
+      if [[ $COMP_CWORD -eq 2 ]]; then
+        COMPREPLY=( $(compgen -W "ls api" -- "$cur") )
+      elif [[ "$sub" == "ls" ]]; then
+        COMPREPLY=( $(compgen -W "--json --plain --search --limit --browser --browser-app --url-contains" -- "$cur") )
+      elif [[ "$sub" == "api" ]]; then
+        local api_cmd="${COMP_WORDS[3]}"
+        if [[ $COMP_CWORD -eq 3 ]]; then
+          COMPREPLY=( $(compgen -W "ls add rm play pick" -- "$cur") )
+        else
+          case "$api_cmd" in
+            ls) COMPREPLY=( $(compgen -W "--json --raw --plain --search --limit" -- "$cur") ) ;;
+            add) COMPREPLY=( $(compgen -W "--episode-json --uuid --podcast --title --published --url --raw" -- "$cur") ) ;;
+            rm) COMPREPLY=( $(compgen -W "--dry-run --force --no-input --raw" -- "$cur") ) ;;
+            play) COMPREPLY=( $(compgen -W "--search --dry-run --browser --browser-app --url-contains --web-base" -- "$cur") ) ;;
+            pick) COMPREPLY=( $(compgen -W "--search --limit --recent --unplayed --in-progress --no-play --browser --browser-app --url-contains --web-base" -- "$cur") ) ;;
+          esac
+        fi
+      fi
+      return 0
+      ;;
+    local)
+      if [[ $COMP_CWORD -eq 2 ]]; then
+        COMPREPLY=( $(compgen -W "pick play pause resume stop status" -- "$cur") )
+      else
+        case "$sub" in
+          pick) COMPREPLY=( $(compgen -W "--search --limit --recent --unplayed --in-progress --from-start" -- "$cur") ) ;;
+          play) COMPREPLY=( $(compgen -W "--from-start --dry-run" -- "$cur") ) ;;
+          status) COMPREPLY=( $(compgen -W "--json --plain" -- "$cur") ) ;;
+          *) COMPREPLY=() ;;
+        esac
+      fi
+      return 0
+      ;;
+    har)
+      if [[ $COMP_CWORD -eq 2 ]]; then
+        COMPREPLY=( $(compgen -W "summarize graphql redact" -- "$cur") )
+      else
+        case "$sub" in
+          summarize|graphql) COMPREPLY=( $(compgen -W "--host --json" -- "$cur") ) ;;
+          redact) COMPREPLY=() ;;
+        esac
+      fi
+      return 0
+      ;;
+  esac
+
+  COMPREPLY=()
 }
 complete -F _pocketcastsctl_completions pocketcastsctl
-`, join),
-		"zsh": fmt.Sprintf(`#compdef pocketcastsctl
+`,
+		"zsh": `#compdef pocketcastsctl
 _pocketcastsctl_completions() {
-  local -a commands
-  commands=(%s)
-  compadd "$@" -- $commands
+  local curcontext="$curcontext" state line
+  local cmd sub
+  cmd="${words[2]}"
+  sub="${words[3]}"
+
+  if (( CURRENT == 2 )); then
+    _values "commands" \
+      "help" "version" "completion" "now" "doctor" "start" "config" "auth" "web" "queue" "local" "har"
+    return
+  fi
+
+  case "$cmd" in
+    completion)
+      _values "shell" "bash" "zsh" "fish"
+      ;;
+    now)
+      _values "flags" "--json" "--plain" "--watch" "--interactive" "--verify-auth" "--interval" "--max-updates"
+      ;;
+    start)
+      _values "flags" "--json" "--no-input" "--browser" "--browser-app" "--url" "--url-contains" "--key-contains" "--candidate-passes"
+      ;;
+    doctor)
+      if (( CURRENT == 3 )); then
+        _values "subcommands/flags" "explain" "--json" "--plain" "--quick" "--full" "--fix"
+      else
+        _values "flags/codes" "--json" "--plain" "--quick" "--full" "--fix" "doctor.auth.invalid" "doctor.auth.unverified" "doctor.auth.header_missing"
+      fi
+      ;;
+    auth)
+      if (( CURRENT == 3 )); then
+        _values "auth subcommands" "login" "refresh" "sync" "tabs" "status" "verify" "clear"
+      else
+        case "$sub" in
+          login) _values "flags" "--browser" "--browser-app" "--url" "--url-contains" ;;
+          refresh) _values "flags" "--browser" "--browser-app" "--url" "--url-contains" "--key-contains" "--candidate-passes" "--sync-only" "--no-input" ;;
+          sync) _values "flags" "--browser" "--browser-app" "--url-contains" "--header" "--prefix" "--key-contains" "--dry-run" ;;
+          tabs) _values "flags" "--browser" "--browser-app" "--json" "--plain" ;;
+          status|verify) _values "flags" "--json" "--plain" ;;
+        esac
+      fi
+      ;;
+    config)
+      if (( CURRENT == 3 )); then
+        _values "config subcommands" "init" "path" "show"
+      else
+        [[ "$sub" == "show" ]] && _values "flags" "--json" "--reveal-secrets"
+      fi
+      ;;
+    web)
+      if (( CURRENT == 3 )); then
+        _values "web subcommands" "play" "pause" "toggle" "next" "prev" "status"
+      else
+        _values "flags" "--browser" "--browser-app" "--url-contains" "--json" "--plain"
+      fi
+      ;;
+    queue)
+      if (( CURRENT == 3 )); then
+        _values "queue subcommands" "ls" "api"
+      elif [[ "$sub" == "ls" ]]; then
+        _values "flags" "--json" "--plain" "--search" "--limit" "--browser" "--browser-app" "--url-contains"
+      elif [[ "$sub" == "api" ]]; then
+        local api_cmd="${words[4]}"
+        if (( CURRENT == 4 )); then
+          _values "queue api subcommands" "ls" "add" "rm" "play" "pick"
+        else
+          case "$api_cmd" in
+            ls) _values "flags" "--json" "--raw" "--plain" "--search" "--limit" ;;
+            add) _values "flags" "--episode-json" "--uuid" "--podcast" "--title" "--published" "--url" "--raw" ;;
+            rm) _values "flags" "--dry-run" "--force" "--no-input" "--raw" ;;
+            play) _values "flags" "--search" "--dry-run" "--browser" "--browser-app" "--url-contains" "--web-base" ;;
+            pick) _values "flags" "--search" "--limit" "--recent" "--unplayed" "--in-progress" "--no-play" "--browser" "--browser-app" "--url-contains" "--web-base" ;;
+          esac
+        fi
+      fi
+      ;;
+    local)
+      if (( CURRENT == 3 )); then
+        _values "local subcommands" "pick" "play" "pause" "resume" "stop" "status"
+      else
+        case "$sub" in
+          pick) _values "flags" "--search" "--limit" "--recent" "--unplayed" "--in-progress" "--from-start" ;;
+          play) _values "flags" "--from-start" "--dry-run" ;;
+          status) _values "flags" "--json" "--plain" ;;
+        esac
+      fi
+      ;;
+    har)
+      if (( CURRENT == 3 )); then
+        _values "har subcommands" "summarize" "graphql" "redact"
+      else
+        case "$sub" in
+          summarize|graphql) _values "flags" "--host" "--json" ;;
+        esac
+      fi
+      ;;
+  esac
 }
 _pocketcastsctl_completions "$@"
-`, join),
-		"fish": fmt.Sprintf(`set -l commands %s
-complete -c pocketcastsctl -f -a "$commands"
-`, strings.Join(cmds, " ")),
+`,
+		"fish": `complete -c pocketcastsctl -f -n '__fish_use_subcommand' -a 'help version completion now doctor start config auth web queue local har'
+complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from completion' -a 'bash zsh fish'
+
+complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from now' -l json -l plain -l watch -l interactive -l verify-auth -l interval -l max-updates
+complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from start' -l json -l no-input -l browser -l browser-app -l url -l url-contains -l key-contains -l candidate-passes
+complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from doctor' -a 'explain' -l json -l plain -l quick -l full -l fix
+complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from config' -a 'init path show'
+complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from auth' -a 'login refresh sync tabs status verify clear'
+complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from web' -a 'play pause toggle next prev status'
+complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from queue' -a 'ls api'
+complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from local' -a 'pick play pause resume stop status'
+complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from har' -a 'summarize graphql redact'
+
+complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from play' -l dry-run
+complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from rm' -l dry-run -l force -l no-input
+complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from ls' -l json -l plain -l search -l limit
+`,
 	}
 }
 

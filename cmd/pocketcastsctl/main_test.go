@@ -304,6 +304,29 @@ func TestRunNowWatchWithJSONRejected(t *testing.T) {
 	}
 }
 
+func TestRunNowInteractiveSkip(t *testing.T) {
+	code, stdout, stderr := runForTest(t, []string{"now", "--interactive"}, "\n")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr=%q", code, stderr)
+	}
+	if !strings.Contains(stdout, "POCKETCASTS NOW") {
+		t.Fatalf("stdout missing now dashboard: %q", stdout)
+	}
+	if !strings.Contains(stderr, "Run suggested action number") {
+		t.Fatalf("stderr missing interactive prompt: %q", stderr)
+	}
+}
+
+func TestRunNowInteractiveRejectsJSON(t *testing.T) {
+	code, _, stderr := runForTest(t, []string{"now", "--interactive", "--json"}, "")
+	if code != 2 {
+		t.Fatalf("exit code = %d, want 2", code)
+	}
+	if !strings.Contains(stderr, "--interactive requires non-watch human output") {
+		t.Fatalf("stderr missing interactive validation: %q", stderr)
+	}
+}
+
 func TestRunNowWatchMaxUpdatesOne(t *testing.T) {
 	code, stdout, stderr := runForTest(t, []string{"now", "--watch", "--interval", "1ms", "--max-updates", "1"}, "")
 	if code != 0 {
@@ -469,6 +492,19 @@ func TestRunStartNoInputMissingAuth(t *testing.T) {
 	}
 	if !strings.Contains(stderr, "auth not configured and --no-input is set") {
 		t.Fatalf("stderr missing no-input auth message: %q", stderr)
+	}
+}
+
+func TestRunStartJSONMissingAuth(t *testing.T) {
+	code, stdout, stderr := runForTest(t, []string{"start", "--json"}, "")
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1; stderr=%q", code, stderr)
+	}
+	if !strings.Contains(stdout, "\"status\": \"fail\"") {
+		t.Fatalf("stdout missing failed status: %q", stdout)
+	}
+	if !strings.Contains(stdout, "\"id\": \"auth_config\"") {
+		t.Fatalf("stdout missing auth_config step: %q", stdout)
 	}
 }
 

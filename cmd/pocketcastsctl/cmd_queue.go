@@ -380,6 +380,7 @@ func runQueueAPIPlay(args []string, cfg config.Config, client *pocketcasts.Clien
 	urlContains := fs.String("url-contains", cfg.URLContains, `substring to match the Pocket Casts tab URL`)
 	webBase := fs.String("web-base", "https://play.pocketcasts.com", "web player base URL")
 	search := fs.String("search", "", "filter by substring in title before choosing")
+	dryRun := fs.Bool("dry-run", false, "resolve target episode and print planned action without starting playback")
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0
@@ -388,7 +389,7 @@ func runQueueAPIPlay(args []string, cfg config.Config, client *pocketcasts.Clien
 		return 2
 	}
 	if fs.NArg() != 1 {
-		fmt.Fprintln(os.Stderr, "usage: pocketcastsctl queue api play <index|uuid> [--search q] [--browser chrome|safari] [--url-contains needle]")
+		fmt.Fprintln(os.Stderr, "usage: pocketcastsctl queue api play <index|uuid> [--search q] [--dry-run] [--browser chrome|safari] [--url-contains needle]")
 		return 2
 	}
 
@@ -415,6 +416,14 @@ func runQueueAPIPlay(args []string, cfg config.Config, client *pocketcasts.Clien
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "queue api play: %v\n", err)
 		return 2
+	}
+	if *dryRun {
+		title := strings.TrimSpace(target.Title)
+		if title == "" {
+			title = "(untitled)"
+		}
+		fmt.Printf("dry-run: would play in web player: %s (%s)\n", title, target.UUID)
+		return 0
 	}
 
 	return playEpisodeInWebPlayer(ctx, *browser, *browserApp, *urlContains, *webBase, target)

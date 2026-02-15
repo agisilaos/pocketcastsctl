@@ -11,6 +11,23 @@ import (
 	"pocketcastsctl/internal/config"
 )
 
+const smokeEpisodeUUID = "11111111-1111-1111-1111-111111111111"
+
+func writeSmokeConfig(t *testing.T, baseURL string) {
+	t.Helper()
+	cfgPath := filepath.Join(t.TempDir(), "config.json")
+	t.Setenv(config.EnvConfigPath, cfgPath)
+	err := os.WriteFile(cfgPath, []byte(`{
+  "browser":"chrome",
+  "url_contains":"pocketcasts.com",
+  "api_base_url":"`+baseURL+`",
+  "api_headers":{"Authorization":"Bearer test-token"}
+}`), 0o600)
+	if err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+}
+
 func TestCLISmokeCoreCommands(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -83,17 +100,7 @@ func TestCLISmokeQueueAPILSPlainUnauthorized(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	cfgPath := filepath.Join(t.TempDir(), "config.json")
-	t.Setenv(config.EnvConfigPath, cfgPath)
-	err := os.WriteFile(cfgPath, []byte(`{
-  "browser":"chrome",
-  "url_contains":"pocketcasts.com",
-  "api_base_url":"`+srv.URL+`",
-  "api_headers":{"Authorization":"Bearer test-token"}
-}`), 0o600)
-	if err != nil {
-		t.Fatalf("write config: %v", err)
-	}
+	writeSmokeConfig(t, srv.URL)
 
 	code, stdout, stderr := runForTest(t, []string{"queue", "api", "ls", "--plain"}, "")
 	if code != 1 {
@@ -107,5 +114,47 @@ func TestCLISmokeQueueAPILSPlainUnauthorized(t *testing.T) {
 	}
 	if !strings.Contains(stderr, "auth refresh") {
 		t.Fatalf("stderr missing auth recovery hint: %q", stderr)
+	}
+}
+
+func TestCLISmokeQueueAPIPlayDryRun(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/up_next/list" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"episodes":[{"uuid":"` + smokeEpisodeUUID + `","title":"Smoke Episode","url":"https://example.test/audio.mp3"}]}`))
+	}))
+	defer srv.Close()
+	writeSmokeConfig(t, srv.URL)
+
+	code, stdout, stderr := runForTest(t, []string{"queue", "api", "play", "--dry-run", "1"}, "")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr=%q", code, stderr)
+	}
+	if !strings.Contains(stdout, "dry-run: would play in web player: Smoke Episode") {
+		t.Fatalf("stdout missing dry-run summary: %q", stdout)
+	}
+}
+
+func TestCLISmokeLocalPlayDryRun(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/up_next/list" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"episodes":[{"uuid":"` + smokeEpisodeUUID + `","title":"Local Smoke","url":"https://example.test/audio.mp3","playedUpTo":95}]}`))
+	}))
+	defer srv.Close()
+	writeSmokeConfig(t, srv.URL)
+
+	code, stdout, stderr := runForTest(t, []string{"local", "play", "--dry-run", "1"}, "")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr=%q", code, stderr)
+	}
+	if !strings.Contains(stdout, "dry-run: would play local audio: Local Smoke") {
+		t.Fatalf("stdout missing local dry-run summary: %q", stdout)
 	}
 }

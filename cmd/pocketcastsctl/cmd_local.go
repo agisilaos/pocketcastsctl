@@ -107,6 +107,7 @@ func runLocalPlay(args []string, cfg config.Config) int {
 	fs := flag.NewFlagSet("local play", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	fromStart := fs.Bool("from-start", false, "start from beginning instead of Pocket Casts progress")
+	dryRun := fs.Bool("dry-run", false, "resolve target episode and print planned action without starting playback")
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0
@@ -115,7 +116,7 @@ func runLocalPlay(args []string, cfg config.Config) int {
 		return 2
 	}
 	if fs.NArg() != 1 {
-		fmt.Fprintln(os.Stderr, "usage: pocketcastsctl local play [--from-start] <index|uuid>")
+		fmt.Fprintln(os.Stderr, "usage: pocketcastsctl local play [--from-start] [--dry-run] <index|uuid>")
 		return 2
 	}
 
@@ -147,6 +148,18 @@ func runLocalPlay(args []string, cfg config.Config) int {
 	if !*fromStart {
 		progress, _ := pocketcasts.ExtractEpisodeProgress(body)
 		startAt = progress[target.UUID]
+	}
+	if *dryRun {
+		title := strings.TrimSpace(target.Title)
+		if title == "" {
+			title = "(untitled)"
+		}
+		if startAt > 0 {
+			fmt.Printf("dry-run: would play local audio: %s (%s) [from %s]\n", title, target.UUID, formatHMS(startAt))
+		} else {
+			fmt.Printf("dry-run: would play local audio: %s (%s)\n", title, target.UUID)
+		}
+		return 0
 	}
 	return startLocalPlayback(cfg, target, startAt)
 }
