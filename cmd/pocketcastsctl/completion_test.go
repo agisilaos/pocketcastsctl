@@ -8,6 +8,9 @@ import (
 func TestCompletionScriptsIncludeNewFlags(t *testing.T) {
 	scripts := completionScripts()
 	bash := scripts["bash"]
+	if !strings.Contains(bash, " setup ") {
+		t.Fatalf("bash completion missing setup command")
+	}
 	if !strings.Contains(bash, "--interactive") {
 		t.Fatalf("bash completion missing --interactive")
 	}

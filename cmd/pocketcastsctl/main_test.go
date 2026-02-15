@@ -490,6 +490,9 @@ func TestRunStartNoInputMissingAuth(t *testing.T) {
 	if code != 1 {
 		t.Fatalf("exit code = %d, want 1", code)
 	}
+	if !strings.Contains(stderr, "`start` is deprecated; use `pocketcastsctl setup`") {
+		t.Fatalf("stderr missing deprecation warning: %q", stderr)
+	}
 	if !strings.Contains(stderr, "auth not configured and --no-input is set") {
 		t.Fatalf("stderr missing no-input auth message: %q", stderr)
 	}
@@ -497,6 +500,19 @@ func TestRunStartNoInputMissingAuth(t *testing.T) {
 
 func TestRunStartJSONMissingAuth(t *testing.T) {
 	code, stdout, stderr := runForTest(t, []string{"start", "--json"}, "")
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1; stderr=%q", code, stderr)
+	}
+	if !strings.Contains(stdout, "\"status\": \"fail\"") {
+		t.Fatalf("stdout missing failed status: %q", stdout)
+	}
+	if !strings.Contains(stdout, "\"id\": \"auth_config\"") {
+		t.Fatalf("stdout missing auth_config step: %q", stdout)
+	}
+}
+
+func TestRunSetupJSONMissingAuth(t *testing.T) {
+	code, stdout, stderr := runForTest(t, []string{"setup", "--json"}, "")
 	if code != 1 {
 		t.Fatalf("exit code = %d, want 1; stderr=%q", code, stderr)
 	}
@@ -599,6 +615,16 @@ func TestRunHelpStart(t *testing.T) {
 	}
 	if !strings.Contains(stdout, "Recommended first-run flow:") {
 		t.Fatalf("stdout missing start flow: %q", stdout)
+	}
+}
+
+func TestRunHelpSetup(t *testing.T) {
+	code, stdout, stderr := runForTest(t, []string{"help", "setup"}, "")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr=%q", code, stderr)
+	}
+	if !strings.Contains(stdout, "pocketcastsctl setup") {
+		t.Fatalf("stdout missing setup usage: %q", stdout)
 	}
 }
 

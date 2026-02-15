@@ -43,19 +43,20 @@ Show build metadata:
 ./bin/pocketcastsctl help
 ./bin/pocketcastsctl now
 ./bin/pocketcastsctl now --watch
-./bin/pocketcastsctl help start
+./bin/pocketcastsctl help setup
 ./bin/pocketcastsctl help queue api
 ```
 
 Recommended first-run flow:
 
 ```bash
-./bin/pocketcastsctl start
+./bin/pocketcastsctl setup
 ./bin/pocketcastsctl queue api ls
 ./bin/pocketcastsctl queue api play 1
 ```
 
 `doctor` validates setup (browser automation, config, auth presence, and API auth validity when configured) and suggests next actions.
+`setup` is the guided onboarding command (`start` is kept as a deprecated alias).
 
 Doctor modes:
 

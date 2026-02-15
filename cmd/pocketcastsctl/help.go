@@ -39,6 +39,7 @@ var usageText = map[string]string{
 	"har graphql":    "pocketcastsctl har graphql [--host host] [--json] <file.har>",
 	"har redact":     "pocketcastsctl har redact <in.har> <out.har>",
 	"doctor explain": "pocketcastsctl doctor explain <code> [--json]",
+	"setup":          "pocketcastsctl setup [--json] [--no-input] [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--url-contains needle]",
 	"start":          "pocketcastsctl start [--json] [--no-input] [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--url-contains needle]",
 	"now":            "pocketcastsctl now [--watch] [--interactive] [--interval 5s] [--verify-auth] [--json|--plain]",
 	"completion":     "pocketcastsctl completion [zsh|bash|fish]",
@@ -221,8 +222,10 @@ func runHelp(args []string) int {
 		default:
 			return unknownHelpTopic(args)
 		}
+	case "setup":
+		printSetupHelp()
 	case "start", "getting-started":
-		printGettingStartedHelp()
+		printSetupHelp()
 	case "now":
 		printNowHelp()
 	default:
@@ -278,7 +281,7 @@ pocketcastsctl controls the Pocket Casts Web Player (macOS).
 Start here:
   pocketcastsctl now
   pocketcastsctl doctor
-  pocketcastsctl help start
+  pocketcastsctl help setup
 
 Common tasks:
   Open the now-playing cockpit:
@@ -286,7 +289,7 @@ Common tasks:
   pocketcastsctl now --watch
 
   Run guided setup:
-  pocketcastsctl start
+  pocketcastsctl setup
 
   Sign in and sync auth:
   pocketcastsctl auth login
@@ -309,6 +312,7 @@ Command reference:
   pocketcastsctl now [--watch] [--interactive] [--interval 5s] [--verify-auth] [--json|--plain]
   pocketcastsctl doctor [--json|--plain] [--quick|--full] [--fix]
   pocketcastsctl doctor explain <code> [--json]
+  pocketcastsctl setup [--json] [--no-input] [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--url-contains needle]
   pocketcastsctl start [--json] [--no-input] [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--url-contains needle]
   pocketcastsctl auth login [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com]
   pocketcastsctl auth refresh [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--candidate-passes N]
@@ -328,9 +332,10 @@ Command reference:
   pocketcastsctl har graphql [--host host] [--json] <file.har>     (use --host= to disable filtering)
   pocketcastsctl har redact <in.har> <out.har>
   pocketcastsctl config init|path|show
-  pocketcastsctl help [now|start|doctor|auth|web|queue|local|har|config|completion]
+  pocketcastsctl help [now|setup|start|doctor|auth|web|queue|local|har|config|completion]
 
 Deprecated shortcuts (use canonical commands above):
+  pocketcastsctl start
   pocketcastsctl login
   pocketcastsctl ls
   pocketcastsctl pick
@@ -340,14 +345,14 @@ Deprecated shortcuts (use canonical commands above):
 `) + "\n")
 }
 
-func printGettingStartedHelp() {
+func printSetupHelp() {
 	fmt.Print(strings.TrimSpace(`
 Usage:
-  pocketcastsctl start [--json] [--no-input] [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--url-contains needle]
-  pocketcastsctl help start
+  pocketcastsctl setup [--json] [--no-input] [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--url-contains needle]
+  pocketcastsctl help setup
 
 Recommended first-run flow:
-  1. pocketcastsctl start
+  1. pocketcastsctl setup
   2. pocketcastsctl queue api ls
   3. pocketcastsctl queue api play 1
 `) + "\n")

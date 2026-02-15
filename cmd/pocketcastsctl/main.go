@@ -56,6 +56,8 @@ func run(args []string) int {
 	switch args[0] {
 	case "config":
 		return runConfig(args[1:], cfg)
+	case "setup":
+		return runSetup(args[1:], cfg)
 	case "start", "getting-started":
 		return runStart(args[1:], cfg)
 	case "now":
@@ -312,6 +314,11 @@ func formatInlineErr(s string) string {
 }
 
 func runStart(args []string, cfg config.Config) int {
+	fmt.Fprintln(os.Stderr, "warning: `start` is deprecated; use `pocketcastsctl setup`")
+	return runSetup(args, cfg)
+}
+
+func runSetup(args []string, cfg config.Config) int {
 	fs := flag.NewFlagSet("start", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	jsonOut := fs.Bool("json", false, "output JSON onboarding report")
@@ -330,7 +337,7 @@ func runStart(args []string, cfg config.Config) int {
 		return 2
 	}
 	if fs.NArg() != 0 {
-		fmt.Fprintln(os.Stderr, "usage: pocketcastsctl start [--json] [--no-input] [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--url-contains needle]")
+		fmt.Fprintln(os.Stderr, "usage: pocketcastsctl setup [--json] [--no-input] [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--url-contains needle]")
 		return 2
 	}
 	if *jsonOut {
@@ -368,7 +375,7 @@ func runStart(args []string, cfg config.Config) int {
 				return 1
 			}
 		} else {
-			fmt.Fprintf(os.Stderr, "start: %s\n", message)
+			fmt.Fprintf(os.Stderr, "setup: %s\n", message)
 			if strings.TrimSpace(hint) != "" {
 				fmt.Fprintf(os.Stderr, "next: %s\n", hint)
 			}
@@ -376,22 +383,22 @@ func runStart(args []string, cfg config.Config) int {
 		return 1
 	}
 
-	fmt.Fprintln(os.Stderr, "start step 1/4: run quick environment checks")
+	fmt.Fprintln(os.Stderr, "setup step 1/4: run quick environment checks")
 	checks := collectDoctorChecks(cfg, false)
 	_, warnCount, failCount := summarizeDoctorChecks(checks)
 	if failCount > 0 {
 		return fail("quick_checks", "environment has blocking issues", "run `pocketcastsctl doctor --full --fix`")
 	}
 	if warnCount > 0 {
-		fmt.Fprintln(os.Stderr, "start: quick checks passed with warnings")
+		fmt.Fprintln(os.Stderr, "setup: quick checks passed with warnings")
 		addStep("quick_checks", "warn", "quick checks passed with warnings", "")
 	} else {
-		fmt.Fprintln(os.Stderr, "start: quick checks passed")
+		fmt.Fprintln(os.Stderr, "setup: quick checks passed")
 		addStep("quick_checks", "ok", "quick checks passed", "")
 	}
 
 	cfgNow, _ := config.Load()
-	fmt.Fprintln(os.Stderr, "start step 2/4: ensure auth is configured")
+	fmt.Fprintln(os.Stderr, "setup step 2/4: ensure auth is configured")
 	if !authutil.HasAuthorizationHeader(cfgNow.APIHeaders) {
 		if *noInput {
 			return fail("auth_config", "auth not configured and --no-input is set", "run `pocketcastsctl auth refresh --sync-only --no-input` after logging in")
@@ -400,7 +407,7 @@ func runStart(args []string, cfg config.Config) int {
 		line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
 		answer := strings.ToLower(strings.TrimSpace(line))
 		if answer != "" && answer != "y" && answer != "yes" {
-			fmt.Fprintln(os.Stderr, "start: skipped auth refresh")
+			fmt.Fprintln(os.Stderr, "setup: skipped auth refresh")
 			fmt.Fprintln(os.Stderr, "next: run `pocketcastsctl auth refresh`")
 			return fail("auth_config", "auth refresh skipped", "run `pocketcastsctl auth refresh`")
 		}
@@ -425,7 +432,7 @@ func runStart(args []string, cfg config.Config) int {
 	addStep("auth_config", "ok", "auth configured", "")
 
 	cfgNow, _ = config.Load()
-	fmt.Fprintln(os.Stderr, "start step 3/4: verify auth with API")
+	fmt.Fprintln(os.Stderr, "setup step 3/4: verify auth with API")
 	if *jsonOut {
 		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 		err := app.VerifyAuth(ctx, cfgNow, app.VerifyOptions{Attempts: 3, BaseDelay: 200 * time.Millisecond})
@@ -442,7 +449,7 @@ func runStart(args []string, cfg config.Config) int {
 	}
 	addStep("auth_verify", "ok", "auth accepted by API", "")
 
-	fmt.Fprintln(os.Stderr, "start step 4/4: ready")
+	fmt.Fprintln(os.Stderr, "setup step 4/4: ready")
 	report.Next = []string{"pocketcastsctl queue api ls", "pocketcastsctl queue api play 1"}
 	addStep("ready", "ok", "setup complete", "")
 	if *jsonOut {
@@ -691,7 +698,7 @@ _pocketcastsctl_completions() {
   sub="${COMP_WORDS[2]}"
 
   if [[ $COMP_CWORD -eq 1 ]]; then
-    COMPREPLY=( $(compgen -W "help version completion now doctor start config auth web queue local har" -- "$cur") )
+    COMPREPLY=( $(compgen -W "help version completion now doctor setup start config auth web queue local har" -- "$cur") )
     return 0
   fi
 
@@ -702,6 +709,10 @@ _pocketcastsctl_completions() {
       ;;
     now)
       COMPREPLY=( $(compgen -W "--json --plain --watch --interactive --verify-auth --interval --max-updates" -- "$cur") )
+      return 0
+      ;;
+    setup)
+      COMPREPLY=( $(compgen -W "--json --no-input --browser --browser-app --url --url-contains --key-contains --candidate-passes" -- "$cur") )
       return 0
       ;;
     start)
@@ -807,7 +818,7 @@ _pocketcastsctl_completions() {
 
   if (( CURRENT == 2 )); then
     _values "commands" \
-      "help" "version" "completion" "now" "doctor" "start" "config" "auth" "web" "queue" "local" "har"
+      "help" "version" "completion" "now" "doctor" "setup" "start" "config" "auth" "web" "queue" "local" "har"
     return
   fi
 
@@ -817,6 +828,9 @@ _pocketcastsctl_completions() {
       ;;
     now)
       _values "flags" "--json" "--plain" "--watch" "--interactive" "--verify-auth" "--interval" "--max-updates"
+      ;;
+    setup)
+      _values "flags" "--json" "--no-input" "--browser" "--browser-app" "--url" "--url-contains" "--key-contains" "--candidate-passes"
       ;;
     start)
       _values "flags" "--json" "--no-input" "--browser" "--browser-app" "--url" "--url-contains" "--key-contains" "--candidate-passes"
@@ -899,10 +913,11 @@ _pocketcastsctl_completions() {
 }
 _pocketcastsctl_completions "$@"
 `,
-		"fish": `complete -c pocketcastsctl -f -n '__fish_use_subcommand' -a 'help version completion now doctor start config auth web queue local har'
+		"fish": `complete -c pocketcastsctl -f -n '__fish_use_subcommand' -a 'help version completion now doctor setup start config auth web queue local har'
 complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from completion' -a 'bash zsh fish'
 
 complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from now' -l json -l plain -l watch -l interactive -l verify-auth -l interval -l max-updates
+complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from setup' -l json -l no-input -l browser -l browser-app -l url -l url-contains -l key-contains -l candidate-passes
 complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from start' -l json -l no-input -l browser -l browser-app -l url -l url-contains -l key-contains -l candidate-passes
 complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from doctor' -a 'explain' -l json -l plain -l quick -l full -l fix
 complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from config' -a 'init path show'
