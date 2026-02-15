@@ -506,8 +506,8 @@ func TestRunStartJSONMissingAuth(t *testing.T) {
 	if !strings.Contains(stdout, "\"status\": \"fail\"") {
 		t.Fatalf("stdout missing failed status: %q", stdout)
 	}
-	if !strings.Contains(stdout, "\"id\": \"auth_config\"") {
-		t.Fatalf("stdout missing auth_config step: %q", stdout)
+	if !strings.Contains(stdout, "\"id\": \"auth\"") {
+		t.Fatalf("stdout missing auth step: %q", stdout)
 	}
 }
 
@@ -519,8 +519,47 @@ func TestRunSetupJSONMissingAuth(t *testing.T) {
 	if !strings.Contains(stdout, "\"status\": \"fail\"") {
 		t.Fatalf("stdout missing failed status: %q", stdout)
 	}
-	if !strings.Contains(stdout, "\"id\": \"auth_config\"") {
-		t.Fatalf("stdout missing auth_config step: %q", stdout)
+	if !strings.Contains(stdout, "\"id\": \"auth\"") {
+		t.Fatalf("stdout missing auth step: %q", stdout)
+	}
+}
+
+func TestRunSetupCheckJSON(t *testing.T) {
+	code, stdout, stderr := runForTest(t, []string{"setup", "check", "--json"}, "")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr=%q", code, stderr)
+	}
+	if !strings.Contains(stdout, "\"command\": \"check\"") {
+		t.Fatalf("stdout missing command=check: %q", stdout)
+	}
+	if !strings.Contains(stdout, "\"id\": \"check\"") {
+		t.Fatalf("stdout missing check step: %q", stdout)
+	}
+}
+
+func TestRunSetupAuthNoInputPlain(t *testing.T) {
+	code, stdout, stderr := runForTest(t, []string{"setup", "auth", "--no-input", "--plain"}, "")
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1; stderr=%q", code, stderr)
+	}
+	if !strings.Contains(stdout, "command\tauth") {
+		t.Fatalf("stdout missing command auth: %q", stdout)
+	}
+	if !strings.Contains(stdout, "step_1_id\tauth") {
+		t.Fatalf("stdout missing auth step id: %q", stdout)
+	}
+}
+
+func TestRunSetupVerifyJSONMissingAuth(t *testing.T) {
+	code, stdout, stderr := runForTest(t, []string{"setup", "verify", "--json"}, "")
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1; stderr=%q", code, stderr)
+	}
+	if !strings.Contains(stdout, "\"command\": \"verify\"") {
+		t.Fatalf("stdout missing command verify: %q", stdout)
+	}
+	if !strings.Contains(stdout, "\"id\": \"verify\"") {
+		t.Fatalf("stdout missing verify step: %q", stdout)
 	}
 }
 
@@ -625,6 +664,16 @@ func TestRunHelpSetup(t *testing.T) {
 	}
 	if !strings.Contains(stdout, "pocketcastsctl setup") {
 		t.Fatalf("stdout missing setup usage: %q", stdout)
+	}
+}
+
+func TestRunHelpSetupCheck(t *testing.T) {
+	code, stdout, stderr := runForTest(t, []string{"help", "setup", "check"}, "")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr=%q", code, stderr)
+	}
+	if !strings.Contains(stdout, "pocketcastsctl setup check") {
+		t.Fatalf("stdout missing setup check usage: %q", stdout)
 	}
 }
 

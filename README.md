@@ -58,6 +58,16 @@ Recommended first-run flow:
 `doctor` validates setup (browser automation, config, auth presence, and API auth validity when configured) and suggests next actions.
 `setup` is the guided onboarding command (`start` is kept as a deprecated alias).
 
+Setup modes:
+
+```bash
+./bin/pocketcastsctl setup                 # full guided flow (interactive on TTY)
+./bin/pocketcastsctl setup run --json      # full agentic report
+./bin/pocketcastsctl setup check --plain   # quick readiness checks only
+./bin/pocketcastsctl setup auth --no-input # auth-only non-interactive
+./bin/pocketcastsctl setup verify --json   # verify-only machine output
+```
+
 Doctor modes:
 
 ```bash
@@ -83,6 +93,7 @@ Output contract table:
 | Command | Human | `--plain` | `--json` |
 | --- | --- | --- | --- |
 | `now` | dashboard | key/value lines | full snapshot object |
+| `setup` | guided onboarding | key/value step report | structured step report |
 | `doctor` | checklist | tab-separated checks | structured checks + counts |
 | `auth tabs` | URL list | URL list | JSON array of URLs |
 | `auth status` | checklist | key/value lines | status object |

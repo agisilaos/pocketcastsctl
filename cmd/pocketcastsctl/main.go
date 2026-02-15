@@ -318,10 +318,52 @@ func runStart(args []string, cfg config.Config) int {
 	return runSetup(args, cfg)
 }
 
+type setupStep struct {
+	ID      string `json:"id"`
+	Status  string `json:"status"`
+	Message string `json:"message"`
+	Hint    string `json:"hint,omitempty"`
+}
+
+type setupReport struct {
+	Status  string      `json:"status"`
+	Mode    string      `json:"mode"`
+	Command string      `json:"command"`
+	Steps   []setupStep `json:"steps"`
+	Next    []string    `json:"next,omitempty"`
+	Error   string      `json:"error,omitempty"`
+}
+
+type setupOptions struct {
+	jsonOut         bool
+	plainOut        bool
+	noInput         bool
+	browser         string
+	browserApp      string
+	openURL         string
+	urlContains     string
+	keyContains     string
+	candidatePasses int
+}
+
 func runSetup(args []string, cfg config.Config) int {
-	fs := flag.NewFlagSet("start", flag.ContinueOnError)
+	subcmd := "run"
+	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+		switch args[0] {
+		case "run", "check", "auth", "verify":
+			subcmd = args[0]
+			args = args[1:]
+		default:
+			fmt.Fprintf(os.Stderr, "unknown setup subcommand: %s\n", args[0])
+			fmt.Fprintln(os.Stderr, "usage: pocketcastsctl setup [run|check|auth|verify] [--json|--plain] [--no-input] [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--url-contains needle]")
+			return 2
+		}
+	}
+
+	fs := flag.NewFlagSet("setup", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	jsonOut := fs.Bool("json", false, "output JSON onboarding report")
+	plainOut := fs.Bool("plain", false, "plain key/value output")
 	noInput := fs.Bool("no-input", false, "disable interactive prompts")
 	browser := fs.String("browser", cfg.Browser, `browser name`)
 	browserApp := fs.String("browser-app", cfg.BrowserApp, `macOS application name (optional)`)
@@ -337,131 +379,231 @@ func runSetup(args []string, cfg config.Config) int {
 		return 2
 	}
 	if fs.NArg() != 0 {
-		fmt.Fprintln(os.Stderr, "usage: pocketcastsctl setup [--json] [--no-input] [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--url-contains needle]")
+		fmt.Fprintln(os.Stderr, "usage: pocketcastsctl setup [run|check|auth|verify] [--json|--plain] [--no-input] [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--url-contains needle]")
 		return 2
 	}
-	if *jsonOut {
-		*noInput = true
+	if *jsonOut && *plainOut {
+		fmt.Fprintln(os.Stderr, "setup: use only one of --json or --plain")
+		return 2
 	}
 
-	type startStep struct {
-		ID      string `json:"id"`
-		Status  string `json:"status"`
-		Message string `json:"message"`
-		Hint    string `json:"hint,omitempty"`
+	opts := setupOptions{
+		jsonOut:         *jsonOut,
+		plainOut:        *plainOut,
+		noInput:         *noInput || *jsonOut || *plainOut,
+		browser:         *browser,
+		browserApp:      *browserApp,
+		openURL:         *openURL,
+		urlContains:     *urlContains,
+		keyContains:     *keyContains,
+		candidatePasses: *candidatePasses,
 	}
-	type startReport struct {
-		Status string      `json:"status"`
-		Steps  []startStep `json:"steps"`
-		Next   []string    `json:"next,omitempty"`
-		Error  string      `json:"error,omitempty"`
+	mode := "interactive"
+	if opts.noInput {
+		mode = "agentic"
 	}
-	report := startReport{Status: "ok", Steps: make([]startStep, 0, 4)}
-	addStep := func(id, status, message, hint string) {
-		report.Steps = append(report.Steps, startStep{
-			ID:      id,
-			Status:  status,
-			Message: message,
-			Hint:    strings.TrimSpace(hint),
-		})
+	report := setupReport{
+		Status:  "ok",
+		Mode:    mode,
+		Command: subcmd,
+		Steps:   make([]setupStep, 0, 4),
 	}
-	fail := func(id, message, hint string) int {
+
+	fail := func(id, message, hint string, code int) int {
 		report.Status = "fail"
 		report.Error = message
-		addStep(id, "fail", message, hint)
-		if *jsonOut {
-			if err := printJSON(report); err != nil {
-				errf("failed to render start JSON: %v\n", err)
-				return 1
-			}
-		} else {
-			fmt.Fprintf(os.Stderr, "setup: %s\n", message)
-			if strings.TrimSpace(hint) != "" {
-				fmt.Fprintf(os.Stderr, "next: %s\n", hint)
-			}
-		}
-		return 1
+		report.Steps = append(report.Steps, setupStep{ID: id, Status: "fail", Message: message, Hint: strings.TrimSpace(hint)})
+		return renderSetupOutput(report, opts, code)
 	}
 
+	cfgNow := cfg
+	switch subcmd {
+	case "check":
+		if code := setupStepCheck(cfgNow, &report); code != 0 {
+			return renderSetupOutput(report, opts, code)
+		}
+		return renderSetupOutput(report, opts, 0)
+	case "auth":
+		if code := setupStepAuth(cfgNow, opts, &report); code != 0 {
+			return renderSetupOutput(report, opts, code)
+		}
+		return renderSetupOutput(report, opts, 0)
+	case "verify":
+		if code := setupStepVerify(cfgNow, &report); code != 0 {
+			return renderSetupOutput(report, opts, code)
+		}
+		return renderSetupOutput(report, opts, 0)
+	case "run":
+		if code := setupStepCheck(cfgNow, &report); code != 0 {
+			return renderSetupOutput(report, opts, code)
+		}
+		if code := setupStepAuth(cfgNow, opts, &report); code != 0 {
+			return renderSetupOutput(report, opts, code)
+		}
+		cfgNow, _ = config.Load()
+		if code := setupStepVerify(cfgNow, &report); code != 0 {
+			return renderSetupOutput(report, opts, code)
+		}
+		fmt.Fprintln(os.Stderr, "setup step 4/4: ready")
+		report.Next = []string{"pocketcastsctl queue api ls", "pocketcastsctl queue api play 1"}
+		report.Steps = append(report.Steps, setupStep{ID: "ready", Status: "ok", Message: "setup complete"})
+		return renderSetupOutput(report, opts, 0)
+	default:
+		return fail("setup", "unknown setup command", "", 2)
+	}
+}
+
+func setupStepCheck(cfg config.Config, report *setupReport) int {
 	fmt.Fprintln(os.Stderr, "setup step 1/4: run quick environment checks")
 	checks := collectDoctorChecks(cfg, false)
 	_, warnCount, failCount := summarizeDoctorChecks(checks)
 	if failCount > 0 {
-		return fail("quick_checks", "environment has blocking issues", "run `pocketcastsctl doctor --full --fix`")
+		report.Status = "fail"
+		report.Error = "environment has blocking issues"
+		report.Steps = append(report.Steps, setupStep{
+			ID:      "check",
+			Status:  "fail",
+			Message: "environment has blocking issues",
+			Hint:    "run `pocketcastsctl doctor --full --fix`",
+		})
+		return 1
 	}
 	if warnCount > 0 {
 		fmt.Fprintln(os.Stderr, "setup: quick checks passed with warnings")
-		addStep("quick_checks", "warn", "quick checks passed with warnings", "")
-	} else {
-		fmt.Fprintln(os.Stderr, "setup: quick checks passed")
-		addStep("quick_checks", "ok", "quick checks passed", "")
-	}
-
-	cfgNow, _ := config.Load()
-	fmt.Fprintln(os.Stderr, "setup step 2/4: ensure auth is configured")
-	if !authutil.HasAuthorizationHeader(cfgNow.APIHeaders) {
-		if *noInput {
-			return fail("auth_config", "auth not configured and --no-input is set", "run `pocketcastsctl auth refresh --sync-only --no-input` after logging in")
-		}
-		fmt.Fprint(os.Stderr, "Run `pocketcastsctl auth refresh` now? [Y/n]: ")
-		line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
-		answer := strings.ToLower(strings.TrimSpace(line))
-		if answer != "" && answer != "y" && answer != "yes" {
-			fmt.Fprintln(os.Stderr, "setup: skipped auth refresh")
-			fmt.Fprintln(os.Stderr, "next: run `pocketcastsctl auth refresh`")
-			return fail("auth_config", "auth refresh skipped", "run `pocketcastsctl auth refresh`")
-		}
-		refreshArgs := []string{
-			"--browser", *browser,
-			"--browser-app", *browserApp,
-			"--url", *openURL,
-			"--url-contains", *urlContains,
-			"--key-contains", *keyContains,
-			"--candidate-passes", strconv.Itoa(*candidatePasses),
-		}
-		if code := runAuthRefresh(refreshArgs, cfgNow); code != 0 {
-			report.Status = "fail"
-			report.Error = "auth refresh failed"
-			addStep("auth_config", "fail", "auth refresh failed", "run `pocketcastsctl auth refresh`")
-			if *jsonOut {
-				_ = printJSON(report)
-			}
-			return code
-		}
-	}
-	addStep("auth_config", "ok", "auth configured", "")
-
-	cfgNow, _ = config.Load()
-	fmt.Fprintln(os.Stderr, "setup step 3/4: verify auth with API")
-	if *jsonOut {
-		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
-		err := app.VerifyAuth(ctx, cfgNow, app.VerifyOptions{Attempts: 3, BaseDelay: 200 * time.Millisecond})
-		cancel()
-		if err != nil {
-			hint := "run `pocketcastsctl auth refresh`"
-			if app.KindOf(err) == app.KindTransient {
-				hint = "retry `pocketcastsctl auth verify` after checking network"
-			}
-			return fail("auth_verify", strings.TrimSpace(err.Error()), hint)
-		}
-	} else if code := runAuthVerify(nil, cfgNow); code != 0 {
-		return code
-	}
-	addStep("auth_verify", "ok", "auth accepted by API", "")
-
-	fmt.Fprintln(os.Stderr, "setup step 4/4: ready")
-	report.Next = []string{"pocketcastsctl queue api ls", "pocketcastsctl queue api play 1"}
-	addStep("ready", "ok", "setup complete", "")
-	if *jsonOut {
-		if err := printJSON(report); err != nil {
-			errf("failed to render start JSON: %v\n", err)
-			return 1
-		}
+		report.Steps = append(report.Steps, setupStep{ID: "check", Status: "warn", Message: "quick checks passed with warnings"})
 		return 0
 	}
-	fmt.Println("next: " + report.Next[0])
-	fmt.Println("next: " + report.Next[1])
+	fmt.Fprintln(os.Stderr, "setup: quick checks passed")
+	report.Steps = append(report.Steps, setupStep{ID: "check", Status: "ok", Message: "quick checks passed"})
 	return 0
+}
+
+func setupStepAuth(cfg config.Config, opts setupOptions, report *setupReport) int {
+	fmt.Fprintln(os.Stderr, "setup step 2/4: ensure auth is configured")
+	cfgNow, _ := config.Load()
+	if authutil.HasAuthorizationHeader(cfgNow.APIHeaders) {
+		report.Steps = append(report.Steps, setupStep{ID: "auth", Status: "ok", Message: "auth configured"})
+		return 0
+	}
+	if opts.noInput {
+		report.Status = "fail"
+		report.Error = "auth not configured and --no-input is set"
+		report.Steps = append(report.Steps, setupStep{
+			ID:      "auth",
+			Status:  "fail",
+			Message: "auth not configured and --no-input is set",
+			Hint:    "run `pocketcastsctl auth refresh --sync-only --no-input` after logging in",
+		})
+		return 1
+	}
+	fmt.Fprint(os.Stderr, "Run `pocketcastsctl auth refresh` now? [Y/n]: ")
+	line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+	answer := strings.ToLower(strings.TrimSpace(line))
+	if answer != "" && answer != "y" && answer != "yes" {
+		report.Status = "fail"
+		report.Error = "auth refresh skipped"
+		report.Steps = append(report.Steps, setupStep{
+			ID:      "auth",
+			Status:  "fail",
+			Message: "auth refresh skipped",
+			Hint:    "run `pocketcastsctl auth refresh`",
+		})
+		return 1
+	}
+
+	refreshArgs := []string{
+		"--browser", opts.browser,
+		"--browser-app", opts.browserApp,
+		"--url", opts.openURL,
+		"--url-contains", opts.urlContains,
+		"--key-contains", opts.keyContains,
+		"--candidate-passes", strconv.Itoa(opts.candidatePasses),
+	}
+	if code := runAuthRefresh(refreshArgs, cfgNow); code != 0 {
+		report.Status = "fail"
+		report.Error = "auth refresh failed"
+		report.Steps = append(report.Steps, setupStep{
+			ID:      "auth",
+			Status:  "fail",
+			Message: "auth refresh failed",
+			Hint:    "run `pocketcastsctl auth refresh`",
+		})
+		return code
+	}
+	report.Steps = append(report.Steps, setupStep{ID: "auth", Status: "ok", Message: "auth configured"})
+	return 0
+}
+
+func setupStepVerify(cfg config.Config, report *setupReport) int {
+	fmt.Fprintln(os.Stderr, "setup step 3/4: verify auth with API")
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	err := app.VerifyAuth(ctx, cfg, app.VerifyOptions{Attempts: 3, BaseDelay: 200 * time.Millisecond})
+	cancel()
+	if err != nil {
+		hint := "run `pocketcastsctl auth refresh`"
+		if app.KindOf(err) == app.KindTransient {
+			hint = "retry `pocketcastsctl auth verify` after checking network"
+		}
+		report.Status = "fail"
+		report.Error = strings.TrimSpace(err.Error())
+		report.Steps = append(report.Steps, setupStep{
+			ID:      "verify",
+			Status:  "fail",
+			Message: strings.TrimSpace(err.Error()),
+			Hint:    hint,
+		})
+		return 1
+	}
+	report.Steps = append(report.Steps, setupStep{ID: "verify", Status: "ok", Message: "auth accepted by API"})
+	return 0
+}
+
+func renderSetupOutput(report setupReport, opts setupOptions, exitCode int) int {
+	if opts.jsonOut {
+		if err := printJSON(report); err != nil {
+			errf("failed to render setup JSON: %v\n", err)
+			return 1
+		}
+		return exitCode
+	}
+	if opts.plainOut {
+		fmt.Printf("status\t%s\n", report.Status)
+		fmt.Printf("mode\t%s\n", report.Mode)
+		fmt.Printf("command\t%s\n", report.Command)
+		for i, step := range report.Steps {
+			fmt.Printf("step_%d_id\t%s\n", i+1, step.ID)
+			fmt.Printf("step_%d_status\t%s\n", i+1, step.Status)
+			fmt.Printf("step_%d_message\t%s\n", i+1, step.Message)
+			if strings.TrimSpace(step.Hint) != "" {
+				fmt.Printf("step_%d_hint\t%s\n", i+1, step.Hint)
+			}
+		}
+		if strings.TrimSpace(report.Error) != "" {
+			fmt.Printf("error\t%s\n", report.Error)
+		}
+		for i, n := range report.Next {
+			fmt.Printf("next_%d\t%s\n", i+1, n)
+		}
+		return exitCode
+	}
+	if exitCode == 0 {
+		for _, n := range report.Next {
+			fmt.Println("next:", n)
+		}
+	} else {
+		fmt.Fprintf(os.Stderr, "setup: %s\n", strings.TrimSpace(report.Error))
+		lastHint := ""
+		for i := len(report.Steps) - 1; i >= 0; i-- {
+			if strings.TrimSpace(report.Steps[i].Hint) != "" {
+				lastHint = report.Steps[i].Hint
+				break
+			}
+		}
+		if lastHint != "" {
+			fmt.Fprintln(os.Stderr, "next:", lastHint)
+		}
+	}
+	return exitCode
 }
 
 func redactedConfig(cfg config.Config, reveal bool) config.Config {
@@ -712,7 +854,11 @@ _pocketcastsctl_completions() {
       return 0
       ;;
     setup)
-      COMPREPLY=( $(compgen -W "--json --no-input --browser --browser-app --url --url-contains --key-contains --candidate-passes" -- "$cur") )
+      if [[ $COMP_CWORD -eq 2 ]]; then
+        COMPREPLY=( $(compgen -W "run check auth verify --json --plain --no-input --browser --browser-app --url --url-contains --key-contains --candidate-passes" -- "$cur") )
+      else
+        COMPREPLY=( $(compgen -W "--json --plain --no-input --browser --browser-app --url --url-contains --key-contains --candidate-passes" -- "$cur") )
+      fi
       return 0
       ;;
     start)
@@ -830,7 +976,11 @@ _pocketcastsctl_completions() {
       _values "flags" "--json" "--plain" "--watch" "--interactive" "--verify-auth" "--interval" "--max-updates"
       ;;
     setup)
-      _values "flags" "--json" "--no-input" "--browser" "--browser-app" "--url" "--url-contains" "--key-contains" "--candidate-passes"
+      if (( CURRENT == 3 )); then
+        _values "subcommands/flags" "run" "check" "auth" "verify" "--json" "--plain" "--no-input" "--browser" "--browser-app" "--url" "--url-contains" "--key-contains" "--candidate-passes"
+      else
+        _values "flags" "--json" "--plain" "--no-input" "--browser" "--browser-app" "--url" "--url-contains" "--key-contains" "--candidate-passes"
+      fi
       ;;
     start)
       _values "flags" "--json" "--no-input" "--browser" "--browser-app" "--url" "--url-contains" "--key-contains" "--candidate-passes"
@@ -917,7 +1067,8 @@ _pocketcastsctl_completions "$@"
 complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from completion' -a 'bash zsh fish'
 
 complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from now' -l json -l plain -l watch -l interactive -l verify-auth -l interval -l max-updates
-complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from setup' -l json -l no-input -l browser -l browser-app -l url -l url-contains -l key-contains -l candidate-passes
+complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from setup' -a 'run check auth verify'
+complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from setup' -l json -l plain -l no-input -l browser -l browser-app -l url -l url-contains -l key-contains -l candidate-passes
 complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from start' -l json -l no-input -l browser -l browser-app -l url -l url-contains -l key-contains -l candidate-passes
 complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from doctor' -a 'explain' -l json -l plain -l quick -l full -l fix
 complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from config' -a 'init path show'

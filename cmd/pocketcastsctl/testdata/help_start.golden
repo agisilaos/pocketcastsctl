@@ -1,5 +1,9 @@
 Usage:
-  pocketcastsctl setup [--json] [--no-input] [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--url-contains needle]
+  pocketcastsctl setup [run|check|auth|verify] [--json|--plain] [--no-input] [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--url-contains needle]
+  pocketcastsctl setup run [--json|--plain] [--no-input]
+  pocketcastsctl setup check [--json|--plain]
+  pocketcastsctl setup auth [--json|--plain] [--no-input]
+  pocketcastsctl setup verify [--json|--plain]
   pocketcastsctl help setup
 
 Recommended first-run flow:

@@ -11,6 +11,9 @@ func TestCompletionScriptsIncludeNewFlags(t *testing.T) {
 	if !strings.Contains(bash, " setup ") {
 		t.Fatalf("bash completion missing setup command")
 	}
+	if !strings.Contains(bash, "run check auth verify") {
+		t.Fatalf("bash completion missing setup subcommands")
+	}
 	if !strings.Contains(bash, "--interactive") {
 		t.Fatalf("bash completion missing --interactive")
 	}

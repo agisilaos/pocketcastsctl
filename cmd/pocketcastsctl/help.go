@@ -39,7 +39,11 @@ var usageText = map[string]string{
 	"har graphql":    "pocketcastsctl har graphql [--host host] [--json] <file.har>",
 	"har redact":     "pocketcastsctl har redact <in.har> <out.har>",
 	"doctor explain": "pocketcastsctl doctor explain <code> [--json]",
-	"setup":          "pocketcastsctl setup [--json] [--no-input] [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--url-contains needle]",
+	"setup":          "pocketcastsctl setup [run|check|auth|verify] [--json|--plain] [--no-input] [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--url-contains needle]",
+	"setup run":      "pocketcastsctl setup run [--json|--plain] [--no-input] [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--url-contains needle]",
+	"setup check":    "pocketcastsctl setup check [--json|--plain]",
+	"setup auth":     "pocketcastsctl setup auth [--json|--plain] [--no-input] [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--url-contains needle]",
+	"setup verify":   "pocketcastsctl setup verify [--json|--plain]",
 	"start":          "pocketcastsctl start [--json] [--no-input] [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--url-contains needle]",
 	"now":            "pocketcastsctl now [--watch] [--interactive] [--interval 5s] [--verify-auth] [--json|--plain]",
 	"completion":     "pocketcastsctl completion [zsh|bash|fish]",
@@ -223,7 +227,22 @@ func runHelp(args []string) int {
 			return unknownHelpTopic(args)
 		}
 	case "setup":
-		printSetupHelp()
+		if len(args) == 1 {
+			printSetupHelp()
+			return 0
+		}
+		switch args[1] {
+		case "run":
+			printUsage("setup run")
+		case "check":
+			printUsage("setup check")
+		case "auth":
+			printUsage("setup auth")
+		case "verify":
+			printUsage("setup verify")
+		default:
+			return unknownHelpTopic(args)
+		}
 	case "start", "getting-started":
 		printSetupHelp()
 	case "now":
@@ -312,7 +331,7 @@ Command reference:
   pocketcastsctl now [--watch] [--interactive] [--interval 5s] [--verify-auth] [--json|--plain]
   pocketcastsctl doctor [--json|--plain] [--quick|--full] [--fix]
   pocketcastsctl doctor explain <code> [--json]
-  pocketcastsctl setup [--json] [--no-input] [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--url-contains needle]
+  pocketcastsctl setup [run|check|auth|verify] [--json|--plain] [--no-input] [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--url-contains needle]
   pocketcastsctl start [--json] [--no-input] [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--url-contains needle]
   pocketcastsctl auth login [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com]
   pocketcastsctl auth refresh [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--candidate-passes N]
@@ -348,7 +367,11 @@ Deprecated shortcuts (use canonical commands above):
 func printSetupHelp() {
 	fmt.Print(strings.TrimSpace(`
 Usage:
-  pocketcastsctl setup [--json] [--no-input] [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--url-contains needle]
+  pocketcastsctl setup [run|check|auth|verify] [--json|--plain] [--no-input] [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--url-contains needle]
+  pocketcastsctl setup run [--json|--plain] [--no-input]
+  pocketcastsctl setup check [--json|--plain]
+  pocketcastsctl setup auth [--json|--plain] [--no-input]
+  pocketcastsctl setup verify [--json|--plain]
   pocketcastsctl help setup
 
 Recommended first-run flow:
