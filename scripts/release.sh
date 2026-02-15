@@ -73,45 +73,51 @@ last_tag() {
   git describe --tags --abbrev=0 2>/dev/null || true
 }
 
-extract_unreleased_notes() {
-  python3 - <<'PY'
-txt=open("CHANGELOG.md","r",encoding="utf-8").read().splitlines()
-out=[]
-in_un=False
-for line in txt:
-    if line.strip() == "## [Unreleased]":
-        in_un=True
+generate_release_notes() {
+  local prev_tag="$1"
+  local range
+  if [[ -n "${prev_tag}" ]]; then
+    range="${prev_tag}..HEAD"
+  else
+    range="HEAD"
+  fi
+  git log --no-merges --pretty=format:'%H%x1f%s%x1f%b%x1e' "${range}" | python3 - <<'PY'
+import sys
+
+raw = sys.stdin.read()
+entries = [e for e in raw.split("\x1e") if e.strip()]
+out = []
+for entry in entries:
+    parts = entry.rstrip("\n").split("\x1f", 2)
+    if len(parts) < 2:
         continue
-    if in_un and line.startswith("## ["):
-        break
-    if in_un:
-        out.append(line)
+    commit = parts[0].strip()
+    subject = parts[1].strip()
+    body = parts[2] if len(parts) > 2 else ""
+    short = commit[:7] if commit else "unknown"
+    out.append(f"- {subject} ({short})")
+
+    body_lines = [line.rstrip() for line in body.splitlines()]
+    while body_lines and not body_lines[0].strip():
+        body_lines.pop(0)
+    while body_lines and not body_lines[-1].strip():
+        body_lines.pop()
+    if body_lines:
+        for line in body_lines:
+            out.append(f"  {line}" if line else "  ")
+
 print("\n".join(out).strip())
 PY
 }
 
-generate_fallback_notes() {
-  local prev_tag="$1"
-  if [[ -n "${prev_tag}" ]]; then
-    git log --no-merges --pretty=format:'- %s (%h)' "${prev_tag}..HEAD"
-  else
-    git log --no-merges --pretty=format:'- %s (%h)'
-  fi
-}
-
 update_changelog() {
   local ver="$1"
-  local prev_tag="$2"
+  local notes="$2"
   local date_utc
   date_utc="$(date -u +%Y-%m-%d)"
 
   [[ -f CHANGELOG.md ]] || die "CHANGELOG.md not found"
 
-  local notes
-  notes="$(extract_unreleased_notes)"
-  if [[ -z "${notes}" ]]; then
-    notes="$(generate_fallback_notes "${prev_tag}")"
-  fi
   if [[ -z "${notes}" ]]; then
     notes="- No changes recorded."
   fi
@@ -132,31 +138,34 @@ if any(line.startswith(target_header) for line in lines):
 
 out=[]
 in_unreleased=False
-inserted=False
-
 for line in lines:
     if line.strip() == "## [Unreleased]":
-        out.append(line)
-        out.append("")
-        out.append(f"## [{version}] - {date}")
-        out.append("")
-        out.extend(notes.splitlines() if notes.strip() else ["- No changes recorded."])
-        out.append("")
-        inserted=True
         in_unreleased=True
         continue
-
-    if in_unreleased:
-        if line.startswith("## ["):
-            in_unreleased=False
-            out.append(line)
-        else:
-            continue
-    else:
+    if in_unreleased and line.startswith("## ["):
+        in_unreleased=False
         out.append(line)
+        continue
+    if in_unreleased:
+        continue
+    out.append(line)
 
-if not inserted:
-    raise SystemExit("error: CHANGELOG.md missing '## [Unreleased]' header")
+section=[f"## [{version}] - {date}", ""]
+section.extend(notes.splitlines() if notes.strip() else ["- No changes recorded."])
+section.append("")
+
+insert_idx=None
+for i, line in enumerate(out):
+    if line.startswith("## ["):
+        insert_idx=i
+        break
+
+if insert_idx is None:
+    if out and out[-1].strip():
+        out.append("")
+    out.extend(section)
+else:
+    out[insert_idx:insert_idx]=section
 
 open(path,"w",encoding="utf-8").write("\n".join(out).rstrip() + "\n")
 PY
@@ -198,6 +207,7 @@ build_dist() {
 
 create_github_release() {
   local ver="$1"
+  local notes="$2"
   if ! command -v gh >/dev/null 2>&1; then
     print -- "gh not found; skipping GitHub release creation"
     return 0
@@ -205,22 +215,10 @@ create_github_release() {
 
   local notes_file
   notes_file="$(mktemp)"
-  python3 - "$ver" >"${notes_file}" <<'PY'
-import sys
-ver=sys.argv[1]
-txt=open("CHANGELOG.md","r",encoding="utf-8").read().splitlines()
-out=[]
-in_sec=False
-for line in txt:
-    if line.startswith("## [") and line.startswith(f"## [{ver}]"):
-        in_sec=True
-        continue
-    if in_sec and line.startswith("## ["):
-        break
-    if in_sec:
-        out.append(line)
-print("\n".join(out).strip() or f"Release {ver}")
-PY
+  if [[ -z "${notes}" ]]; then
+    notes="Release ${ver}"
+  fi
+  print -- "${notes}" > "${notes_file}"
 
   gh release create "${ver}" dist/*.tar.gz dist/SHA256SUMS.txt --notes-file "${notes_file}" --latest
   rm -f "${notes_file}"
@@ -376,8 +374,13 @@ main() {
 
   local prev
   prev="$(last_tag)"
+  local notes
+  notes="$(generate_release_notes "${prev}")"
+  if [[ -z "${notes}" ]]; then
+    notes="- No changes recorded."
+  fi
 
-  update_changelog "${version}" "${prev}"
+  update_changelog "${version}" "${notes}"
   git commit -m "chore(release): ${version}"
 
   git tag "${version}"
@@ -390,7 +393,7 @@ main() {
   build_dist "${version}"
 
   print -- "Creating GitHub release..."
-  create_github_release "${version}"
+  create_github_release "${version}" "${notes}"
 
   print -- "Updating Homebrew tap..."
   update_homebrew_formula "${version}"

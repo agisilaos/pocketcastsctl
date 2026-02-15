@@ -55,31 +55,17 @@ fi
 git rev-parse "$version" >/dev/null 2>&1 && die "tag already exists: $version"
 
 [[ -f CHANGELOG.md ]] || die "CHANGELOG.md not found"
-rg -n '^## \[Unreleased\]$' CHANGELOG.md >/dev/null || die "CHANGELOG.md missing '## [Unreleased]'"
 if rg -n "^## \[$version\]" CHANGELOG.md >/dev/null; then
   die "$version already exists in CHANGELOG.md"
 fi
 
-# Validate changelog section parse logic used by release script.
-python3 - <<'PY'
-from pathlib import Path
-
-lines = Path("CHANGELOG.md").read_text(encoding="utf-8").splitlines()
-in_unreleased = False
-section = []
-for line in lines:
-    if line.strip() == "## [Unreleased]":
-        in_unreleased = True
-        continue
-    if in_unreleased and line.startswith("## ["):
-        break
-    if in_unreleased:
-        section.append(line)
-
-if not in_unreleased:
-    raise SystemExit("missing Unreleased section")
-# Empty unreleased is allowed; script falls back to git log.
-PY
+# Validate release notes generation range used by release script.
+prev_tag="$(git describe --tags --abbrev=0 2>/dev/null || true)"
+if [[ -n "$prev_tag" ]]; then
+  git log --no-merges --pretty=format:'%H%x1f%s%x1f%b%x1e' "${prev_tag}..HEAD" >/dev/null
+else
+  git log --no-merges --pretty=format:'%H%x1f%s%x1f%b%x1e' HEAD >/dev/null
+fi
 
 # Ensure help contracts and docs snapshots are stable before release.
 go test ./cmd/pocketcastsctl -run 'TestGoldenHelpRoot|TestGoldenHelpStart' >/dev/null

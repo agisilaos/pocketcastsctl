@@ -4,8 +4,6 @@ All notable changes to this project will be documented in this file.
 
 The format is based on *Keep a Changelog*, and this project adheres to *Semantic Versioning*.
 
-## [Unreleased]
-
 ## [v0.1.4] - 2026-02-14
 
 - chore: add release preflight, docs drift checks, and core package tests (7863c48)

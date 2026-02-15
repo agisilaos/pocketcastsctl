@@ -13,12 +13,9 @@ func TestReleasePreflightFailurePaths(t *testing.T) {
 	if runtime.GOOS != "darwin" {
 		t.Skip("release_preflight.sh requires Darwin")
 	}
-	if _, err := exec.LookPath("rg"); err != nil {
-		t.Skip("release_preflight.sh expects rg in PATH")
-	}
 
 	t.Run("invalid semver", func(t *testing.T) {
-		repo := setupPreflightRepo(t, true)
+		repo := setupPreflightRepo(t)
 		out, err := runCmd(repo, "bash", "scripts/release_preflight.sh", "v1.2")
 		if err == nil {
 			t.Fatalf("expected failure for invalid version")
@@ -29,7 +26,7 @@ func TestReleasePreflightFailurePaths(t *testing.T) {
 	})
 
 	t.Run("tag exists", func(t *testing.T) {
-		repo := setupPreflightRepo(t, true)
+		repo := setupPreflightRepo(t)
 		mustRun(t, repo, "git", "tag", "v1.2.3")
 		out, err := runCmd(repo, "bash", "scripts/release_preflight.sh", "v1.2.3")
 		if err == nil {
@@ -40,19 +37,22 @@ func TestReleasePreflightFailurePaths(t *testing.T) {
 		}
 	})
 
-	t.Run("missing unreleased header", func(t *testing.T) {
-		repo := setupPreflightRepo(t, false)
-		out, err := runCmd(repo, "bash", "scripts/release_preflight.sh", "v1.2.3")
-		if err == nil {
-			t.Fatalf("expected failure for missing unreleased section")
+	t.Run("missing changelog", func(t *testing.T) {
+		repo := setupPreflightRepo(t)
+		if err := os.Remove(filepath.Join(repo, "CHANGELOG.md")); err != nil {
+			t.Fatalf("remove changelog: %v", err)
 		}
-		if !strings.Contains(out, "CHANGELOG.md missing '## [Unreleased]'") {
+		out, err := runCmd(repo, "bash", "scripts/release_preflight.sh", "--allow-dirty", "v1.2.3")
+		if err == nil {
+			t.Fatalf("expected failure for missing changelog")
+		}
+		if !strings.Contains(out, "CHANGELOG.md not found") {
 			t.Fatalf("unexpected output: %s", out)
 		}
 	})
 
 	t.Run("dirty tree without allow-dirty", func(t *testing.T) {
-		repo := setupPreflightRepo(t, true)
+		repo := setupPreflightRepo(t)
 		mustWriteFile(t, filepath.Join(repo, "README.md"), "dirty\n")
 		out, err := runCmd(repo, "bash", "scripts/release_preflight.sh", "v1.2.3")
 		if err == nil {
@@ -93,17 +93,13 @@ func TestCheckHelpDocsDriftScript(t *testing.T) {
 	})
 }
 
-func setupPreflightRepo(t *testing.T, withUnreleased bool) string {
+func setupPreflightRepo(t *testing.T) string {
 	t.Helper()
 	repo := t.TempDir()
 	mustCopyFile(t, repoRootPath(t, "scripts/release_preflight.sh"), filepath.Join(repo, "scripts/release_preflight.sh"))
 	mustWriteFile(t, filepath.Join(repo, "go.mod"), "module example.com/preflight\n\ngo 1.24\n")
 	mustWriteFile(t, filepath.Join(repo, "README.md"), "fixture\n")
-	if withUnreleased {
-		mustWriteFile(t, filepath.Join(repo, "CHANGELOG.md"), "# Changelog\n\n## [Unreleased]\n\n## [v0.1.0] - 2026-01-01\n")
-	} else {
-		mustWriteFile(t, filepath.Join(repo, "CHANGELOG.md"), "# Changelog\n\n## [v0.1.0] - 2026-01-01\n")
-	}
+	mustWriteFile(t, filepath.Join(repo, "CHANGELOG.md"), "# Changelog\n\n## [v0.1.0] - 2026-01-01\n")
 	mustRun(t, repo, "git", "init")
 	mustRun(t, repo, "git", "config", "user.name", "Codex")
 	mustRun(t, repo, "git", "config", "user.email", "codex@example.com")

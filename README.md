@@ -310,7 +310,8 @@ The release workflow mirrors [`homepodctl`](https://github.com/agisilaos/homepod
 
 - Version metadata is embedded via ldflags (`main.version`, `main.commit`, `main.date`); `pocketcastsctl --version` shows it.
 - `make release VERSION=vX.Y.Z` runs `scripts/release.sh` to:
-  - Update `CHANGELOG.md` from the `[Unreleased]` section
+  - Generate release notes from commit titles and descriptions since the previous tag
+  - Insert the generated notes into `CHANGELOG.md` under the new version
   - Tag and push `main` + the tag
   - Build macOS arm64/amd64 tarballs under `dist/` with checksums
   - Create a GitHub Release (if `gh` is installed)
