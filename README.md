@@ -29,6 +29,8 @@ For local iteration:
 ```bash
 make build   # builds ./pocketcastsctl
 make test    # runs unit tests
+make test-scripts  # runs script failure-path tests
+make check-help-docs
 make release VERSION=v0.1.0  # builds artifacts + tag + tap update (macOS + gh + git)
 ```
 
@@ -182,7 +184,7 @@ macOS may prompt you to allow `osascript` to control your browser (Automation pe
 This path calls Pocket Casts’ private API (currently `up_next/list`, `up_next/play_next`, `up_next/remove`) using an auth token extracted from your logged-in Web Player tab.
 
 ```bash
-./bin/pocketcastsctl login
+./bin/pocketcastsctl auth login
 ./bin/pocketcastsctl auth refresh
 ./bin/pocketcastsctl auth status
 ./bin/pocketcastsctl auth verify
@@ -237,8 +239,8 @@ If `auth sync` can’t find a token, reload `https://play.pocketcasts.com` while
 If it finds the wrong thing, use:
 
 ```bash
-./pocketcastsctl auth sync --dry-run
-./pocketcastsctl auth sync --key-contains token
+./bin/pocketcastsctl auth sync --dry-run
+./bin/pocketcastsctl auth sync --key-contains token
 ```
 
 If `queue api` commands return `401 Unauthorized`, refresh credentials:
@@ -261,8 +263,8 @@ By default, `queue api rm` prompts for confirmation on TTY. In non-interactive m
 Play a specific item from Up Next:
 
 ```bash
-./bin/pocketcastsctl ls
-./bin/pocketcastsctl play 3
+./bin/pocketcastsctl queue api ls
+./bin/pocketcastsctl queue api play 3
 ```
 
 Add “Play Next” (requires episode fields observed in HAR; easiest is `--episode-json`):
@@ -306,4 +308,4 @@ Run the release on macOS with a clean git tree.
 
 ## Roadmap
 
-See `ROADMAP.md` for the current milestone plan (`v0.1.3`) and acceptance criteria.
+See `ROADMAP.md` for the current milestone plan (`v0.1.5`) and acceptance criteria.

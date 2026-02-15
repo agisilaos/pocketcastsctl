@@ -31,4 +31,3 @@ func TestFilterQueueItems(t *testing.T) {
 		t.Fatalf("filterQueueItems mismatch, got %+v want %+v", got, want)
 	}
 }
-

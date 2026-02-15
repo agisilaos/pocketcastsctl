@@ -19,6 +19,8 @@ jobs:
         run: make fmt-check
       - name: Test
         run: go test ./...
+      - name: Script Tests
+        run: make test-scripts
       - name: Help/Docs Drift Check
         run: make check-help-docs
       - name: Release Preflight Smoke

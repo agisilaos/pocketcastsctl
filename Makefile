@@ -1,4 +1,4 @@
-.PHONY: build test vet fmt fmt-check check-help-docs release-preflight release
+.PHONY: build test test-scripts vet fmt fmt-check check-help-docs release-preflight release
 
 build:
 	go build -o pocketcastsctl ./cmd/pocketcastsctl
@@ -6,14 +6,17 @@ build:
 test:
 	go test ./...
 
+test-scripts:
+	go test ./scripts -run 'TestReleasePreflightFailurePaths|TestCheckHelpDocsDriftScript'
+
 vet:
 	go vet ./...
 
 fmt:
-	gofmt -w cmd/pocketcastsctl/main.go internal
+	gofmt -w cmd internal scripts
 
 fmt-check:
-	@test -z "$$(gofmt -l cmd/pocketcastsctl/main.go internal)"
+	@test -z "$$(gofmt -l cmd internal scripts)"
 
 check-help-docs:
 	./scripts/check-help-docs-drift.sh
