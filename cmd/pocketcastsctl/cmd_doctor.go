@@ -47,10 +47,12 @@ func runDoctor(args []string, cfg config.Config) int {
 	if *quick {
 		includeAPIValidation = false
 	}
-	if includeAPIValidation {
-		fmt.Fprintln(os.Stderr, "doctor: running full checks (includes API auth validation; this may take a few seconds)")
-	} else {
-		fmt.Fprintln(os.Stderr, "doctor: running quick checks (skips API auth validation)")
+	if !*jsonOut && !*plain {
+		if includeAPIValidation {
+			fmt.Fprintln(os.Stderr, "doctor: running full checks (includes API auth validation; this may take a few seconds)")
+		} else {
+			fmt.Fprintln(os.Stderr, "doctor: running quick checks (skips API auth validation)")
+		}
 	}
 
 	checks := collectDoctorChecks(cfg, includeAPIValidation)

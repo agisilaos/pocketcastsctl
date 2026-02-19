@@ -741,7 +741,7 @@ func TestRunAuthRefreshNoInputRequiresSyncOnly(t *testing.T) {
 }
 
 func TestRunDoctorJSON(t *testing.T) {
-	code, stdout, _ := runForTest(t, []string{"doctor", "--json"}, "")
+	code, stdout, stderr := runForTest(t, []string{"doctor", "--json"}, "")
 	if code != 0 && code != 1 {
 		t.Fatalf("exit code = %d, want 0 or 1", code)
 	}
@@ -750,6 +750,9 @@ func TestRunDoctorJSON(t *testing.T) {
 	}
 	if !strings.Contains(stdout, "\"status\"") {
 		t.Fatalf("stdout missing status field: %q", stdout)
+	}
+	if strings.TrimSpace(stderr) != "" {
+		t.Fatalf("stderr should be empty for --json output, got: %q", stderr)
 	}
 }
 
@@ -764,12 +767,15 @@ func TestRunDoctorModeConflict(t *testing.T) {
 }
 
 func TestRunDoctorQuickJSON(t *testing.T) {
-	code, stdout, _ := runForTest(t, []string{"doctor", "--json", "--quick"}, "")
+	code, stdout, stderr := runForTest(t, []string{"doctor", "--json", "--quick"}, "")
 	if code != 0 && code != 1 {
 		t.Fatalf("exit code = %d, want 0 or 1", code)
 	}
 	if !strings.Contains(stdout, `"mode": "quick"`) {
 		t.Fatalf("stdout missing quick mode: %q", stdout)
+	}
+	if strings.TrimSpace(stderr) != "" {
+		t.Fatalf("stderr should be empty for --json output, got: %q", stderr)
 	}
 }
 
