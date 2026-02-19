@@ -1078,12 +1078,14 @@ complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from queue' -a 'ls api'
 complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from local' -a 'pick play pause resume stop status'
 complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from har' -a 'summarize graphql redact'
 
-complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from play' -l dry-run
-complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from rm' -l dry-run -l force -l no-input
-complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from ls' -l json -l plain -l search -l limit
+complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from queue; and __fish_seen_subcommand_from api; and __fish_seen_subcommand_from play' -l dry-run -l search -l browser -l browser-app -l url-contains -l web-base
+complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from local; and __fish_seen_subcommand_from play' -l dry-run -l from-start
+complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from queue; and __fish_seen_subcommand_from api; and __fish_seen_subcommand_from rm' -l dry-run -l force -l no-input
+complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from queue; and __fish_seen_subcommand_from ls' -l json -l plain -l search -l limit -l browser -l browser-app -l url-contains
+complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from queue; and __fish_seen_subcommand_from api; and __fish_seen_subcommand_from ls' -l json -l plain -l raw -l search -l limit
 `,
+		}
 	}
-}
 
 type doctorCheck struct {
 	ID      string `json:"id"`

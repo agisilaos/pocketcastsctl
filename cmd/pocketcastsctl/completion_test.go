@@ -28,4 +28,12 @@ func TestCompletionScriptsIncludeNewFlags(t *testing.T) {
 	if !strings.Contains(zsh, "--interactive") || !strings.Contains(zsh, "--dry-run") {
 		t.Fatalf("zsh completion missing new flags")
 	}
+
+	fish := scripts["fish"]
+	if strings.Contains(fish, "complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from play' -l dry-run") {
+		t.Fatalf("fish completion still contains unscoped play dry-run rule")
+	}
+	if !strings.Contains(fish, "__fish_seen_subcommand_from queue; and __fish_seen_subcommand_from api; and __fish_seen_subcommand_from play") {
+		t.Fatalf("fish completion missing scoped queue api play rule")
+	}
 }
