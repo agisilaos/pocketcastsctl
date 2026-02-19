@@ -44,7 +44,7 @@ Command reference:
   pocketcastsctl auth clear
   pocketcastsctl web <play|pause|toggle|next|prev|status> [--browser <name>] [--browser-app <app>] [--url-contains needle]
   pocketcastsctl queue ls [--json] [--browser <name>] [--browser-app <app>] [--url-contains needle]
-  pocketcastsctl queue api ls [--limit N] [--search q] [--json|--raw] [--plain]
+  pocketcastsctl queue api ls [--limit N] [--search q] [--json|--plain|--raw]
   pocketcastsctl queue api add (--uuid id --podcast id --title t --published rfc3339 --url audioUrl) | (--episode-json json)
   pocketcastsctl queue api rm [--dry-run] [--force|--no-input] <episode-uuid...>
   pocketcastsctl queue api play <index|uuid> [--dry-run] [--browser <name>] [--browser-app <app>] [--url-contains needle]

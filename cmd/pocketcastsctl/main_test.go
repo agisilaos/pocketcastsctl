@@ -149,6 +149,16 @@ func TestRunQueueRemoveRequiresForceNonInteractive(t *testing.T) {
 	}
 }
 
+func TestRunQueueAPILSMutuallyExclusiveOutputFlags(t *testing.T) {
+	code, _, stderr := runForTest(t, []string{"queue", "api", "ls", "--json", "--plain"}, "")
+	if code != 2 {
+		t.Fatalf("exit code = %d, want 2", code)
+	}
+	if !strings.Contains(stderr, "use only one of --json, --plain, or --raw") {
+		t.Fatalf("stderr missing output mode conflict message: %q", stderr)
+	}
+}
+
 func TestRunVersionWritesStdoutOnly(t *testing.T) {
 	code, stdout, stderr := runForTest(t, []string{"--version"}, "")
 	if code != 0 {

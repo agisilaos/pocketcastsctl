@@ -157,6 +157,20 @@ func runQueueAPILS(args []string, client *pocketcasts.Client, ctx context.Contex
 		fmt.Fprintf(os.Stderr, "failed to parse flags: %v\n", err)
 		return 2
 	}
+	outputModes := 0
+	if *raw {
+		outputModes++
+	}
+	if *jsonOut {
+		outputModes++
+	}
+	if *plain {
+		outputModes++
+	}
+	if outputModes > 1 {
+		fmt.Fprintln(os.Stderr, "queue api ls: use only one of --json, --plain, or --raw")
+		return 2
+	}
 
 	body, err := fetchUpNextWithRetry(ctx, client, serverModified)
 	if err != nil {

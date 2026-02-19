@@ -24,7 +24,7 @@ var usageText = map[string]string{
 	"web prev":       "pocketcastsctl web prev [--browser <name>] [--browser-app <app>] [--url-contains needle]",
 	"web status":     "pocketcastsctl web status [--json] [--plain] [--browser <name>] [--browser-app <app>] [--url-contains needle]",
 	"queue ls":       "pocketcastsctl queue ls [--json] [--plain] [--search q] [--limit N] [--browser <name>] [--browser-app <app>] [--url-contains needle]",
-	"queue api ls":   "pocketcastsctl queue api ls [--limit N] [--search q] [--json|--raw] [--plain]",
+	"queue api ls":   "pocketcastsctl queue api ls [--limit N] [--search q] [--json|--plain|--raw]",
 	"queue api add":  "pocketcastsctl queue api add (--uuid id --podcast id --title t --published rfc3339 --url audioUrl) | (--episode-json json) [--raw]",
 	"queue api rm":   "pocketcastsctl queue api rm [--dry-run] [--force|--no-input] [--raw] <episode-uuid...>",
 	"queue api play": "pocketcastsctl queue api play <index|uuid> [--search q] [--dry-run] [--browser <name>] [--browser-app <app>] [--url-contains needle] [--web-base url]",
@@ -341,7 +341,7 @@ Command reference:
   pocketcastsctl auth clear
   pocketcastsctl web <play|pause|toggle|next|prev|status> [--browser <name>] [--browser-app <app>] [--url-contains needle]
   pocketcastsctl queue ls [--json] [--browser <name>] [--browser-app <app>] [--url-contains needle]
-  pocketcastsctl queue api ls [--limit N] [--search q] [--json|--raw] [--plain]
+  pocketcastsctl queue api ls [--limit N] [--search q] [--json|--plain|--raw]
   pocketcastsctl queue api add (--uuid id --podcast id --title t --published rfc3339 --url audioUrl) | (--episode-json json)
   pocketcastsctl queue api rm [--dry-run] [--force|--no-input] <episode-uuid...>
   pocketcastsctl queue api play <index|uuid> [--dry-run] [--browser <name>] [--browser-app <app>] [--url-contains needle]
