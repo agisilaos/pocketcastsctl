@@ -31,7 +31,9 @@ make build   # builds ./pocketcastsctl
 make test    # runs unit tests
 make test-scripts  # runs script failure-path tests
 make check-help-docs
-make release VERSION=v0.1.0  # builds artifacts + tag + tap update (macOS + gh + git)
+make release-check VERSION=vX.Y.Z
+make release-dry-run VERSION=vX.Y.Z
+make release VERSION=vX.Y.Z
 ```
 
 ## Usage
@@ -309,13 +311,16 @@ Environment overrides:
 The release workflow mirrors [`homepodctl`](https://github.com/agisilaos/homepodctl):
 
 - Version metadata is embedded via ldflags (`main.version`, `main.commit`, `main.date`); `pocketcastsctl --version` shows it.
+- `make release-check VERSION=vX.Y.Z` runs `scripts/release-check.sh` and validates tests/vet/docs/format + stamped version output.
+- `make release-dry-run VERSION=vX.Y.Z` builds release archives without changelog/tag/push/release/tap writes.
 - `make release VERSION=vX.Y.Z` runs `scripts/release.sh` to:
   - Generate release notes from commit titles and descriptions since the previous tag
   - Insert the generated notes into `CHANGELOG.md` under the new version
   - Tag and push `main` + the tag
   - Build macOS arm64/amd64 tarballs under `dist/` with checksums
-  - Create a GitHub Release (if `gh` is installed)
+  - Create a GitHub Release
   - Update the Homebrew tap (`agisilaos/homebrew-tap`)
+- Release scripts: `scripts/release-check.sh` and `scripts/release.sh`
 
 Run the release on macOS with a clean git tree.
 

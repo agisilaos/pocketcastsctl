@@ -23,5 +23,5 @@ jobs:
         run: make test-scripts
       - name: Help/Docs Drift Check
         run: make check-help-docs
-      - name: Release Preflight Smoke
-        run: ./scripts/release_preflight.sh v0.0.0
+      - name: Release Check Smoke
+        run: make release-check VERSION=v0.0.0

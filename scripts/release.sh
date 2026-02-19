@@ -12,16 +12,35 @@ if [[ "$(uname -s)" != "Darwin" ]]; then
   die "release.sh must be run on macOS (Darwin)"
 fi
 
-command -v go >/dev/null 2>&1 || die "go is required"
-command -v python3 >/dev/null 2>&1 || die "python3 is required"
-command -v git >/dev/null 2>&1 || die "git is required"
+for tool in go python3 git gh; do
+  command -v "$tool" >/dev/null 2>&1 || die "$tool is required"
+done
 
-version="${1:-}"
+dry_run=0
+version=""
+for arg in "$@"; do
+  case "$arg" in
+    --dry-run)
+      dry_run=1
+      ;;
+    *)
+      if [[ -z "$version" ]]; then
+        version="$arg"
+      else
+        die "usage: scripts/release.sh vX.Y.Z [--dry-run]"
+      fi
+      ;;
+  esac
+done
+
 if [[ -z "${version}" ]]; then
-  die "usage: scripts/release.sh vX.Y.Z"
+  die "usage: scripts/release.sh vX.Y.Z [--dry-run]"
 fi
 if [[ "${version}" != v* ]]; then
   version="v${version}"
+fi
+if [[ ! "${version}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  die "version must match vX.Y.Z (got: ${version})"
 fi
 
 repo_owner="agisilaos"
@@ -53,10 +72,6 @@ ensure_origin_remote() {
 }
 
 ensure_github_repo() {
-  if ! command -v gh >/dev/null 2>&1; then
-    print -- "gh not found; skipping GitHub repo creation"
-    return 0
-  fi
   if gh repo view "${repo_owner}/${repo_name}" >/dev/null 2>&1; then
     return 0
   fi
@@ -75,55 +90,23 @@ last_tag() {
 
 generate_release_notes() {
   local prev_tag="$1"
-  local range
   if [[ -n "${prev_tag}" ]]; then
-    range="${prev_tag}..HEAD"
+    git log --no-merges --pretty=format:'- %s (%h)' "${prev_tag}..HEAD"
   else
-    range="HEAD"
+    git log --no-merges --pretty=format:'- %s (%h)'
   fi
-  local entries_file
-  entries_file="$(mktemp)"
-  git log --no-merges --pretty=format:'%H%x1f%s%x1f%b%x1e' "${range}" > "${entries_file}"
-  python3 - "${entries_file}" <<'PY'
-import sys
-
-path = sys.argv[1]
-with open(path, "r", encoding="utf-8") as f:
-    raw = f.read()
-entries = [e for e in raw.split("\x1e") if e.strip()]
-out = []
-for entry in entries:
-    parts = entry.rstrip("\n").split("\x1f", 2)
-    if len(parts) < 2:
-        continue
-    commit = parts[0].strip()
-    subject = parts[1].strip()
-    body = parts[2] if len(parts) > 2 else ""
-    short = commit[:7] if commit else "unknown"
-    out.append(f"- {subject} ({short})")
-
-    body_lines = [line.rstrip() for line in body.splitlines()]
-    while body_lines and not body_lines[0].strip():
-        body_lines.pop(0)
-    while body_lines and not body_lines[-1].strip():
-        body_lines.pop()
-    if body_lines:
-        for line in body_lines:
-            out.append(f"  {line}" if line else "  ")
-
-print("\n".join(out).strip())
-PY
-  rm -f "${entries_file}"
 }
 
 update_changelog() {
   local ver="$1"
-  local notes="$2"
+  local prev_tag="$2"
   local date_utc
   date_utc="$(date -u +%Y-%m-%d)"
 
   [[ -f CHANGELOG.md ]] || die "CHANGELOG.md not found"
 
+  local notes
+  notes="$(generate_release_notes "${prev_tag}")"
   if [[ -z "${notes}" ]]; then
     notes="- No changes recorded."
   fi
@@ -142,36 +125,23 @@ target_header=f"## [{version}]"
 if any(line.startswith(target_header) for line in lines):
     raise SystemExit(f"error: {version} already exists in CHANGELOG.md")
 
-out=[]
-in_unreleased=False
-for line in lines:
-    if line.strip() == "## [Unreleased]":
-        in_unreleased=True
-        continue
-    if in_unreleased and line.startswith("## ["):
-        in_unreleased=False
-        out.append(line)
-        continue
-    if in_unreleased:
-        continue
-    out.append(line)
-
 section=[f"## [{version}] - {date}", ""]
 section.extend(notes.splitlines() if notes.strip() else ["- No changes recorded."])
 section.append("")
 
-insert_idx=None
-for i, line in enumerate(out):
+insert_at=None
+for i, line in enumerate(lines):
     if line.startswith("## ["):
-        insert_idx=i
+        insert_at=i
         break
 
-if insert_idx is None:
+if insert_at is None:
+    out=lines[:]
     if out and out[-1].strip():
         out.append("")
     out.extend(section)
 else:
-    out[insert_idx:insert_idx]=section
+    out=lines[:insert_at] + section + lines[insert_at:]
 
 open(path,"w",encoding="utf-8").write("\n".join(out).rstrip() + "\n")
 PY
@@ -213,28 +183,31 @@ build_dist() {
 
 create_github_release() {
   local ver="$1"
-  local notes="$2"
-  if ! command -v gh >/dev/null 2>&1; then
-    print -- "gh not found; skipping GitHub release creation"
-    return 0
-  fi
 
   local notes_file
   notes_file="$(mktemp)"
-  if [[ -z "${notes}" ]]; then
-    notes="Release ${ver}"
-  fi
-  print -- "${notes}" > "${notes_file}"
+  python3 - "$ver" >"${notes_file}" <<'PY'
+import sys
+ver=sys.argv[1]
+txt=open("CHANGELOG.md","r",encoding="utf-8").read().splitlines()
+out=[]
+in_sec=False
+for line in txt:
+    if line.startswith("## [") and line.startswith(f"## [{ver}]"):
+        in_sec=True
+        continue
+    if in_sec and line.startswith("## ["):
+        break
+    if in_sec:
+        out.append(line)
+print("\n".join(out).strip() or f"Release {ver}")
+PY
 
-  gh release create "${ver}" dist/*.tar.gz dist/SHA256SUMS.txt --notes-file "${notes_file}" --latest
+  gh release create "${ver}" dist/*.tar.gz dist/SHA256SUMS.txt --notes-file "${notes_file}" --latest --target "$(git rev-parse HEAD)"
   rm -f "${notes_file}"
 }
 
 ensure_homebrew_tap_repo() {
-  if ! command -v gh >/dev/null 2>&1; then
-    print -- "gh not found; skipping Homebrew tap automation"
-    return 1
-  fi
   if gh repo view "${tap_repo}" >/dev/null 2>&1; then
     return 0
   fi
@@ -246,7 +219,7 @@ ensure_homebrew_tap_repo() {
 update_homebrew_formula() {
   local ver="$1"
   local ver_nov="${ver#v}"
-  ensure_homebrew_tap_repo || return 0
+  ensure_homebrew_tap_repo
 
   local sha_arm sha_amd
   sha_arm="$(awk -v f="pocketcastsctl_${ver}_darwin_arm64.tar.gz" '$2==f{print $1}' dist/SHA256SUMS.txt | head -n 1 || true)"
@@ -255,7 +228,6 @@ update_homebrew_formula() {
 
   local tmp
   tmp="$(mktemp -d)"
-  # Avoid zsh `set -u` issues with traps and local variables by cleaning up explicitly.
 
   git clone "${tap_remote}" "${tmp}/tap" >/dev/null 2>&1 || die "failed to clone tap repo: ${tap_remote}"
   mkdir -p "${tmp}/tap/Formula"
@@ -371,35 +343,44 @@ main() {
   ensure_git_repo
   ensure_github_repo
   ensure_origin_remote
-  print -- "Running release preflight checks..."
-  ./scripts/release_preflight.sh "${version}"
+  require_clean_tree
 
   if git rev-parse "${version}" >/dev/null 2>&1; then
     die "tag already exists: ${version}"
   fi
 
-  local prev
-  prev="$(last_tag)"
-  local notes
-  notes="$(generate_release_notes "${prev}")"
-  if [[ -z "${notes}" ]]; then
-    notes="- No changes recorded."
+  print -- "Running release checks..."
+  ./scripts/release-check.sh "${version}"
+
+  if [[ "${dry_run}" -eq 1 ]]; then
+    print -- "Dry run enabled: changelog/tag/push/release/tap updates will be skipped."
+    print -- "Building dist artifacts..."
+    build_dist "${version}"
+    print -- "Dry run complete. Artifacts: dist/"
+    return 0
   fi
 
-  update_changelog "${version}" "${notes}"
+  local prev
+  prev="$(last_tag)"
+
+  update_changelog "${version}" "${prev}"
   git commit -m "chore(release): ${version}"
-
-  git tag "${version}"
-
-  print -- "Pushing main + tags..."
-  git push origin main
-  git push origin "${version}"
 
   print -- "Building dist artifacts..."
   build_dist "${version}"
 
+  if ! git rev-parse "${version}" >/dev/null 2>&1; then
+    git tag "${version}"
+  fi
+
+  print -- "Pushing main commit..."
+  git push origin main
+
+  print -- "Pushing release tag..."
+  git push origin "${version}"
+
   print -- "Creating GitHub release..."
-  create_github_release "${version}" "${notes}"
+  create_github_release "${version}"
 
   print -- "Updating Homebrew tap..."
   update_homebrew_formula "${version}"
