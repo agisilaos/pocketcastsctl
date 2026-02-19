@@ -1084,8 +1084,8 @@ complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from queue; and __fish_
 complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from queue; and __fish_seen_subcommand_from ls' -l json -l plain -l search -l limit -l browser -l browser-app -l url-contains
 complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from queue; and __fish_seen_subcommand_from api; and __fish_seen_subcommand_from ls' -l json -l plain -l raw -l search -l limit
 `,
-		}
 	}
+}
 
 type doctorCheck struct {
 	ID      string `json:"id"`
