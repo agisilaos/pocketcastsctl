@@ -81,10 +81,15 @@ generate_release_notes() {
   else
     range="HEAD"
   fi
-  git log --no-merges --pretty=format:'%H%x1f%s%x1f%b%x1e' "${range}" | python3 - <<'PY'
+  local entries_file
+  entries_file="$(mktemp)"
+  git log --no-merges --pretty=format:'%H%x1f%s%x1f%b%x1e' "${range}" > "${entries_file}"
+  python3 - "${entries_file}" <<'PY'
 import sys
 
-raw = sys.stdin.read()
+path = sys.argv[1]
+with open(path, "r", encoding="utf-8") as f:
+    raw = f.read()
 entries = [e for e in raw.split("\x1e") if e.strip()]
 out = []
 for entry in entries:
@@ -108,6 +113,7 @@ for entry in entries:
 
 print("\n".join(out).strip())
 PY
+  rm -f "${entries_file}"
 }
 
 update_changelog() {
