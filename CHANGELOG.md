@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 The format is based on *Keep a Changelog*, and this project adheres to *Semantic Versioning*.
 
+## [v0.1.5] - 2026-02-19
+
+- fix(release): repair notes generation pipeline (918530b)
+- chore(fmt): gofmt completion script changes (3150723)
+- fix(cli): keep doctor structured output stderr-quiet (f609a7d)
+- fix(cli): scope fish completion flags by command path (36552e5)
+- fix(cli): enforce exclusive queue api ls output modes (eaeb9ea)
+- docs(cli): remove deprecated start from canonical help list (e2d367c)
+- fix(cli): accept doctor explain --json after code (66e9b23)
+- chore(release): generate notes from commit titles and bodies (7351ff9)
+- feat(cli): add staged setup subcommands for interactive and agentic onboarding (e4cd5cb)
+- feat(cli): introduce setup command and deprecate start alias (e867f4b)
+- feat(cli): add start json mode, dry-run plays, interactive now, and richer completions (50db3b2)
+- test(scripts): add failure-path coverage and refresh README runbook (beca3b3)
+- test(cli): add integration smoke suite for core commands (2f1a4d7)
+- refactor(cli): split queue/local/auth/doctor/help commands and centralize output helpers (3c46501)
+
 ## [v0.1.4] - 2026-02-14
 
 - chore: add release preflight, docs drift checks, and core package tests (7863c48)
