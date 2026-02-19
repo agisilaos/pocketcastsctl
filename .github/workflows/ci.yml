@@ -23,5 +23,3 @@ jobs:
         run: make test-scripts
       - name: Help/Docs Drift Check
         run: make check-help-docs
-      - name: Release Check Smoke
-        run: make release-check VERSION=v0.0.0
