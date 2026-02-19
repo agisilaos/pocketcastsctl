@@ -332,7 +332,6 @@ Command reference:
   pocketcastsctl doctor [--json|--plain] [--quick|--full] [--fix]
   pocketcastsctl doctor explain <code> [--json]
   pocketcastsctl setup [run|check|auth|verify] [--json|--plain] [--no-input] [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--url-contains needle]
-  pocketcastsctl start [--json] [--no-input] [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--url-contains needle]
   pocketcastsctl auth login [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com]
   pocketcastsctl auth refresh [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--candidate-passes N]
   pocketcastsctl auth sync [--browser <name>] [--browser-app <app>] [--url-contains needle]
