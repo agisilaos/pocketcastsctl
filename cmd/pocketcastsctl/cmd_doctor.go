@@ -321,10 +321,22 @@ func doctorSuggestedFixes(checks []doctorCheck) []string {
 }
 
 func runDoctorExplain(args []string) int {
+	// Allow bool flags to appear before or after positional args.
+	reordered := make([]string, 0, len(args))
+	positionals := make([]string, 0, len(args))
+	for _, arg := range args {
+		if strings.HasPrefix(arg, "-") {
+			reordered = append(reordered, arg)
+			continue
+		}
+		positionals = append(positionals, arg)
+	}
+	reordered = append(reordered, positionals...)
+
 	fs := flag.NewFlagSet("doctor explain", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	jsonOut := fs.Bool("json", false, "output JSON")
-	if err := fs.Parse(args); err != nil {
+	if err := fs.Parse(reordered); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0
 		}

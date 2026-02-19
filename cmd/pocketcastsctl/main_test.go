@@ -443,6 +443,26 @@ func TestRunDoctorExplainKnownCode(t *testing.T) {
 	}
 }
 
+func TestRunDoctorExplainKnownCodeJSONFlagAfterCode(t *testing.T) {
+	code, stdout, stderr := runForTest(t, []string{"doctor", "explain", "doctor.auth.invalid", "--json"}, "")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr=%q", code, stderr)
+	}
+	if !strings.Contains(stdout, "\"code\": \"doctor.auth.invalid\"") {
+		t.Fatalf("stdout missing doctor explain code: %q", stdout)
+	}
+}
+
+func TestRunDoctorExplainKnownCodeJSONFlagBeforeCode(t *testing.T) {
+	code, stdout, stderr := runForTest(t, []string{"doctor", "explain", "--json", "doctor.auth.invalid"}, "")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr=%q", code, stderr)
+	}
+	if !strings.Contains(stdout, "\"code\": \"doctor.auth.invalid\"") {
+		t.Fatalf("stdout missing doctor explain code: %q", stdout)
+	}
+}
+
 func TestRunDoctorExplainUnknownCode(t *testing.T) {
 	code, _, stderr := runForTest(t, []string{"doctor", "explain", "doctor.unknown"}, "")
 	if code != 2 {
