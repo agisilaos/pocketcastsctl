@@ -15,6 +15,9 @@ fi
 [[ -f README.md ]] || die "README.md not found"
 [[ -f CHANGELOG.md ]] || die "CHANGELOG.md not found"
 
+echo "[docs-check] validating shared docs contract"
+python3 ./scripts/docs-contract-check.py
+
 echo "[docs-check] validating help/docs snapshots"
 ./scripts/check-help-docs-drift.sh
 

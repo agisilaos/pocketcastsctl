@@ -9,7 +9,7 @@ This project is intentionally starting with **browser automation** (Safari/Chrom
 
 Supported browsers for automation depend on whether the macOS app is scriptable; you can set `--browser` to `chrome`, `safari`, `arc`, `dia`, `brave`, `edge`, or pass a custom app name with `--browser-app`.
 
-## Install / build
+## Install
 
 ```bash
 cd pocketcastsctl
@@ -306,7 +306,7 @@ Environment overrides:
 - `POCKETCASTS_URL_CONTAINS`
 - `POCKETCASTS_API_BASE_URL`
 
-## Release process
+## Release
 
 The release workflow mirrors [`homepodctl`](https://github.com/agisilaos/homepodctl):
 
@@ -323,6 +323,12 @@ The release workflow mirrors [`homepodctl`](https://github.com/agisilaos/homepod
 - Release scripts: `scripts/release-check.sh` and `scripts/release.sh`
 
 Run the release on macOS with a clean git tree.
+
+## Docs
+
+- CLI help snapshots: `docs/cli-help/help-root.txt`, `docs/cli-help/help-start.txt`
+- Product roadmap: `ROADMAP.md`
+- Release history: `CHANGELOG.md`
 
 ## Roadmap
 
