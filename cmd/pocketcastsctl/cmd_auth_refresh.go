@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -24,16 +23,11 @@ func runAuthRefresh(args []string, cfg config.Config) int {
 	candidatePasses := fs.Int("candidate-passes", 1, "number of token-candidate verification passes")
 	syncOnly := fs.Bool("sync-only", false, "skip login/open flow; sync token from current browser session")
 	noInput := fs.Bool("no-input", false, "disable interactive prompts (requires --sync-only)")
-	if err := fs.Parse(args); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			return 0
-		}
-		fmt.Fprintf(os.Stderr, "failed to parse flags: %v\n", err)
-		return 2
+	if ok, code := parseFlagsOrExit(fs, args); !ok {
+		return code
 	}
-	if fs.NArg() != 0 {
-		fmt.Fprintln(os.Stderr, "usage: pocketcastsctl auth refresh [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--url-contains needle] [--key-contains q] [--candidate-passes N] [--sync-only] [--no-input]")
-		return 2
+	if ok, code := requireNoPositionalArgsOrExit(fs, "usage: pocketcastsctl auth refresh [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--url-contains needle] [--key-contains q] [--candidate-passes N] [--sync-only] [--no-input]"); !ok {
+		return code
 	}
 	if *noInput && !*syncOnly {
 		fmt.Fprintln(os.Stderr, "auth refresh: --no-input requires --sync-only")

@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -19,16 +18,11 @@ func runAuthStatus(args []string, cfg config.Config) int {
 	fs.SetOutput(os.Stderr)
 	jsonOut := fs.Bool("json", false, "output JSON")
 	plain := fs.Bool("plain", false, "plain line-oriented output")
-	if err := fs.Parse(args); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			return 0
-		}
-		fmt.Fprintf(os.Stderr, "failed to parse flags: %v\n", err)
-		return 2
+	if ok, code := parseFlagsOrExit(fs, args); !ok {
+		return code
 	}
-	if fs.NArg() != 0 {
-		fmt.Fprintln(os.Stderr, "usage: pocketcastsctl auth status [--json] [--plain]")
-		return 2
+	if ok, code := requireNoPositionalArgsOrExit(fs, "usage: pocketcastsctl auth status [--json] [--plain]"); !ok {
+		return code
 	}
 
 	headers := cfg.APIHeaders
@@ -127,16 +121,11 @@ func runAuthVerify(args []string, cfg config.Config) int {
 	fs.SetOutput(os.Stderr)
 	jsonOut := fs.Bool("json", false, "output JSON")
 	plain := fs.Bool("plain", false, "plain line-oriented output")
-	if err := fs.Parse(args); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			return 0
-		}
-		fmt.Fprintf(os.Stderr, "failed to parse flags: %v\n", err)
-		return 2
+	if ok, code := parseFlagsOrExit(fs, args); !ok {
+		return code
 	}
-	if fs.NArg() != 0 {
-		fmt.Fprintln(os.Stderr, "usage: pocketcastsctl auth verify [--json] [--plain]")
-		return 2
+	if ok, code := requireNoPositionalArgsOrExit(fs, "usage: pocketcastsctl auth verify [--json] [--plain]"); !ok {
+		return code
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)

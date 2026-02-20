@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -23,12 +22,8 @@ func runAuthSync(args []string, cfg config.Config) int {
 	prefix := fs.String("prefix", "Bearer ", "prefix to add to token (set empty to store raw token)")
 	keyContains := fs.String("key-contains", "", "prefer tokens whose sourceKey contains this substring")
 	dryRun := fs.Bool("dry-run", false, "print token candidate keys only (no token values) and exit")
-	if err := fs.Parse(args); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			return 0
-		}
-		fmt.Fprintf(os.Stderr, "failed to parse flags: %v\n", err)
-		return 2
+	if ok, code := parseFlagsOrExit(fs, args); !ok {
+		return code
 	}
 
 	controller, err := browsercontrol.New(browsercontrol.Options{

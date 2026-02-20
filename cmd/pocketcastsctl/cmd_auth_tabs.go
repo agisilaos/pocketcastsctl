@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -19,12 +18,8 @@ func runAuthTabs(args []string, cfg config.Config) int {
 	browserApp := fs.String("browser-app", cfg.BrowserApp, `macOS application name (optional)`)
 	jsonOut := fs.Bool("json", false, "output JSON")
 	plain := fs.Bool("plain", false, "plain line-oriented output")
-	if err := fs.Parse(args); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			return 0
-		}
-		fmt.Fprintf(os.Stderr, "failed to parse flags: %v\n", err)
-		return 2
+	if ok, code := parseFlagsOrExit(fs, args); !ok {
+		return code
 	}
 	controller, err := browsercontrol.New(browsercontrol.Options{
 		Browser:     *browser,

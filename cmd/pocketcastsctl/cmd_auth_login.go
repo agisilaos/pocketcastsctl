@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -18,12 +17,8 @@ func runAuthLogin(args []string, cfg config.Config) int {
 	browserApp := fs.String("browser-app", cfg.BrowserApp, `macOS application name (optional)`)
 	openURL := fs.String("url", "https://pocketcasts.com/podcasts", "URL to open for login")
 	urlContains := fs.String("url-contains", cfg.URLContains, `substring to match the Pocket Casts tab URL`)
-	if err := fs.Parse(args); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			return 0
-		}
-		fmt.Fprintf(os.Stderr, "failed to parse flags: %v\n", err)
-		return 2
+	if ok, code := parseFlagsOrExit(fs, args); !ok {
+		return code
 	}
 
 	appName := *browserApp
