@@ -22,7 +22,7 @@
 - Shared utility helpers and types: `../cmd/pocketcastsctl/cmd_shared_helpers.go`
 - Web-player launch and interactive picker helpers: `../cmd/pocketcastsctl/cmd_picker_webplay.go`
 - Auth handlers: `../cmd/pocketcastsctl/cmd_auth.go`, `../cmd/pocketcastsctl/cmd_auth_status_verify.go`, `../cmd/pocketcastsctl/cmd_auth_refresh.go`, `../cmd/pocketcastsctl/cmd_auth_helpers.go`
-- Queue handlers: `../cmd/pocketcastsctl/cmd_queue.go`, `../cmd/pocketcastsctl/cmd_queue_helpers.go`, `../cmd/pocketcastsctl/cmd_queue_fetch.go`
+- Queue handlers: `../cmd/pocketcastsctl/cmd_queue_dispatch.go`, `../cmd/pocketcastsctl/cmd_queue_api_ls.go`, `../cmd/pocketcastsctl/cmd_queue_api_mutations.go`, `../cmd/pocketcastsctl/cmd_queue_api_play_pick.go`, `../cmd/pocketcastsctl/cmd_queue_helpers.go`, `../cmd/pocketcastsctl/cmd_queue_fetch.go`
 - Shared retry/auth-recovery helpers: `../cmd/pocketcastsctl/cmd_retry.go`
 - Other command handlers: `../cmd/pocketcastsctl/cmd_local.go`, `../cmd/pocketcastsctl/cmd_doctor.go`, `../cmd/pocketcastsctl/help.go`
 
