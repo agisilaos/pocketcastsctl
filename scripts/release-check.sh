@@ -53,6 +53,9 @@ go test ./scripts -run 'TestReleasePreflightFailurePaths|TestCheckHelpDocsDriftS
 echo "[release-check] running docs check"
 ./scripts/docs-check.sh
 
+echo "[release-check] checking go module metadata"
+go mod tidy -diff
+
 echo "[release-check] checking format"
 if [[ -n "$(gofmt -l cmd internal scripts)" ]]; then
   die "gofmt reported formatting drift in cmd/, internal/, or scripts/"
