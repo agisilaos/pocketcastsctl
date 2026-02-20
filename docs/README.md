@@ -34,6 +34,8 @@
 
 - Targeted coverage command for lower-level packages:
   - `go test -cover ./internal/pocketcasts ./internal/browsercontrol ./internal/app`
+- Command-contract coverage examples:
+  - `go test ./cmd/pocketcastsctl -run 'TestRunQueueAPI(Add|Play|Pick)'`
 - HTTP/API behavior tests for Pocket Casts client live in: `../internal/pocketcasts/client_http_test.go`
 - Browser AppleScript execution/parsing tests with a fake `osascript` binary live in: `../internal/browsercontrol/controller_exec_test.go`
 - Script harness coverage command: `make test-scripts-cover`
