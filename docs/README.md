@@ -14,10 +14,13 @@
 ## CLI Command Layout
 
 - Entry and shared helpers: `../cmd/pocketcastsctl/main.go`
+- Config command handling: `../cmd/pocketcastsctl/cmd_config.go`
 - Setup/start flows: `../cmd/pocketcastsctl/cmd_setup.go`
 - Now dashboard flow: `../cmd/pocketcastsctl/cmd_now.go`
 - Web and HAR handlers: `../cmd/pocketcastsctl/cmd_web_har.go`
 - Completion command and shell scripts: `../cmd/pocketcastsctl/cmd_completion.go`
+- Shared utility helpers and types: `../cmd/pocketcastsctl/cmd_shared_helpers.go`
+- Web-player launch and interactive picker helpers: `../cmd/pocketcastsctl/cmd_picker_webplay.go`
 - Auth, queue, local, doctor, and help handlers: `../cmd/pocketcastsctl/cmd_auth.go`, `../cmd/pocketcastsctl/cmd_queue.go`, `../cmd/pocketcastsctl/cmd_local.go`, `../cmd/pocketcastsctl/cmd_doctor.go`, `../cmd/pocketcastsctl/help.go`
 
 ## Release
