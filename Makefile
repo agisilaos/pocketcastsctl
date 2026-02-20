@@ -1,4 +1,4 @@
-.PHONY: build test test-scripts vet fmt fmt-check check-help-docs docs-check release-preflight release-check release release-dry-run
+.PHONY: build test test-scripts test-scripts-cover vet fmt fmt-check check-help-docs docs-check release-preflight release-check release release-dry-run
 
 build:
 	go build -o pocketcastsctl ./cmd/pocketcastsctl
@@ -8,6 +8,9 @@ test:
 
 test-scripts:
 	go test ./scripts -run 'TestReleasePreflightFailurePaths|TestCheckHelpDocsDriftScript'
+
+test-scripts-cover:
+	go test -cover ./scripts
 
 vet:
 	go vet ./...

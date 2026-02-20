@@ -2,11 +2,12 @@ package scripts_test
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+
+	scriptspkg "pocketcastsctl/scripts"
 )
 
 func TestReleasePreflightFailurePaths(t *testing.T) {
@@ -141,10 +142,7 @@ func main() {
 }
 
 func runCmd(dir string, name string, args ...string) (string, error) {
-	cmd := exec.Command(name, args...)
-	cmd.Dir = dir
-	out, err := cmd.CombinedOutput()
-	return string(out), err
+	return scriptspkg.RunCommand(dir, name, args...)
 }
 
 func mustRun(t *testing.T, dir string, name string, args ...string) {

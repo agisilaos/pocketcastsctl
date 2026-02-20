@@ -30,6 +30,7 @@ For local iteration:
 make build   # builds ./pocketcastsctl
 make test    # runs unit tests
 make test-scripts  # runs script failure-path tests
+make test-scripts-cover  # runs scripts package coverage
 make check-help-docs
 make release-check VERSION=vX.Y.Z
 make release-dry-run VERSION=vX.Y.Z
