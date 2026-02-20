@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -21,12 +20,8 @@ func runQueueAPILS(args []string, client *pocketcasts.Client, ctx context.Contex
 	plain := fs.Bool("plain", false, "plain tab-separated output (index, title, uuid, published)")
 	limit := fs.Int("limit", 0, "limit output items (0 = no limit)")
 	search := fs.String("search", "", "filter by substring in title")
-	if err := fs.Parse(args); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			return 0
-		}
-		fmt.Fprintf(os.Stderr, "failed to parse flags: %v\n", err)
-		return 2
+	if ok, code := parseFlagsOrExit(fs, args); !ok {
+		return code
 	}
 	outputModes := 0
 	if *raw {

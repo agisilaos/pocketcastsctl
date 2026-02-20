@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -23,12 +22,8 @@ func runQueueAPIAdd(args []string, client *pocketcasts.Client, ctx context.Conte
 	published := fs.String("published", "", "episode published RFC3339 timestamp")
 	urlStr := fs.String("url", "", "episode audio URL")
 	raw := fs.Bool("raw", false, "output raw JSON response")
-	if err := fs.Parse(args); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			return 0
-		}
-		fmt.Fprintf(os.Stderr, "failed to parse flags: %v\n", err)
-		return 2
+	if ok, code := parseFlagsOrExit(fs, args); !ok {
+		return code
 	}
 
 	var ep pocketcasts.UpNextEpisode
@@ -67,16 +62,11 @@ func runQueueAPIRemove(args []string, client *pocketcasts.Client, ctx context.Co
 	dryRun := fs.Bool("dry-run", false, "print the UUIDs that would be removed and exit")
 	force := fs.Bool("force", false, "skip interactive confirmation")
 	noInput := fs.Bool("no-input", false, "disable prompts (requires --force)")
-	if err := fs.Parse(args); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			return 0
-		}
-		fmt.Fprintf(os.Stderr, "failed to parse flags: %v\n", err)
-		return 2
+	if ok, code := parseFlagsOrExit(fs, args); !ok {
+		return code
 	}
-	if fs.NArg() == 0 {
-		fmt.Fprintln(os.Stderr, "usage: pocketcastsctl queue api rm <episode-uuid> [more-uuids...]")
-		return 2
+	if ok, code := requireMinPositionalArgsOrExit(fs, 1, "usage: pocketcastsctl queue api rm <episode-uuid> [more-uuids...]"); !ok {
+		return code
 	}
 	uuids := make([]string, 0, fs.NArg())
 	for i := 0; i < fs.NArg(); i++ {

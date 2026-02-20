@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -42,12 +41,8 @@ func runQueue(args []string, cfg config.Config) int {
 	browser := fs.String("browser", cfg.Browser, `browser name`)
 	browserApp := fs.String("browser-app", cfg.BrowserApp, `macOS application name (optional)`)
 	urlContains := fs.String("url-contains", cfg.URLContains, `substring to match the Pocket Casts tab URL`)
-	if err := fs.Parse(args[1:]); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			return 0
-		}
-		fmt.Fprintf(os.Stderr, "failed to parse flags: %v\n", err)
-		return 2
+	if ok, code := parseFlagsOrExit(fs, args[1:]); !ok {
+		return code
 	}
 
 	controller, err := browsercontrol.New(browsercontrol.Options{

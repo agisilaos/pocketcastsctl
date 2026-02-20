@@ -31,3 +31,11 @@ func requireExactPositionalArgsOrExit(fs *flag.FlagSet, n int, usage string) (bo
 	}
 	return true, 0
 }
+
+func requireMinPositionalArgsOrExit(fs *flag.FlagSet, min int, usage string) (bool, int) {
+	if fs.NArg() < min {
+		errln(usage)
+		return false, 2
+	}
+	return true, 0
+}

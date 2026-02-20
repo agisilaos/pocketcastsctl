@@ -40,4 +40,9 @@ func TestRequirePositionalArgsHelpers(t *testing.T) {
 	if !ok || code != 0 {
 		t.Fatalf("requireExactPositionalArgsOrExit ok=%v code=%d, want true/0", ok, code)
 	}
+
+	ok, code = requireMinPositionalArgsOrExit(fs, 2, "usage")
+	if ok || code != 2 {
+		t.Fatalf("requireMinPositionalArgsOrExit ok=%v code=%d, want false/2", ok, code)
+	}
 }

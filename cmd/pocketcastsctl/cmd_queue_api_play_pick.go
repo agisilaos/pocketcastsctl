@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -22,16 +21,11 @@ func runQueueAPIPlay(args []string, cfg config.Config, client *pocketcasts.Clien
 	webBase := fs.String("web-base", "https://play.pocketcasts.com", "web player base URL")
 	search := fs.String("search", "", "filter by substring in title before choosing")
 	dryRun := fs.Bool("dry-run", false, "resolve target episode and print planned action without starting playback")
-	if err := fs.Parse(args); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			return 0
-		}
-		fmt.Fprintf(os.Stderr, "failed to parse flags: %v\n", err)
-		return 2
+	if ok, code := parseFlagsOrExit(fs, args); !ok {
+		return code
 	}
-	if fs.NArg() != 1 {
-		fmt.Fprintln(os.Stderr, "usage: pocketcastsctl queue api play <index|uuid> [--search q] [--dry-run] [--browser chrome|safari] [--url-contains needle]")
-		return 2
+	if ok, code := requireExactPositionalArgsOrExit(fs, 1, "usage: pocketcastsctl queue api play <index|uuid> [--search q] [--dry-run] [--browser chrome|safari] [--url-contains needle]"); !ok {
+		return code
 	}
 
 	body, err := fetchUpNextWithRetry(ctx, client, "0")
@@ -83,16 +77,11 @@ func runQueueAPIPick(args []string, cfg config.Config, client *pocketcasts.Clien
 	unplayed := fs.Bool("unplayed", false, "show only episodes with no saved progress")
 	inProgress := fs.Bool("in-progress", false, "show only episodes with saved progress")
 	noPlay := fs.Bool("no-play", false, "only print selected UUID (do not start playback)")
-	if err := fs.Parse(args); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			return 0
-		}
-		fmt.Fprintf(os.Stderr, "failed to parse flags: %v\n", err)
-		return 2
+	if ok, code := parseFlagsOrExit(fs, args); !ok {
+		return code
 	}
-	if fs.NArg() != 0 {
-		fmt.Fprintln(os.Stderr, "usage: pocketcastsctl queue api pick [--search q] [--limit N] [--recent] [--unplayed|--in-progress] [--no-play] [--browser chrome|safari] [--url-contains needle]")
-		return 2
+	if ok, code := requireNoPositionalArgsOrExit(fs, "usage: pocketcastsctl queue api pick [--search q] [--limit N] [--recent] [--unplayed|--in-progress] [--no-play] [--browser chrome|safari] [--url-contains needle]"); !ok {
+		return code
 	}
 	if *unplayed && *inProgress {
 		fmt.Fprintln(os.Stderr, "queue api pick: use only one of --unplayed or --in-progress")
