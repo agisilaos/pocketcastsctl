@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 
 	"pocketcastsctl/internal/browsercontrol"
@@ -98,5 +99,13 @@ func TestCollectAuthStatusNoVerify(t *testing.T) {
 	}
 	if !status.TokenExpiryKnown {
 		t.Fatalf("TokenExpiryKnown = false, want true")
+	}
+}
+
+func TestTokenCandidateScorePrefersKeyContains(t *testing.T) {
+	hit := tokenCandidateScore(browsercontrol.TokenCandidate{SourceKey: "access_token", Token: strings.Repeat("x", 48)}, "access")
+	miss := tokenCandidateScore(browsercontrol.TokenCandidate{SourceKey: "session_token", Token: strings.Repeat("x", 48)}, "access")
+	if hit <= miss {
+		t.Fatalf("expected keyContains hit score (%d) to be greater than miss (%d)", hit, miss)
 	}
 }
