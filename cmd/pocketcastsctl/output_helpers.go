@@ -30,3 +30,20 @@ func printJSON(v any) error {
 	outln(string(b))
 	return nil
 }
+
+func printRawOrPrettyJSON(body []byte, raw bool) {
+	if raw {
+		outln(string(body))
+		return
+	}
+	if len(body) == 0 {
+		outln("ok")
+		return
+	}
+	var v any
+	if err := json.Unmarshal(body, &v); err != nil {
+		outln(string(body))
+		return
+	}
+	_ = printJSON(v)
+}

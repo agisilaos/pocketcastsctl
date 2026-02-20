@@ -56,21 +56,7 @@ func runQueueAPIAdd(args []string, client *pocketcasts.Client, ctx context.Conte
 		fmt.Fprintf(os.Stderr, "queue api add failed: %v\n", err)
 		return 1
 	}
-	if *raw {
-		fmt.Println(string(body))
-		return 0
-	}
-	if len(body) == 0 {
-		fmt.Println("ok")
-		return 0
-	}
-	var v any
-	if err := json.Unmarshal(body, &v); err != nil {
-		fmt.Println(string(body))
-		return 0
-	}
-	b, _ := json.MarshalIndent(v, "", "  ")
-	fmt.Println(string(b))
+	printRawOrPrettyJSON(body, *raw)
 	return 0
 }
 
@@ -129,21 +115,7 @@ func runQueueAPIRemove(args []string, client *pocketcasts.Client, ctx context.Co
 		fmt.Fprintf(os.Stderr, "queue api rm failed: %v\n", err)
 		return 1
 	}
-	if *raw {
-		fmt.Println(string(body))
-		return 0
-	}
-	if len(body) == 0 {
-		fmt.Println("ok")
-		return 0
-	}
-	var v any
-	if err := json.Unmarshal(body, &v); err != nil {
-		fmt.Println(string(body))
-		return 0
-	}
-	b, _ := json.MarshalIndent(v, "", "  ")
-	fmt.Println(string(b))
+	printRawOrPrettyJSON(body, *raw)
 	return 0
 }
 
