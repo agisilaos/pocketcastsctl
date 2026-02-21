@@ -77,6 +77,7 @@ Doctor modes:
 ./bin/pocketcastsctl doctor --quick
 ./bin/pocketcastsctl doctor --full
 ./bin/pocketcastsctl doctor --fix      # suggestions only; no changes made
+./bin/pocketcastsctl doctor --fix --apply   # apply supported in-tool fixes
 ./bin/pocketcastsctl doctor --json
 ```
 
@@ -206,6 +207,9 @@ This path calls Pocket Casts’ private API (currently `up_next/list`, `up_next/
 ./bin/pocketcastsctl queue api ls
 ./bin/pocketcastsctl queue api play 1
 ./bin/pocketcastsctl queue api pick --in-progress --recent
+./bin/pocketcastsctl queue api bump 5
+./bin/pocketcastsctl queue api move 5 2
+./bin/pocketcastsctl queue api dedupe --dry-run
 ```
 
 `auth refresh` is a guided flow: open login page, sync token, then verify.

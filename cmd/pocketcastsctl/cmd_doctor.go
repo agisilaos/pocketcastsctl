@@ -28,6 +28,7 @@ func runDoctor(args []string, cfg config.Config) int {
 	quick := fs.Bool("quick", false, "skip API validation checks")
 	full := fs.Bool("full", false, "run full checks including API validation")
 	fix := fs.Bool("fix", false, "print suggested fix commands (no changes are made)")
+	apply := fs.Bool("apply", false, "apply supported doctor fixes (use with --fix)")
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0
@@ -39,8 +40,12 @@ func runDoctor(args []string, cfg config.Config) int {
 		fmt.Fprintln(os.Stderr, "doctor: use only one of --quick or --full")
 		return 2
 	}
+	if *apply && !*fix {
+		fmt.Fprintln(os.Stderr, "doctor: --apply requires --fix")
+		return 2
+	}
 	if fs.NArg() != 0 {
-		fmt.Fprintln(os.Stderr, "usage: pocketcastsctl doctor [--json|--plain] [--quick|--full] [--fix]")
+		fmt.Fprintln(os.Stderr, "usage: pocketcastsctl doctor [--json|--plain] [--quick|--full] [--fix [--apply]]")
 		return 2
 	}
 	includeAPIValidation := true
@@ -63,6 +68,11 @@ func runDoctor(args []string, cfg config.Config) int {
 	} else if warnCount > 0 {
 		overall = "warn"
 	}
+	fixes := doctorSuggestedFixes(checks)
+	appliedFixes := []doctorFixResult{}
+	if *fix && *apply {
+		appliedFixes = applyDoctorFixes(checks)
+	}
 
 	if *jsonOut {
 		out := map[string]any{
@@ -74,13 +84,16 @@ func runDoctor(args []string, cfg config.Config) int {
 				"fail": failCount,
 			},
 			"checks":          checks,
-			"suggested_fixes": doctorSuggestedFixes(checks),
+			"suggested_fixes": fixes,
+		}
+		if len(appliedFixes) > 0 {
+			out["applied_fixes"] = appliedFixes
 		}
 		if err := printJSON(out); err != nil {
 			errf("failed to render doctor JSON: %v\n", err)
 			return 1
 		}
-		if failCount > 0 {
+		if failCount > 0 || hasFailedDoctorFix(appliedFixes) {
 			return 1
 		}
 		return 0
@@ -89,7 +102,12 @@ func runDoctor(args []string, cfg config.Config) int {
 		for _, c := range checks {
 			fmt.Printf("%s\t%s\t%s\t%s\n", c.Status, c.ID, c.Code, c.Message)
 		}
-		if failCount > 0 {
+		if len(appliedFixes) > 0 {
+			for _, fx := range appliedFixes {
+				fmt.Printf("%s\t%s\t%s\t%s\n", fx.Status, "doctor_fix", fx.Action, fx.Message)
+			}
+		}
+		if failCount > 0 || hasFailedDoctorFix(appliedFixes) {
 			return 1
 		}
 		return 0
@@ -109,7 +127,6 @@ func runDoctor(args []string, cfg config.Config) int {
 		}
 	}
 	if *fix {
-		fixes := doctorSuggestedFixes(checks)
 		if len(fixes) > 0 {
 			fmt.Println("suggested fixes (dry guidance):")
 			for _, cmd := range fixes {
@@ -118,11 +135,108 @@ func runDoctor(args []string, cfg config.Config) int {
 		} else {
 			fmt.Println("suggested fixes: none")
 		}
+		if *apply {
+			if len(appliedFixes) == 0 {
+				fmt.Println("applied fixes: none")
+			} else {
+				fmt.Println("applied fixes:")
+				for _, fx := range appliedFixes {
+					fmt.Printf("  [%s] %s - %s\n", strings.ToUpper(fx.Status), fx.Command, fx.Message)
+				}
+			}
+		}
 	}
-	if failCount > 0 {
+	if failCount > 0 || hasFailedDoctorFix(appliedFixes) {
 		return 1
 	}
 	return 0
+}
+
+type doctorFixResult struct {
+	Action  string `json:"action"`
+	Command string `json:"command"`
+	Status  string `json:"status"`
+	Message string `json:"message"`
+}
+
+func applyDoctorFixes(checks []doctorCheck) []doctorFixResult {
+	type fixAction struct {
+		Action  string
+		Command string
+	}
+	actions := make([]fixAction, 0, 2)
+	seen := map[string]bool{}
+	add := func(action, command string) {
+		if seen[action] {
+			return
+		}
+		seen[action] = true
+		actions = append(actions, fixAction{Action: action, Command: command})
+	}
+
+	for _, c := range checks {
+		if c.Status == "ok" {
+			continue
+		}
+		switch c.ID {
+		case "config_file":
+			add("config_init", "pocketcastsctl config init")
+		case "auth_header", "auth_validation":
+			add("auth_refresh_sync", "pocketcastsctl auth refresh --sync-only --no-input")
+		}
+	}
+
+	results := make([]doctorFixResult, 0, len(actions))
+	for _, action := range actions {
+		res := doctorFixResult{
+			Action:  action.Action,
+			Command: action.Command,
+			Status:  "ok",
+			Message: "applied",
+		}
+		switch action.Action {
+		case "config_init":
+			if _, err := os.Stat(config.Path()); err == nil {
+				res.Message = "config already exists; skipped"
+			} else if !errors.Is(err, os.ErrNotExist) {
+				res.Status = "fail"
+				res.Message = fmt.Sprintf("stat config: %v", err)
+			} else if err := config.Save(config.Default()); err != nil {
+				res.Status = "fail"
+				res.Message = fmt.Sprintf("write config: %v", err)
+			} else {
+				res.Message = fmt.Sprintf("wrote default config to %s", redactUserPath(config.Path()))
+			}
+		case "auth_refresh_sync":
+			cfgNow, err := config.Load()
+			if err != nil {
+				res.Status = "fail"
+				res.Message = fmt.Sprintf("load config: %v", err)
+				break
+			}
+			if code := runAuthRefresh([]string{"--sync-only", "--no-input"}, cfgNow); code != 0 {
+				res.Status = "fail"
+				res.Message = fmt.Sprintf("auth refresh exited with code %d", code)
+			} else {
+				res.Message = "synced and verified auth from current browser session"
+			}
+		default:
+			res.Status = "fail"
+			res.Message = "unknown fix action"
+		}
+		results = append(results, res)
+	}
+
+	return results
+}
+
+func hasFailedDoctorFix(results []doctorFixResult) bool {
+	for _, r := range results {
+		if strings.TrimSpace(r.Status) == "fail" {
+			return true
+		}
+	}
+	return false
 }
 
 func collectDoctorChecks(cfg config.Config, includeAPIValidation bool) []doctorCheck {

@@ -128,6 +128,12 @@ func runQueueAPI(args []string, cfg config.Config) int {
 		return runQueueAPIPlay(args[1:], cfg, client, ctx)
 	case "pick":
 		return runQueueAPIPick(args[1:], cfg, client, ctx)
+	case "bump":
+		return runQueueAPIBump(args[1:], client, ctx)
+	case "move":
+		return runQueueAPIMove(args[1:], client, ctx)
+	case "dedupe":
+		return runQueueAPIDedupe(args[1:], client, ctx)
 	default:
 		fmt.Fprintf(os.Stderr, "unknown queue api subcommand: %s\n", args[0])
 		return 2

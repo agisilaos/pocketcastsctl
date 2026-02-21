@@ -44,3 +44,33 @@ func TestRunQueueAPIPickRejectsConflictingFilters(t *testing.T) {
 		t.Fatalf("stderr missing conflicting filter message: %q", stderr)
 	}
 }
+
+func TestRunQueueAPIBumpRequiresSelector(t *testing.T) {
+	code, _, stderr := runForTest(t, []string{"queue", "api", "bump"}, "")
+	if code != 2 {
+		t.Fatalf("exit code = %d, want 2", code)
+	}
+	if !strings.Contains(stderr, "usage: pocketcastsctl queue api bump <index|uuid>") {
+		t.Fatalf("stderr missing usage for queue api bump: %q", stderr)
+	}
+}
+
+func TestRunQueueAPIMoveRequiresFromAndTo(t *testing.T) {
+	code, _, stderr := runForTest(t, []string{"queue", "api", "move", "1"}, "")
+	if code != 2 {
+		t.Fatalf("exit code = %d, want 2", code)
+	}
+	if !strings.Contains(stderr, "usage: pocketcastsctl queue api move <index|uuid> <to-index>") {
+		t.Fatalf("stderr missing usage for queue api move: %q", stderr)
+	}
+}
+
+func TestRunQueueAPIDedupeRejectsPositionalArgs(t *testing.T) {
+	code, _, stderr := runForTest(t, []string{"queue", "api", "dedupe", "extra"}, "")
+	if code != 2 {
+		t.Fatalf("exit code = %d, want 2", code)
+	}
+	if !strings.Contains(stderr, "usage: pocketcastsctl queue api dedupe") {
+		t.Fatalf("stderr missing usage for queue api dedupe: %q", stderr)
+	}
+}

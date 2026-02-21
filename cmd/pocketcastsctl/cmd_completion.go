@@ -63,9 +63,9 @@ _pocketcastsctl_completions() {
       ;;
     doctor)
       if [[ $COMP_CWORD -eq 2 ]]; then
-        COMPREPLY=( $(compgen -W "explain --json --plain --quick --full --fix" -- "$cur") )
+        COMPREPLY=( $(compgen -W "explain --json --plain --quick --full --fix --apply" -- "$cur") )
       else
-        COMPREPLY=( $(compgen -W "--json --plain --quick --full --fix doctor.auth.invalid doctor.auth.unverified doctor.auth.header_missing" -- "$cur") )
+        COMPREPLY=( $(compgen -W "--json --plain --quick --full --fix --apply doctor.auth.invalid doctor.auth.unverified doctor.auth.header_missing" -- "$cur") )
       fi
       return 0
       ;;
@@ -108,7 +108,7 @@ _pocketcastsctl_completions() {
       elif [[ "$sub" == "api" ]]; then
         local api_cmd="${COMP_WORDS[3]}"
         if [[ $COMP_CWORD -eq 3 ]]; then
-          COMPREPLY=( $(compgen -W "ls add rm play pick" -- "$cur") )
+          COMPREPLY=( $(compgen -W "ls add rm play pick bump move dedupe" -- "$cur") )
         else
           case "$api_cmd" in
             ls) COMPREPLY=( $(compgen -W "--json --raw --plain --search --limit" -- "$cur") ) ;;
@@ -116,6 +116,9 @@ _pocketcastsctl_completions() {
             rm) COMPREPLY=( $(compgen -W "--dry-run --force --no-input --raw" -- "$cur") ) ;;
             play) COMPREPLY=( $(compgen -W "--search --dry-run --browser --browser-app --url-contains --web-base" -- "$cur") ) ;;
             pick) COMPREPLY=( $(compgen -W "--search --limit --recent --unplayed --in-progress --no-play --browser --browser-app --url-contains --web-base" -- "$cur") ) ;;
+            bump) COMPREPLY=( $(compgen -W "--dry-run --json --raw" -- "$cur") ) ;;
+            move) COMPREPLY=( $(compgen -W "--dry-run --json --raw" -- "$cur") ) ;;
+            dedupe) COMPREPLY=( $(compgen -W "--dry-run --json --raw" -- "$cur") ) ;;
           esac
         fi
       fi
@@ -183,9 +186,9 @@ _pocketcastsctl_completions() {
       ;;
     doctor)
       if (( CURRENT == 3 )); then
-        _values "subcommands/flags" "explain" "--json" "--plain" "--quick" "--full" "--fix"
+        _values "subcommands/flags" "explain" "--json" "--plain" "--quick" "--full" "--fix" "--apply"
       else
-        _values "flags/codes" "--json" "--plain" "--quick" "--full" "--fix" "doctor.auth.invalid" "doctor.auth.unverified" "doctor.auth.header_missing"
+        _values "flags/codes" "--json" "--plain" "--quick" "--full" "--fix" "--apply" "doctor.auth.invalid" "doctor.auth.unverified" "doctor.auth.header_missing"
       fi
       ;;
     auth)
@@ -223,7 +226,7 @@ _pocketcastsctl_completions() {
       elif [[ "$sub" == "api" ]]; then
         local api_cmd="${words[4]}"
         if (( CURRENT == 4 )); then
-          _values "queue api subcommands" "ls" "add" "rm" "play" "pick"
+          _values "queue api subcommands" "ls" "add" "rm" "play" "pick" "bump" "move" "dedupe"
         else
           case "$api_cmd" in
             ls) _values "flags" "--json" "--raw" "--plain" "--search" "--limit" ;;
@@ -231,6 +234,7 @@ _pocketcastsctl_completions() {
             rm) _values "flags" "--dry-run" "--force" "--no-input" "--raw" ;;
             play) _values "flags" "--search" "--dry-run" "--browser" "--browser-app" "--url-contains" "--web-base" ;;
             pick) _values "flags" "--search" "--limit" "--recent" "--unplayed" "--in-progress" "--no-play" "--browser" "--browser-app" "--url-contains" "--web-base" ;;
+            bump|move|dedupe) _values "flags" "--dry-run" "--json" "--raw" ;;
           esac
         fi
       fi
@@ -266,15 +270,19 @@ complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from now' -l json -l pl
 complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from setup' -a 'run check auth verify'
 complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from setup' -l json -l plain -l no-input -l browser -l browser-app -l url -l url-contains -l key-contains -l candidate-passes
 complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from start' -l json -l no-input -l browser -l browser-app -l url -l url-contains -l key-contains -l candidate-passes
-complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from doctor' -a 'explain' -l json -l plain -l quick -l full -l fix
+complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from doctor' -a 'explain' -l json -l plain -l quick -l full -l fix -l apply
 complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from config' -a 'init path show'
 complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from auth' -a 'login refresh sync tabs status verify clear'
 complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from web' -a 'play pause toggle next prev status'
 complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from queue' -a 'ls api'
+complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from queue; and __fish_seen_subcommand_from api' -a 'ls add rm play pick bump move dedupe'
 complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from local' -a 'pick play pause resume stop status'
 complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from har' -a 'summarize graphql redact'
 
 complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from queue; and __fish_seen_subcommand_from api; and __fish_seen_subcommand_from play' -l dry-run -l search -l browser -l browser-app -l url-contains -l web-base
+complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from queue; and __fish_seen_subcommand_from api; and __fish_seen_subcommand_from bump' -l dry-run -l json -l raw
+complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from queue; and __fish_seen_subcommand_from api; and __fish_seen_subcommand_from move' -l dry-run -l json -l raw
+complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from queue; and __fish_seen_subcommand_from api; and __fish_seen_subcommand_from dedupe' -l dry-run -l json -l raw
 complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from local; and __fish_seen_subcommand_from play' -l dry-run -l from-start
 complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from queue; and __fish_seen_subcommand_from api; and __fish_seen_subcommand_from rm' -l dry-run -l force -l no-input
 complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from queue; and __fish_seen_subcommand_from ls' -l json -l plain -l search -l limit -l browser -l browser-app -l url-contains
