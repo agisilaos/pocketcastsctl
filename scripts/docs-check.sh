@@ -19,7 +19,7 @@ echo "[docs-check] validating shared docs contract"
 python3 ./scripts/docs-contract-check.py
 
 echo "[docs-check] validating help/docs snapshots"
-./scripts/check-help-docs-drift.sh
+./scripts/check-help.sh
 
 echo "[docs-check] validating release command references"
 grep -Fq 'make release-check VERSION=vX.Y.Z' README.md || die "README missing make release-check usage"

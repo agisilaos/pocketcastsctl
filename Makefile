@@ -1,4 +1,4 @@
-.PHONY: build test test-scripts test-scripts-cover vet fmt fmt-check check-help-docs docs-check release-preflight release-check release release-dry-run
+.PHONY: build test test-scripts test-scripts-cover vet fmt fmt-check check-help check-help-docs docs-check release-preflight release-check release release-dry-run
 
 build:
 	go build -o pocketcastsctl ./cmd/pocketcastsctl
@@ -21,8 +21,11 @@ fmt:
 fmt-check:
 	@test -z "$$(gofmt -l cmd internal scripts)"
 
+check-help:
+	./scripts/check-help.sh
+
 check-help-docs:
-	./scripts/check-help-docs-drift.sh
+	./scripts/check-help.sh
 
 docs-check:
 	./scripts/docs-check.sh
