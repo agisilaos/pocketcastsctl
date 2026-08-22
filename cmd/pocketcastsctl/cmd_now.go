@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"context"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -54,8 +53,7 @@ func runNow(args []string, cfg config.Config) int {
 	render := func(s app.NowSnapshot) {
 		switch {
 		case *jsonOut:
-			b, _ := json.MarshalIndent(s, "", "  ")
-			fmt.Println(string(b))
+			_ = printJSON(s)
 		case *plain:
 			printNowPlain(s)
 		default:
@@ -120,6 +118,7 @@ func printNowHuman(s app.NowSnapshot) {
 	fmt.Println(strings.Repeat("=", 72))
 	fmt.Printf("Updated: %s\n", s.GeneratedAt.Local().Format("2006-01-02 15:04:05"))
 	fmt.Printf("Web    : %s%s\n", strings.ToUpper(s.Web.Status), formatInlineErr(s.Web.Error))
+	printPlaybackDetailsHuman(s.Web.PlaybackDetails)
 	local := strings.ToUpper(s.Local.Status)
 	if strings.TrimSpace(s.Local.Title) != "" {
 		local += " - " + strings.TrimSpace(s.Local.Title)
@@ -158,6 +157,7 @@ func printNowPlain(s app.NowSnapshot) {
 	if strings.TrimSpace(s.Web.Error) != "" {
 		fmt.Printf("web_error\t%s\n", s.Web.Error)
 	}
+	printPlaybackDetailsPlain("web_", s.Web.PlaybackDetails)
 	fmt.Printf("local_status\t%s\n", s.Local.Status)
 	if strings.TrimSpace(s.Local.Title) != "" {
 		fmt.Printf("local_title\t%s\n", s.Local.Title)

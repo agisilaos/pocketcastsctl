@@ -37,3 +37,18 @@ func TestCompletionScriptsIncludeNewFlags(t *testing.T) {
 		t.Fatalf("fish completion missing scoped queue api play rule")
 	}
 }
+
+func TestCompletionScriptsIncludeWebDetailsFlag(t *testing.T) {
+	scripts := completionScripts()
+	for shell, want := range map[string]string{
+		"bash": `elif [[ "$sub" == "status" ]]; then
+        COMPREPLY=( $(compgen -W "--browser --browser-app --url-contains --details --json --plain"`,
+		"zsh": `elif [[ "$sub" == "status" ]]; then
+        _values "flags" "--browser" "--browser-app" "--url-contains" "--details" "--json" "--plain"`,
+		"fish": "__fish_seen_subcommand_from web; and __fish_seen_subcommand_from status' -l details",
+	} {
+		if !strings.Contains(scripts[shell], want) {
+			t.Fatalf("%s completion does not scope --details to web status", shell)
+		}
+	}
+}

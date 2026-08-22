@@ -97,7 +97,7 @@ Output contract table:
 
 | Command | Human | `--plain` | `--json` |
 | --- | --- | --- | --- |
-| `now` | dashboard | key/value lines | full snapshot object |
+| `now` | dashboard with Web Player playback details | key/value lines | full snapshot object |
 | `setup` | guided onboarding | key/value step report | structured step report |
 | `doctor` | checklist | tab-separated checks | structured checks + counts |
 | `web tabs` | URL list | URL list | JSON array of URLs |
@@ -105,7 +105,7 @@ Output contract table:
 | `auth import-browser` | explicit session import | status fields | structured result/error |
 | `auth status` | checklist | key/value lines | status object |
 | `auth verify` | checklist | key/value lines | verification object |
-| `web status` | single state line | single state line | `{ \"state\": ... }` |
+| `web status` | single state line; `--details` adds snapshot rows | single state line; `--details` adds key/value rows | playback snapshot object |
 | `local status` | human status line | key/value lines | `{ \"status\": ... }` |
 
 ### Playback (Web Player tab)
@@ -116,10 +116,13 @@ Open and sign into the Web Player, then control it independently from API authen
 ./bin/pocketcastsctl web login --browser dia
 ./bin/pocketcastsctl web tabs --browser chrome
 ./bin/pocketcastsctl web status
+./bin/pocketcastsctl web status --details
 ./bin/pocketcastsctl web status --json
 ./bin/pocketcastsctl web toggle
 ./bin/pocketcastsctl web next
 ```
+
+`web status --json` adds available `episode_title`, `podcast_title`, `position_seconds`, `duration_seconds`, and `progress_percent` fields alongside the existing `state`. Missing metadata is omitted from JSON and shown as `unknown` in detailed human/plain output; a snapshot with state only remains successful.
 
 ### Now-playing cockpit
 
@@ -132,7 +135,7 @@ Use `now` as the main dashboard command:
 ./bin/pocketcastsctl now --json
 ```
 
-`now` merges web status, local status, queue health, auth state, and next-action suggestions in one view.
+`now` merges a Web Player playback snapshot, local status, queue health, auth state, and next-action suggestions in one view. Snapshot sources are collected independently so a slow auth or queue check does not starve Web Player playback details. Watch mode reports positions observed from the player at each interval; it does not estimate progress between observations.
 
 Sample output:
 
@@ -141,6 +144,9 @@ POCKETCASTS NOW
 ========================================================================
 Updated: 2026-02-13 22:39:30
 Web    : PAUSED
+Episode : Ep. 5 – A Deep Module
+Podcast : Software Design Notes
+Progress: 18:42 / 52:10 (35.9%)
 Local  : STOPPED
 Queue  : READY (4 items, 1 in progress) | next: Ep. 6 – On Being God
 Auth   : CONFIGURED
@@ -190,6 +196,7 @@ Flags:
 - `--url-contains <substring>` (default: `pocketcasts.com`)
 
 macOS may prompt you to allow `osascript` to control your browser (Automation permission).
+Rich Web Player playback details also require the browser to allow JavaScript from Apple Events. Chrome and Safari are the validation targets; other Chromium-compatible applications retain the state-only fallback when metadata is unavailable.
 
 ### Queue (best-effort, from Web UI)
 
@@ -365,4 +372,4 @@ Run the release on macOS with a clean git tree.
 
 ## Roadmap
 
-See `ROADMAP.md` for the current milestone plan (`v0.1.5`) and acceptance criteria.
+See `ROADMAP.md` for the `v0.1.6` delivery baseline and Rich Now Playing acceptance criteria.

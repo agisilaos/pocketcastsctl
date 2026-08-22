@@ -20,6 +20,7 @@ Common tasks:
 
   Control playback:
   pocketcastsctl web status
+  pocketcastsctl web status --details
   pocketcastsctl web toggle
   pocketcastsctl web next
 

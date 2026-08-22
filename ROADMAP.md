@@ -1,53 +1,45 @@
 # Roadmap
 
-This roadmap now focuses on post-`v0.1.4` work toward a stable `v0.1.5` release.
+The immediate goal is to restore a green delivery runway, ship the accumulated post-`v0.1.5` work as `v0.1.6`, and then deepen the terminal playback experience with Rich Now Playing.
 
-## Recently completed (through v0.1.4)
+## v0.1.6 Delivery Baseline
 
-- CLI contract hardening (help topics, aliases, destructive safety checks).
-- Output contract consistency and machine-friendly modes (`--json`, `--plain`).
-- Auth diagnostics (`auth status`, `auth verify`, guided refresh flow).
-- Reliability pass for browser/API retries and bounded timeouts.
-- Release confidence checks:
-  - Help/docs drift checks in CI.
-  - Release preflight checks integrated into automation.
+### Scope
 
-## v0.1.5 Milestone
+- Ship applied doctor fixes and queue reorder/cleanup commands already on `main`.
+- Keep CLI help, docs, completion, and structured-output contracts synchronized.
+- Run macOS CI with a Go toolchain compatible with current GitHub runners.
+- Exercise release checks in CI without weakening the stricter checks used for a real versioned release.
+- Keep every release shell script portable on a stock macOS runner.
 
-### 1. Remaining test coverage gaps
-- Scope:
-  - Add dedicated tests for `internal/authutil`.
-  - Strengthen negative/error-path coverage for release and helper scripts.
-- Done when:
-  - Every internal package has at least one package-local test file.
-  - Auth/token parsing and normalization edge cases are covered by unit tests.
+### Done when
 
-### 2. CI and release hardening follow-up
-- Scope:
-  - Add one non-interactive CLI smoke flow in CI.
-  - Add script-level checks for failure scenarios (invalid version, tag exists, changelog shape issues).
-- Done when:
-  - CI catches wiring regressions without relying only on unit tests.
-  - Release scripts fail early with deterministic diagnostics for common operator mistakes.
+- CI and release-check workflows are green on the current macOS runner.
+- `make release-check VERSION=v0.1.6` passes from a clean tree.
+- `CHANGELOG.md`, generated help, and release notes agree on `v0.1.6`.
+- The `v0.1.6` tag and release artifacts are published from `main`.
 
-### 3. Refactor for maintainability
-- Scope:
-  - Break down the large `cmd/pocketcastsctl/main.go` command dispatch into smaller command handlers.
-  - Centralize repeated output formatting and error mapping logic.
-- Done when:
-  - Main command entrypoint is easier to navigate and extend.
-  - New command additions require minimal copy/paste.
+## Next: Rich Now Playing
 
-### 4. UX and docs polish
-- Scope:
-  - Keep README examples aligned with current command surfaces and help text.
-  - Improve task-oriented guidance for auth recovery and playback troubleshooting.
-- Done when:
-  - README and CLI help remain in sync.
-  - Common failure recovery paths are documented with one-command fixes.
+### Scope
+
+- Introduce a Web Player playback snapshot containing state plus available episode, podcast, position, duration, and progress details.
+- Enrich `web status --json` and every `now` output mode additively.
+- Add `web status --details` for rich human and plain output while preserving the existing one-token default.
+- Keep partial metadata successful and preserve state-only behavior as the fallback.
+- Validate metadata extraction in Chrome and Safari before locking browser-specific selectors.
+- Collect independent `now` sources concurrently so slow auth or queue checks cannot starve Web Player details.
+
+### Done when
+
+- Existing human, plain, and JSON consumers continue to work without changes.
+- Chrome and Safari expose a trustworthy snapshot across playing, paused, loading, transition, and no-episode states.
+- Unsupported or incomplete browser metadata degrades to explicit unknown/omitted details without command failure.
+- `now --watch` shows observed progress without overlapping refresh cycles.
+- Focused contract tests, full unit tests, vet, formatting, docs, and help snapshot checks pass.
 
 ## Working style
 
 - Land small, reviewable commits on `main`.
 - Run targeted tests first, then `go test ./...`.
-- Ship only behavior we can verify locally or in CI.
+- Ship only behavior verified locally or in CI.

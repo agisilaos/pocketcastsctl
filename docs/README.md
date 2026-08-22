@@ -18,6 +18,7 @@
 - Setup/start flows: `../cmd/pocketcastsctl/cmd_setup.go`
 - Now dashboard flow: `../cmd/pocketcastsctl/cmd_now.go`
 - Web and HAR handlers: `../cmd/pocketcastsctl/cmd_web_har.go`
+- Playback snapshot output helpers: `../cmd/pocketcastsctl/playback_output.go`
 - Completion command and shell scripts: `../cmd/pocketcastsctl/cmd_completion.go`
 - Shared utility helpers and types: `../cmd/pocketcastsctl/cmd_shared_helpers.go`
 - Web-player launch and interactive picker helpers: `../cmd/pocketcastsctl/cmd_picker_webplay.go`
@@ -43,3 +44,7 @@
 - App-layer queue/auth status tests live in: `../internal/app/now_queue_test.go`, `../internal/app/auth_verify_test.go`
 - Opt-in, non-persisting browser smoke test: `POCKETCASTS_LIVE_BROWSER=dia go test ./internal/authn -run TestLiveBrowserSession -count=1`
 - Script harness coverage command: `make test-scripts-cover`
+
+## Research Notes
+
+- Web Player playback snapshot evidence: `research/web-player-playback-snapshot-2026-08-22.md`

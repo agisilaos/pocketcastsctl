@@ -27,6 +27,18 @@ func setupFakeOsa(t *testing.T) {
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
 
+func setupJXAFakeOsa(t *testing.T) {
+	t.Helper()
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "osascript")
+	script := "#!/bin/sh\n" +
+		"exec /usr/bin/osascript -l JavaScript -e \"$MOCK_BROWSER_JS\" -e \"$5\"\n"
+	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+		t.Fatalf("write JXA fake osascript: %v", err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
 func testController() *Controller {
 	return &Controller{
 		browser:     browser{kind: kindChromium, appName: "Google Chrome"},
@@ -50,6 +62,30 @@ func TestControllerStatusAndQueueList(t *testing.T) {
 		}
 	})
 
+	t.Run("status decodes a rich playback snapshot", func(t *testing.T) {
+		t.Setenv("OSASCRIPT_OUT", `{"state":"playing","episode_title":"Episode 7","podcast_title":"The Podcast","position_seconds":754,"duration_seconds":2700,"progress_percent":27.9}`)
+		t.Setenv("OSASCRIPT_CODE", "0")
+		st, err := c.Status(context.Background())
+		if err != nil {
+			t.Fatalf("Status error: %v", err)
+		}
+		if st.State != "playing" || st.EpisodeTitle == nil || *st.EpisodeTitle != "Episode 7" {
+			t.Fatalf("unexpected identity: %+v", st)
+		}
+		if st.PodcastTitle == nil || *st.PodcastTitle != "The Podcast" {
+			t.Fatalf("unexpected podcast: %+v", st)
+		}
+		if st.PositionSeconds == nil || *st.PositionSeconds != 754 {
+			t.Fatalf("unexpected position: %+v", st)
+		}
+		if st.DurationSeconds == nil || *st.DurationSeconds != 2700 {
+			t.Fatalf("unexpected duration: %+v", st)
+		}
+		if st.ProgressPercent == nil || *st.ProgressPercent != 27.9 {
+			t.Fatalf("unexpected progress: %+v", st)
+		}
+	})
+
 	t.Run("queue list json parse", func(t *testing.T) {
 		t.Setenv("OSASCRIPT_OUT", `[{"title":"Ep","href":"/ep"}]`)
 		t.Setenv("OSASCRIPT_CODE", "0")
@@ -61,6 +97,66 @@ func TestControllerStatusAndQueueList(t *testing.T) {
 			t.Fatalf("unexpected items: %+v", items)
 		}
 	})
+}
+
+func TestControllerStatusExtractsWebPlayerSnapshot(t *testing.T) {
+	setupJXAFakeOsa(t)
+	t.Setenv("MOCK_BROWSER_JS", `
+var media = {currentTime: 754.9, duration: 2700.2, paused: false, ended: false};
+var navigator = {mediaSession: {metadata: {title: "Episode 7", album: "The Podcast", artist: "The Author"}}};
+var document = {
+  querySelector: function(selector) {
+    if (selector.indexOf('Pause') >= 0) return {};
+    if (selector === 'audio.audio') return media;
+    return null;
+  },
+  querySelectorAll: function() { return [media]; }
+};`)
+
+	st, err := testController().Status(context.Background())
+	if err != nil {
+		t.Fatalf("Status error: %v", err)
+	}
+	if st.State != "playing" || st.EpisodeTitle == nil || *st.EpisodeTitle != "Episode 7" {
+		t.Fatalf("unexpected identity: %+v", st)
+	}
+	if st.PodcastTitle == nil || *st.PodcastTitle != "The Podcast" {
+		t.Fatalf("unexpected podcast: %+v", st)
+	}
+	if st.PositionSeconds == nil || *st.PositionSeconds != 754 {
+		t.Fatalf("unexpected position: %+v", st)
+	}
+	if st.DurationSeconds == nil || *st.DurationSeconds != 2700 {
+		t.Fatalf("unexpected duration: %+v", st)
+	}
+	if st.ProgressPercent == nil || *st.ProgressPercent != 28 {
+		t.Fatalf("unexpected progress: %+v", st)
+	}
+}
+
+func TestControllerStatusIgnoresUnvalidatedGenericMediaElements(t *testing.T) {
+	setupJXAFakeOsa(t)
+	t.Setenv("MOCK_BROWSER_JS", `
+var unrelatedMedia = {currentTime: 30, duration: 60, paused: false, ended: false};
+var navigator = {mediaSession: {metadata: {title: "Episode 7", album: "The Podcast"}}};
+var document = {
+  querySelector: function(selector) {
+    if (selector.indexOf('Pause') >= 0) return {};
+    return null;
+  },
+  querySelectorAll: function() { return [unrelatedMedia]; }
+};`)
+
+	st, err := testController().Status(context.Background())
+	if err != nil {
+		t.Fatalf("Status error: %v", err)
+	}
+	if st.EpisodeTitle == nil || *st.EpisodeTitle != "Episode 7" {
+		t.Fatalf("unexpected identity: %+v", st)
+	}
+	if st.PositionSeconds != nil || st.DurationSeconds != nil || st.ProgressPercent != nil {
+		t.Fatalf("generic media timing must be omitted until validated: %+v", st)
+	}
 }
 
 func TestControllerDoAndErrors(t *testing.T) {

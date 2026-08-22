@@ -47,8 +47,17 @@ type ActionResult struct {
 	ClickedLabel string `json:"clickedLabel"`
 }
 
-type StatusResult struct {
+type PlaybackDetails struct {
+	EpisodeTitle    *string  `json:"episode_title,omitempty"`
+	PodcastTitle    *string  `json:"podcast_title,omitempty"`
+	PositionSeconds *int64   `json:"position_seconds,omitempty"`
+	DurationSeconds *int64   `json:"duration_seconds,omitempty"`
+	ProgressPercent *float64 `json:"progress_percent,omitempty"`
+}
+
+type PlaybackSnapshot struct {
 	State string `json:"state"` // playing|paused|unknown
+	PlaybackDetails
 }
 
 type QueueItem struct {
@@ -73,14 +82,14 @@ func (c *Controller) Do(ctx context.Context, action Action) (ActionResult, error
 	return res, nil
 }
 
-func (c *Controller) Status(ctx context.Context) (StatusResult, error) {
+func (c *Controller) Status(ctx context.Context) (PlaybackSnapshot, error) {
 	out, err := c.runJS(ctx, jsStatus())
 	if err != nil {
-		return StatusResult{}, err
+		return PlaybackSnapshot{}, err
 	}
-	var st StatusResult
+	var st PlaybackSnapshot
 	if err := json.Unmarshal([]byte(out), &st); err != nil {
-		return StatusResult{}, fmt.Errorf("unexpected JS result: %q", out)
+		return PlaybackSnapshot{}, fmt.Errorf("unexpected JS result: %q", out)
 	}
 	if st.State == "" {
 		st.State = "unknown"

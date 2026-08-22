@@ -26,7 +26,7 @@ var usageText = map[string]string{
 	"web toggle":          "pocketcastsctl web toggle [--browser <name>] [--browser-app <app>] [--url-contains needle]",
 	"web next":            "pocketcastsctl web next [--browser <name>] [--browser-app <app>] [--url-contains needle]",
 	"web prev":            "pocketcastsctl web prev [--browser <name>] [--browser-app <app>] [--url-contains needle]",
-	"web status":          "pocketcastsctl web status [--json] [--plain] [--browser <name>] [--browser-app <app>] [--url-contains needle]",
+	"web status":          "pocketcastsctl web status [--details] [--json] [--plain] [--browser <name>] [--browser-app <app>] [--url-contains needle]",
 	"queue ls":            "pocketcastsctl queue ls [--json] [--plain] [--search q] [--limit N] [--browser <name>] [--browser-app <app>] [--url-contains needle]",
 	"queue api ls":        "pocketcastsctl queue api ls [--limit N] [--search q] [--json|--plain|--raw]",
 	"queue api add":       "pocketcastsctl queue api add (--uuid id --podcast id --title t --published rfc3339 --url audioUrl) | (--episode-json json) [--raw]",

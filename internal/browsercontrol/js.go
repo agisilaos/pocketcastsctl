@@ -57,9 +57,45 @@ func jsStatus() string {
 	return `(function(){
   const hasPause = !!document.querySelector('button[aria-label="Pause"], button[aria-label="Pause episode"]');
   const hasPlay = !!document.querySelector('button[aria-label="Play"], button[aria-label="Resume"], button[aria-label="Play episode"]');
-  if (hasPause) return JSON.stringify({state:"playing"});
-  if (hasPlay) return JSON.stringify({state:"paused"});
-  return JSON.stringify({state:"unknown"});
+  const snapshot = {state: hasPause ? "playing" : (hasPlay ? "paused" : "unknown")};
+
+  function cleanText(value){
+    return typeof value === "string" ? value.replace(/\s+/g, " ").trim() : "";
+  }
+
+  try {
+    const metadata = typeof navigator !== "undefined" && navigator.mediaSession
+      ? navigator.mediaSession.metadata
+      : null;
+    const episodeTitle = metadata ? cleanText(metadata.title) : "";
+    const podcastTitle = metadata ? cleanText(metadata.album) : "";
+    if (episodeTitle) snapshot.episode_title = episodeTitle;
+    if (podcastTitle) snapshot.podcast_title = podcastTitle;
+  } catch (_) {
+    // Identity is optional; a snapshot with state only remains valid.
+  }
+
+  try {
+    const media = document.querySelector("audio.audio");
+    if (media) {
+      const position = Number(media.currentTime);
+      const duration = Number(media.duration);
+      if (Number.isFinite(position) && position >= 0) {
+        snapshot.position_seconds = Math.floor(position);
+      }
+      if (Number.isFinite(duration) && duration > 0) {
+        snapshot.duration_seconds = Math.floor(duration);
+      }
+      if (Number.isFinite(position) && position >= 0 && Number.isFinite(duration) && duration > 0) {
+        const percent = Math.min(100, Math.max(0, position / duration * 100));
+        snapshot.progress_percent = Math.round(percent * 10) / 10;
+      }
+    }
+  } catch (_) {
+    // Timing is optional; state and any identity details still succeed.
+  }
+
+  return JSON.stringify(snapshot);
 })()`
 }
 
