@@ -55,7 +55,7 @@ fi
 git rev-parse "$version" >/dev/null 2>&1 && die "tag already exists: $version"
 
 [[ -f CHANGELOG.md ]] || die "CHANGELOG.md not found"
-if rg -n "^## \[$version\]" CHANGELOG.md >/dev/null; then
+if grep -Fq "## [$version]" CHANGELOG.md; then
   die "$version already exists in CHANGELOG.md"
 fi
 

@@ -12,13 +12,18 @@ if [[ "$(uname -s)" != "Darwin" ]]; then
   die "release-check.sh must be run on macOS (Darwin)"
 fi
 
-if [[ $# -ne 1 ]]; then
-  echo "usage: scripts/release-check.sh vX.Y.Z" >&2
+ci_mode=0
+version=""
+if [[ $# -eq 1 && "$1" == "--ci" ]]; then
+  ci_mode=1
+elif [[ $# -eq 1 ]]; then
+  version="$1"
+else
+  echo "usage: scripts/release-check.sh vX.Y.Z | --ci" >&2
   exit 2
 fi
 
-version="$1"
-if [[ ! "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+if [[ "$ci_mode" -eq 0 && ! "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   die "version must match vX.Y.Z (got: $version)"
 fi
 
@@ -30,7 +35,7 @@ git rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "not inside a git wor
 git diff --quiet || die "working tree has unstaged changes"
 git diff --cached --quiet || die "index has staged changes"
 
-if git rev-parse "$version" >/dev/null 2>&1; then
+if [[ "$ci_mode" -eq 0 ]] && git rev-parse "$version" >/dev/null 2>&1; then
   die "tag already exists: $version"
 fi
 
@@ -45,7 +50,11 @@ first_release_heading="$(grep -m1 -E '^## \[v[0-9]+\.[0-9]+\.[0-9]+\] - [0-9]{4}
 if [[ -z "$first_release_heading" ]]; then
   die "CHANGELOG.md must contain at least one release heading in format: ## [vX.Y.Z] - YYYY-MM-DD"
 fi
-if [[ "$first_release_heading" != "## [$version] - "* ]]; then
+
+if [[ "$ci_mode" -eq 1 ]]; then
+  version="${first_release_heading#*\[}"
+  version="${version%%\]*}"
+elif [[ "$first_release_heading" != "## [$version] - "* ]]; then
   die "CHANGELOG.md top release heading must be ## [$version] - YYYY-MM-DD before release"
 fi
 
@@ -62,7 +71,7 @@ echo "[release-check] running vet"
 go vet ./...
 
 echo "[release-check] running script tests"
-go test ./scripts -run 'TestReleasePreflightFailurePaths|TestCheckHelpDocsDriftScript'
+go test ./scripts -run 'TestReleasePreflightFailurePaths|TestReleaseCheckModes|TestCheckHelpDocsDriftScript'
 
 echo "[release-check] running docs check"
 ./scripts/docs-check.sh
