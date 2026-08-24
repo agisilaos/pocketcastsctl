@@ -495,7 +495,7 @@ func TestRunDoctorExplainsDiaLaunchRequirement(t *testing.T) {
 	previousAvailable := applicationAvailable
 	previousInspect := inspectDiaProcess
 	applicationAvailable = func(appName string) bool { return appName == "Dia" }
-	inspectDiaProcess = func() diaProcessState {
+	inspectDiaProcess = func(string) diaProcessState {
 		return diaProcessState{Running: true, AppleScriptJavaScript: false}
 	}
 	t.Cleanup(func() {

@@ -30,7 +30,7 @@ func openInBrowser(appName, url string, launchArgs ...string) error {
 func defaultAppForBrowser(browser string) string {
 	switch strings.ToLower(strings.TrimSpace(browser)) {
 	case "":
-		return "Safari"
+		return "Google Chrome"
 	case "chrome", "googlechrome":
 		return "Google Chrome"
 	case "safari":

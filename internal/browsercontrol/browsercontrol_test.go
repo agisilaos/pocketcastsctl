@@ -21,7 +21,7 @@ func TestParseBrowserVariants(t *testing.T) {
 		wantKind    browserKind
 		wantErr     string
 	}{
-		{name: "default safari", browser: "", wantApp: "Safari", wantKind: kindSafari},
+		{name: "default chrome", browser: "", wantApp: "Google Chrome", wantKind: kindChromium},
 		{name: "safari", browser: "safari", wantApp: "Safari", wantKind: kindSafari},
 		{name: "arc", browser: "arc", wantApp: "Arc", wantKind: kindChromium},
 		{name: "dia", browser: "dia", wantApp: "Dia", wantKind: kindDia},

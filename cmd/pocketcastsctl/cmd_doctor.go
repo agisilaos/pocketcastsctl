@@ -283,7 +283,7 @@ func collectDoctorChecks(cfg config.Config, includeAPIValidation bool) []doctorC
 				Message: fmt.Sprintf("%s installed", appName),
 			})
 			if target.isDia() {
-				state := inspectDiaProcess()
+				state := inspectDiaProcess(appName)
 				switch {
 				case !state.Running:
 					checks = append(checks, doctorCheck{

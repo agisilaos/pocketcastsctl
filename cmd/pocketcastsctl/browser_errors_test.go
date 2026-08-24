@@ -93,7 +93,7 @@ func TestBrowserLaunchArgumentsEnableDiaJavaScript(t *testing.T) {
 	previous := inspectDiaProcess
 	t.Cleanup(func() { inspectDiaProcess = previous })
 
-	inspectDiaProcess = func() diaProcessState { return diaProcessState{} }
+	inspectDiaProcess = func(string) diaProcessState { return diaProcessState{} }
 	target := newBrowserTarget("dia", "", "pocketcasts.com")
 	args, err := target.launchArguments()
 	if err != nil {
@@ -103,7 +103,7 @@ func TestBrowserLaunchArgumentsEnableDiaJavaScript(t *testing.T) {
 		t.Fatalf("launch args = %#v", args)
 	}
 
-	inspectDiaProcess = func() diaProcessState {
+	inspectDiaProcess = func(string) diaProcessState {
 		return diaProcessState{Running: true, AppleScriptJavaScript: false}
 	}
 	_, err = target.launchArguments()
@@ -112,11 +112,33 @@ func TestBrowserLaunchArgumentsEnableDiaJavaScript(t *testing.T) {
 	}
 }
 
+func TestDiaBrowserAppOverrideKeepsDiaLaunchHandling(t *testing.T) {
+	previous := inspectDiaProcess
+	t.Cleanup(func() { inspectDiaProcess = previous })
+
+	inspectedApp := ""
+	inspectDiaProcess = func(appName string) diaProcessState {
+		inspectedApp = appName
+		return diaProcessState{}
+	}
+	target := newBrowserTarget("dia", "Dia Beta", "pocketcasts.com")
+	args, err := target.launchArguments()
+	if err != nil {
+		t.Fatalf("launchArguments() error: %v", err)
+	}
+	if inspectedApp != "Dia Beta" {
+		t.Fatalf("inspected app = %q, want Dia Beta", inspectedApp)
+	}
+	if len(args) != 1 || args[0] != diaJavaScriptLaunchFlag {
+		t.Fatalf("launch args = %#v", args)
+	}
+}
+
 func TestRunWebLoginHumanizesDiaLaunchFlagError(t *testing.T) {
 	previousAvailable := applicationAvailable
 	previousInspect := inspectDiaProcess
 	applicationAvailable = func(string) bool { return true }
-	inspectDiaProcess = func() diaProcessState {
+	inspectDiaProcess = func(string) diaProcessState {
 		return diaProcessState{Running: true, AppleScriptJavaScript: false}
 	}
 	t.Cleanup(func() {

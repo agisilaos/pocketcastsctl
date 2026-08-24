@@ -15,8 +15,8 @@ func TestPathFromEnv(t *testing.T) {
 }
 
 func TestDefaultUsesBuiltInBrowser(t *testing.T) {
-	if got := Default().Browser; got != "safari" {
-		t.Fatalf("Default().Browser = %q, want safari", got)
+	if got := Default().Browser; got != "chrome" {
+		t.Fatalf("Default().Browser = %q, want chrome", got)
 	}
 }
 

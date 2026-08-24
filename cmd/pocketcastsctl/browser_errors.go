@@ -40,14 +40,19 @@ func macOSApplicationAvailable(appName string) bool {
 	return exec.Command("/usr/bin/open", "-Ra", appName).Run() == nil
 }
 
-func detectDiaProcess() diaProcessState {
+func detectDiaProcess(appName string) diaProcessState {
 	output, err := exec.Command("/bin/ps", "-axo", "command=").Output()
 	if err != nil {
 		return diaProcessState{}
 	}
+	appName = strings.TrimSpace(appName)
+	if appName == "" {
+		appName = "Dia"
+	}
+	appBundleMarker := "/" + appName + ".app/Contents/MacOS/"
 	state := diaProcessState{}
 	for _, command := range strings.Split(string(output), "\n") {
-		if !strings.Contains(command, "/Dia.app/Contents/MacOS/Dia") {
+		if !strings.Contains(command, appBundleMarker) {
 			continue
 		}
 		state.Running = true
@@ -62,17 +67,14 @@ func detectDiaProcess() diaProcessState {
 }
 
 func (t browserTarget) isDia() bool {
-	if t.app != "" {
-		return strings.EqualFold(t.app, "Dia")
-	}
-	return strings.EqualFold(t.browser, "dia")
+	return strings.EqualFold(t.browser, "dia") || strings.EqualFold(t.app, "Dia")
 }
 
 func (t browserTarget) launchArguments() ([]string, error) {
 	if !t.isDia() {
 		return nil, nil
 	}
-	state := inspectDiaProcess()
+	state := inspectDiaProcess(t.applicationName())
 	if state.Running && !state.AppleScriptJavaScript {
 		return nil, fmt.Errorf("Dia is running without %s", diaJavaScriptLaunchFlag)
 	}
@@ -160,7 +162,7 @@ func (t browserTarget) failure(err error) (string, string) {
 		}
 		browserName := strings.ToLower(t.browser)
 		if browserName == "" {
-			browserName = "safari"
+			browserName = "chrome"
 		}
 		return fmt.Sprintf("no Pocket Casts Web Player tab matching %q was found in %s", needle, appName),
 			fmt.Sprintf("run `%s` to open the Web Player and sign in", cliCommand("web login --browser "+browserName))

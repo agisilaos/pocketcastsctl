@@ -192,7 +192,7 @@ brew install mpv
 
 Flags:
 
-- `--browser safari|chrome|dia` (default: `safari`)
+- `--browser safari|chrome|dia` (default: `chrome`)
 - `--url-contains <substring>` (default: `pocketcasts.com`)
 
 macOS may prompt you to allow `osascript` to control your browser (Automation permission).

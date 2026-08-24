@@ -23,9 +23,7 @@ func parseBrowser(name string, appOverride string) (browser, error) {
 	appOverride = normalizeAppName(appOverride)
 
 	switch nameNorm {
-	case "":
-		return browser{kind: kindSafari, appName: chooseApp(appOverride, "Safari")}, nil
-	case "chrome", "googlechrome":
+	case "", "chrome", "googlechrome":
 		return browser{kind: kindChromium, appName: chooseApp(appOverride, "Google Chrome")}, nil
 	case "chromium":
 		if appOverride == "" {
