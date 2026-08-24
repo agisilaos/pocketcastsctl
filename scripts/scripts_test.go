@@ -52,6 +52,17 @@ func TestReleasePreflightFailurePaths(t *testing.T) {
 		}
 	})
 
+	t.Run("version exists in changelog", func(t *testing.T) {
+		repo := setupPreflightRepo(t)
+		out, err := runCmd(repo, "bash", "scripts/release_preflight.sh", "v0.1.0")
+		if err == nil {
+			t.Fatalf("expected failure when version exists in changelog")
+		}
+		if !strings.Contains(out, "v0.1.0 already exists in CHANGELOG.md") {
+			t.Fatalf("unexpected output: %s", out)
+		}
+	})
+
 	t.Run("dirty tree without allow-dirty", func(t *testing.T) {
 		repo := setupPreflightRepo(t)
 		mustWriteFile(t, filepath.Join(repo, "README.md"), "dirty\n")
