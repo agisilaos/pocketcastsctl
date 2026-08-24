@@ -4,6 +4,28 @@ All notable changes to this project will be documented in this file.
 
 The format is based on *Keep a Changelog*, and this project adheres to *Semantic Versioning*.
 
+## [v0.1.6] - 2026-08-24
+
+### Added
+
+- Added browserless Pocket Casts API authentication with terminal login, explicit Chrome/Dia/Safari session import, and account-scoped macOS Keychain storage.
+- Added applied doctor repairs with `doctor --fix --apply` while keeping suggestion-only fixes as the default.
+- Added Up Next reordering and cleanup with `queue api bump`, `queue api move`, and `queue api dedupe`, including dry-run support.
+
+### Changed
+
+- Improved authentication lifecycle handling with proactive access-token refresh, one retry after authorization failures, explicit logout, and one-release compatibility aliases.
+- Expanded command, integration, API, authentication, browser-import, release-script, and help-contract coverage.
+
+### Fixed
+
+- Made release checks portable on stock macOS GitHub runners and enforced version/changelog agreement before tagging.
+
+### Security
+
+- Made HAR redaction fail closed for malformed or unsupported payloads and expanded sensitive-field coverage before captures are shared.
+- Kept passwords, raw browser cookies, and access/refresh tokens out of command output and JSON configuration.
+
 ## [v0.1.5] - 2026-02-19
 
 - fix(release): repair notes generation pipeline (918530b)
