@@ -19,6 +19,7 @@ Usage:
 
 Environment:
   HOMEBREW_TAP_REPO      Tap repo in owner/name format (default: agisilaos/homebrew-tap)
+  HOMEBREW_TAP_URL       Tap clone URL (default: https://github.com/<HOMEBREW_TAP_REPO>.git)
   HOMEBREW_TAP_BRANCH    Tap branch to push (default: main)
   HOMEBREW_FORMULA_PATH  Path in tap repo (default: ${DEFAULT_FORMULA_PATH})
   GITHUB_REPO            owner/name for release URL generation (auto-detected from git remote)
@@ -220,6 +221,7 @@ gh release create "$VERSION" \
   --notes "$notes"
 
 tap_repo="${HOMEBREW_TAP_REPO:-agisilaos/homebrew-tap}"
+tap_url="${HOMEBREW_TAP_URL:-https://github.com/${tap_repo}.git}"
 tap_branch="${HOMEBREW_TAP_BRANCH:-main}"
 formula_path="${HOMEBREW_FORMULA_PATH:-${DEFAULT_FORMULA_PATH}}"
 formula_class="$(to_class_name "$FORMULA_NAME")"
@@ -230,7 +232,7 @@ formula_test_arg="${HOMEBREW_TEST_ARG:-${DEFAULT_HOMEBREW_TEST_ARG}}"
 tap_dir="$(mktemp -d)"
 trap 'rm -rf "$tmp_dir" "$tap_dir"' EXIT
 
-git clone "git@github.com:${tap_repo}.git" "$tap_dir"
+git clone "$tap_url" "$tap_dir"
 mkdir -p "$(dirname "$tap_dir/$formula_path")"
 
 cat <<FORMULA > "$tap_dir/$formula_path"
