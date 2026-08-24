@@ -57,7 +57,7 @@ func runNow(args []string, cfg config.Config) int {
 		case *plain:
 			printNowPlain(s)
 		default:
-			printNowHuman(s)
+			printNowHuman(s, cfg)
 		}
 	}
 
@@ -113,11 +113,20 @@ func runNowInteractive(actions []string) int {
 	return run(actionArgs)
 }
 
-func printNowHuman(s app.NowSnapshot) {
+func printNowHuman(s app.NowSnapshot, cfg config.Config) {
 	fmt.Println("POCKETCASTS NOW")
 	fmt.Println(strings.Repeat("=", 72))
 	fmt.Printf("Updated: %s\n", s.GeneratedAt.Local().Format("2006-01-02 15:04:05"))
-	fmt.Printf("Web    : %s%s\n", strings.ToUpper(s.Web.Status), formatInlineErr(s.Web.Error))
+	webError := strings.TrimSpace(s.Web.Error)
+	webHint := ""
+	if webError != "" {
+		target := newBrowserTarget(cfg.Browser, cfg.BrowserApp, cfg.URLContains)
+		webError, webHint = target.failure(errors.New(webError))
+	}
+	fmt.Printf("Web    : %s%s\n", strings.ToUpper(s.Web.Status), formatInlineErr(webError))
+	if webHint != "" {
+		fmt.Println("         next:", webHint)
+	}
 	printPlaybackDetailsHuman(s.Web.PlaybackDetails)
 	local := strings.ToUpper(s.Local.Status)
 	if strings.TrimSpace(s.Local.Title) != "" {
@@ -144,11 +153,19 @@ func printNowHuman(s app.NowSnapshot) {
 	fmt.Println(strings.Repeat("-", 72))
 	fmt.Println("Recommended next actions:")
 	for i, a := range s.Actions {
-		fmt.Printf("  %d. %s\n", i+1, a)
+		fmt.Printf("  %d. %s\n", i+1, displaySuggestedAction(a))
 		if i >= 4 {
 			break
 		}
 	}
+}
+
+func displaySuggestedAction(action string) string {
+	action = strings.TrimSpace(action)
+	if args := strings.TrimPrefix(action, "pocketcastsctl "); args != action {
+		return cliCommand(args)
+	}
+	return action
 }
 
 func printNowPlain(s app.NowSnapshot) {

@@ -29,6 +29,18 @@ func redactUserPath(p string) string {
 	return p
 }
 
+func cliCommand(args string) string {
+	command := strings.TrimSpace(invokedCommand)
+	if command == "" {
+		command = "pocketcastsctl"
+	}
+	args = strings.TrimSpace(args)
+	if args == "" {
+		return command
+	}
+	return command + " " + args
+}
+
 func formatHMS(total int) string {
 	if total < 0 {
 		total = 0

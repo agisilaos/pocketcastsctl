@@ -168,7 +168,7 @@ func startLocalPlayback(cfg config.Config, ep pocketcasts.UpNextEpisode, startAt
 	audioURL := strings.TrimSpace(ep.URL)
 	if audioURL == "" {
 		fmt.Fprintln(os.Stderr, "local playback needs an audio URL but none was found in the Up Next response")
-		fmt.Fprintln(os.Stderr, "tip: run `pocketcastsctl queue api ls --raw` and share it; we may need another endpoint to resolve the audio URL")
+		fmt.Fprintf(os.Stderr, "tip: run `%s` and share it; we may need another endpoint to resolve the audio URL\n", cliCommand("queue api ls --raw"))
 		return 1
 	}
 

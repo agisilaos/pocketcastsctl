@@ -39,7 +39,7 @@ type Config struct {
 
 func Default() Config {
 	return Config{
-		Browser:     "chrome",
+		Browser:     "safari",
 		BrowserApp:  "",
 		URLContains: "pocketcasts.com",
 		APIBaseURL:  "https://api.pocketcasts.com",

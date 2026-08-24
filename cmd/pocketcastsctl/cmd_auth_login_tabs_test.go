@@ -10,7 +10,7 @@ func TestRunWebLoginRejectsEmptyURL(t *testing.T) {
 	if code != 1 {
 		t.Fatalf("exit code = %d, want 1", code)
 	}
-	if !strings.Contains(stderr, "web login: failed to open") || !strings.Contains(stderr, "url cannot be empty") {
+	if !strings.Contains(stderr, "web login failed: url cannot be empty") {
 		t.Fatalf("stderr missing empty-url error: %q", stderr)
 	}
 }

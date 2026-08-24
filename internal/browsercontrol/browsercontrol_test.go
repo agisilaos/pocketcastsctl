@@ -21,9 +21,10 @@ func TestParseBrowserVariants(t *testing.T) {
 		wantKind    browserKind
 		wantErr     string
 	}{
-		{name: "default chrome", browser: "", wantApp: "Google Chrome", wantKind: kindChromium},
+		{name: "default safari", browser: "", wantApp: "Safari", wantKind: kindSafari},
 		{name: "safari", browser: "safari", wantApp: "Safari", wantKind: kindSafari},
 		{name: "arc", browser: "arc", wantApp: "Arc", wantKind: kindChromium},
+		{name: "dia", browser: "dia", wantApp: "Dia", wantKind: kindDia},
 		{name: "chromium needs app", browser: "chromium", wantErr: "requires --browser-app"},
 		{name: "custom unknown", browser: "my-browser", wantApp: "my-browser", wantKind: kindChromium},
 	}
@@ -47,6 +48,27 @@ func TestParseBrowserVariants(t *testing.T) {
 				t.Fatalf("kind = %v, want %v", got.kind, tt.wantKind)
 			}
 		})
+	}
+}
+
+func TestDiaUsesNativeAppleScriptDictionary(t *testing.T) {
+	browser, err := parseBrowser("dia", "")
+	if err != nil {
+		t.Fatalf("parseBrowser(dia): %v", err)
+	}
+
+	scripts := map[string]string{
+		"JavaScript": browser.appleScript(),
+		"set URL":    browser.appleScriptSetURL(),
+		"list URLs":  browser.appleScriptListURLs(),
+	}
+	for name, script := range scripts {
+		if !strings.Contains(script, `using terms from application "Dia"`) {
+			t.Errorf("%s script does not use Dia's AppleScript dictionary", name)
+		}
+		if strings.Contains(script, `using terms from application "Google Chrome"`) {
+			t.Errorf("%s script incorrectly uses Google Chrome's AppleScript dictionary", name)
+		}
 	}
 }
 

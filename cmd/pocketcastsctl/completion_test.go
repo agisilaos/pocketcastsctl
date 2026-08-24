@@ -52,3 +52,19 @@ func TestCompletionScriptsIncludeWebDetailsFlag(t *testing.T) {
 		}
 	}
 }
+
+func TestCompletionScriptsIncludeConfigSetBrowser(t *testing.T) {
+	scripts := completionScripts()
+	for shell, want := range map[string]string{
+		"bash": `compgen -W "init path show set"`,
+		"zsh":  `_values "config subcommands" "init" "path" "show" "set"`,
+		"fish": `__fish_seen_subcommand_from config' -a 'init path show set'`,
+	} {
+		if !strings.Contains(scripts[shell], want) {
+			t.Fatalf("%s completion missing config set", shell)
+		}
+		if !strings.Contains(scripts[shell], "safari chrome dia") && !strings.Contains(scripts[shell], `"safari" "chrome" "dia"`) {
+			t.Fatalf("%s completion missing browser choices", shell)
+		}
+	}
+}

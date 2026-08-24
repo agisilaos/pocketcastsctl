@@ -15,6 +15,7 @@ type browserKind int
 const (
 	kindChromium browserKind = iota
 	kindSafari
+	kindDia
 )
 
 func parseBrowser(name string, appOverride string) (browser, error) {
@@ -22,7 +23,9 @@ func parseBrowser(name string, appOverride string) (browser, error) {
 	appOverride = normalizeAppName(appOverride)
 
 	switch nameNorm {
-	case "", "chrome", "googlechrome":
+	case "":
+		return browser{kind: kindSafari, appName: chooseApp(appOverride, "Safari")}, nil
+	case "chrome", "googlechrome":
 		return browser{kind: kindChromium, appName: chooseApp(appOverride, "Google Chrome")}, nil
 	case "chromium":
 		if appOverride == "" {
@@ -36,7 +39,7 @@ func parseBrowser(name string, appOverride string) (browser, error) {
 	case "arc":
 		return browser{kind: kindChromium, appName: chooseApp(appOverride, "Arc")}, nil
 	case "dia":
-		return browser{kind: kindChromium, appName: chooseApp(appOverride, "Dia")}, nil
+		return browser{kind: kindDia, appName: chooseApp(appOverride, "Dia")}, nil
 	case "safari":
 		return browser{kind: kindSafari, appName: chooseApp(appOverride, "Safari")}, nil
 	default:
@@ -57,6 +60,8 @@ func (b browser) appleScript() string {
 		return appleScriptChromium
 	case kindSafari:
 		return appleScriptSafari
+	case kindDia:
+		return appleScriptDia
 	default:
 		return appleScriptChromium
 	}
@@ -68,6 +73,8 @@ func (b browser) appleScriptSetURL() string {
 		return appleScriptChromiumSetURL
 	case kindSafari:
 		return appleScriptSafariSetURL
+	case kindDia:
+		return appleScriptDiaSetURL
 	default:
 		return appleScriptChromiumSetURL
 	}
@@ -79,6 +86,8 @@ func (b browser) appleScriptListURLs() string {
 		return appleScriptChromiumListURLs
 	case kindSafari:
 		return appleScriptSafariListURLs
+	case kindDia:
+		return appleScriptDiaListURLs
 	default:
 		return appleScriptChromiumListURLs
 	}
@@ -159,6 +168,9 @@ on run argv
   set appName to item 1 of argv
   set urlNeedle to item 2 of argv
   set js to item 3 of argv
+  set matched to 0
+  set lastErr to ""
+  set lastURL to ""
 
   tell application appName
     repeat with w in windows
@@ -166,12 +178,60 @@ on run argv
         try
           set u to URL of t
           if u contains urlNeedle then
-            return do JavaScript js in t
+            set matched to matched + 1
+            set lastURL to u
+            try
+              return do JavaScript js in t
+            on error errMsg number errNum
+              set lastErr to errMsg & " (" & errNum & ")"
+            end try
           end if
         end try
       end repeat
     end repeat
   end tell
+
+  if matched > 0 then
+    error "Found " & matched & " matching tab(s) but JavaScript execution failed (lastURL=" & lastURL & "): " & lastErr
+  end if
+
+  error "No tab found in " & appName & " with URL containing: " & urlNeedle
+end run
+end using terms from
+`
+
+const appleScriptDia = `
+using terms from application "Dia"
+on run argv
+  set appName to item 1 of argv
+  set urlNeedle to item 2 of argv
+  set js to item 3 of argv
+  set matched to 0
+  set lastErr to ""
+  set lastURL to ""
+
+  tell application appName
+    repeat with w in windows
+      repeat with t in tabs of w
+        try
+          set u to URL of t
+          if u contains urlNeedle then
+            set matched to matched + 1
+            set lastURL to u
+            try
+              return execute t javascript js
+            on error errMsg number errNum
+              set lastErr to errMsg & " (" & errNum & ")"
+            end try
+          end if
+        end try
+      end repeat
+    end repeat
+  end tell
+
+  if matched > 0 then
+    error "Found " & matched & " matching tab(s) but JavaScript execution failed (lastURL=" & lastURL & "): " & lastErr
+  end if
 
   error "No tab found in " & appName & " with URL containing: " & urlNeedle
 end run
@@ -233,6 +293,32 @@ end run
 end using terms from
 `
 
+const appleScriptDiaSetURL = `
+using terms from application "Dia"
+on run argv
+  set appName to item 1 of argv
+  set urlNeedle to item 2 of argv
+  set newURL to item 3 of argv
+
+  tell application appName
+    repeat with w in windows
+      repeat with t in tabs of w
+        try
+          set u to URL of t
+          if u contains urlNeedle then
+            set URL of t to newURL
+            return "ok"
+          end if
+        end try
+      end repeat
+    end repeat
+  end tell
+
+  error "No tab found in " & appName & " with URL containing: " & urlNeedle
+end run
+end using terms from
+`
+
 const appleScriptChromiumListURLs = `
 using terms from application "Google Chrome"
 on run argv
@@ -266,6 +352,37 @@ end using terms from
 
 const appleScriptSafariListURLs = `
 using terms from application "Safari"
+on run argv
+  set appName to item 1 of argv
+  set urls to {}
+
+  tell application appName
+    repeat with w in windows
+      repeat with t in tabs of w
+        try
+          set u to URL of t
+          if u is not missing value then
+            copy u to end of urls
+          end if
+        end try
+      end repeat
+    end repeat
+  end tell
+
+  if (count of urls) is 0 then
+    return "[]"
+  end if
+
+  set AppleScript's text item delimiters to "\",\""
+  set joined to urls as text
+  set AppleScript's text item delimiters to ""
+  return "[\"" & joined & "\"]"
+end run
+end using terms from
+`
+
+const appleScriptDiaListURLs = `
+using terms from application "Dia"
 on run argv
   set appName to item 1 of argv
   set urls to {}

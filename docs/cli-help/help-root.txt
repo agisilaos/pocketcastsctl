@@ -56,7 +56,7 @@ Command reference:
   pocketcastsctl har summarize [--host host] [--json] <file.har>   (use --host= to disable filtering)
   pocketcastsctl har graphql [--host host] [--json] <file.har>     (use --host= to disable filtering)
   pocketcastsctl har redact <in.har> <out.har>
-  pocketcastsctl config init|path|show
+  pocketcastsctl config init|path|show|set
   pocketcastsctl help [now|setup|start|doctor|auth|web|queue|local|har|config|completion]
 
 Deprecated shortcuts (use canonical commands above):

@@ -7,7 +7,7 @@ Control Pocket Casts playback, Up Next, and API authentication from the command 
 
 Web Player controls use browser automation. API-backed queue commands use a separate API session, so signing the CLI in never requires opening or scripting a browser.
 
-Supported browsers for automation depend on whether the macOS app is scriptable; you can set `--browser` to `chrome`, `safari`, `arc`, `dia`, `brave`, `edge`, or pass a custom app name with `--browser-app`.
+Supported browsers for automation depend on whether the macOS app is scriptable; you can set `--browser` to `chrome`, `safari`, `dia`, `arc`, `brave`, `edge`, or pass a custom app name with `--browser-app`. Safari, Chrome, and Dia have dedicated adapters; the remaining browser applications are best effort.
 
 ## Install
 
@@ -192,11 +192,11 @@ brew install mpv
 
 Flags:
 
-- `--browser chrome|safari` (default: `chrome`)
+- `--browser safari|chrome|dia` (default: `safari`)
 - `--url-contains <substring>` (default: `pocketcasts.com`)
 
 macOS may prompt you to allow `osascript` to control your browser (Automation permission).
-Rich Web Player playback details also require the browser to allow JavaScript from Apple Events. Chrome and Safari are the validation targets; other Chromium-compatible applications retain the state-only fallback when metadata is unavailable.
+Rich Web Player playback details also require the browser to allow JavaScript from Apple Events. Safari exposes this in Settings > Developer. Dia must be launched with `--enable-applescript-javascript`; `web login --browser dia` adds the flag automatically when Dia is not already running. If Dia is already running without it, quit Dia and rerun the login command. Other browser applications are best effort and may not expose a compatible AppleScript interface.
 
 ### Queue (best-effort, from Web UI)
 
@@ -333,7 +333,10 @@ Show the config path and non-secret settings. `api_headers.Authorization` is rea
 ./bin/pocketcastsctl config show
 ./bin/pocketcastsctl config show --json
 ./bin/pocketcastsctl config show --json --reveal-secrets
+./bin/pocketcastsctl config set browser safari
 ```
+
+`config set browser` persists the Web Player browser and clears a stale application-name override.
 
 Environment overrides:
 

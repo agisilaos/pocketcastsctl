@@ -86,9 +86,18 @@ _pocketcastsctl_completions() {
       ;;
     config)
       if [[ $COMP_CWORD -eq 2 ]]; then
-        COMPREPLY=( $(compgen -W "init path show" -- "$cur") )
+        COMPREPLY=( $(compgen -W "init path show set" -- "$cur") )
       else
-        [[ "$sub" == "show" ]] && COMPREPLY=( $(compgen -W "--json --reveal-secrets" -- "$cur") ) || COMPREPLY=()
+        case "$sub" in
+          show) COMPREPLY=( $(compgen -W "--json --reveal-secrets" -- "$cur") ) ;;
+          set)
+            if [[ $COMP_CWORD -eq 3 ]]; then
+              COMPREPLY=( $(compgen -W "browser" -- "$cur") )
+            elif [[ "$prev" == "browser" ]]; then
+              COMPREPLY=( $(compgen -W "safari chrome dia arc brave edge" -- "$cur") )
+            fi
+            ;;
+        esac
       fi
       return 0
       ;;
@@ -208,9 +217,18 @@ _pocketcastsctl_completions() {
       ;;
     config)
       if (( CURRENT == 3 )); then
-        _values "config subcommands" "init" "path" "show"
+        _values "config subcommands" "init" "path" "show" "set"
       else
-        [[ "$sub" == "show" ]] && _values "flags" "--json" "--reveal-secrets"
+        case "$sub" in
+          show) _values "flags" "--json" "--reveal-secrets" ;;
+          set)
+            if (( CURRENT == 4 )); then
+              _values "settings" "browser"
+            elif [[ "${words[4]}" == "browser" ]]; then
+              _values "browsers" "safari" "chrome" "dia" "arc" "brave" "edge"
+            fi
+            ;;
+        esac
       fi
       ;;
     web)
@@ -275,7 +293,9 @@ complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from setup' -a 'run che
 complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from setup' -l json -l plain -l no-input
 complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from start' -l json -l plain -l no-input
 complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from doctor' -a 'explain' -l json -l plain -l quick -l full -l fix -l apply
-complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from config' -a 'init path show'
+complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from config' -a 'init path show set'
+complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from config; and __fish_seen_subcommand_from set' -a 'browser'
+complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from config; and __fish_seen_subcommand_from set; and __fish_seen_subcommand_from browser' -a 'safari chrome dia arc brave edge'
 complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from auth' -a 'login import-browser refresh status verify logout sync tabs clear'
 complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from web' -a 'login tabs play pause toggle next prev status'
 complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from auth; and __fish_seen_subcommand_from login' -l email -l password-stdin -l force -l no-input -l json -l plain

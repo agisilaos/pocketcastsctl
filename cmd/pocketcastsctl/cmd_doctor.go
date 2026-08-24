@@ -180,7 +180,7 @@ func applyDoctorFixes(checks []doctorCheck) []doctorFixResult {
 		}
 		switch c.ID {
 		case "config_file":
-			add("config_init", "pocketcastsctl config init")
+			add("config_init", cliCommand("config init"))
 		}
 	}
 
@@ -225,7 +225,7 @@ func hasFailedDoctorFix(results []doctorFixResult) bool {
 }
 
 func collectDoctorChecks(cfg config.Config, includeAPIValidation bool) []doctorCheck {
-	checks := make([]doctorCheck, 0, 7)
+	checks := make([]doctorCheck, 0, 9)
 
 	if _, err := exec.LookPath("osascript"); err != nil {
 		checks = append(checks, doctorCheck{
@@ -261,6 +261,55 @@ func collectDoctorChecks(cfg config.Config, includeAPIValidation bool) []doctorC
 			Status:  "ok",
 			Message: fmt.Sprintf("browser=%q url_contains=%q", cfg.Browser, cfg.URLContains),
 		})
+
+		target := newBrowserTarget(cfg.Browser, cfg.BrowserApp, cfg.URLContains)
+		appName := target.applicationName()
+		if err := target.applicationError(); err != nil {
+			hint := "install the configured browser or select an installed browser with `--browser`"
+			if fallback, ok := browserFallback(appName); ok {
+				hint = fmt.Sprintf("run `%s`", cliCommand("config set browser "+fallback))
+			}
+			checks = append(checks, doctorCheck{
+				ID:      "browser_application",
+				Status:  "fail",
+				Code:    "doctor.browser.app_missing",
+				Message: err.Error(),
+				Hint:    hint,
+			})
+		} else {
+			checks = append(checks, doctorCheck{
+				ID:      "browser_application",
+				Status:  "ok",
+				Message: fmt.Sprintf("%s installed", appName),
+			})
+			if target.isDia() {
+				state := inspectDiaProcess()
+				switch {
+				case !state.Running:
+					checks = append(checks, doctorCheck{
+						ID:      "browser_javascript",
+						Status:  "warn",
+						Code:    "doctor.browser.dia_not_running",
+						Message: "Dia is not running",
+						Hint:    fmt.Sprintf("run `%s`; it will launch Dia with AppleScript JavaScript support", cliCommand("web login --browser dia")),
+					})
+				case !state.AppleScriptJavaScript:
+					checks = append(checks, doctorCheck{
+						ID:      "browser_javascript",
+						Status:  "fail",
+						Code:    "doctor.browser.dia_javascript_disabled",
+						Message: "Dia is running without AppleScript JavaScript support",
+						Hint:    fmt.Sprintf("quit Dia, then run `%s`", cliCommand("web login --browser dia")),
+					})
+				default:
+					checks = append(checks, doctorCheck{
+						ID:      "browser_javascript",
+						Status:  "ok",
+						Message: "Dia AppleScript JavaScript support enabled",
+					})
+				}
+			}
+		}
 	}
 
 	if _, err := os.Stat(config.Path()); err != nil {
@@ -269,7 +318,7 @@ func collectDoctorChecks(cfg config.Config, includeAPIValidation bool) []doctorC
 			Status:  "warn",
 			Code:    "doctor.config.missing",
 			Message: "config file not found",
-			Hint:    "run `pocketcastsctl config init`",
+			Hint:    fmt.Sprintf("run `%s`", cliCommand("config init")),
 		})
 	} else {
 		checks = append(checks, doctorCheck{
@@ -308,7 +357,7 @@ func collectDoctorChecks(cfg config.Config, includeAPIValidation bool) []doctorC
 			Status:  "warn",
 			Code:    "doctor.auth.session_missing",
 			Message: message,
-			Hint:    "run `pocketcastsctl auth login` or `pocketcastsctl auth import-browser --browser dia`",
+			Hint:    fmt.Sprintf("run `%s` or `%s`", cliCommand("auth login"), cliCommand("auth import-browser --browser dia")),
 		})
 	}
 
@@ -320,7 +369,7 @@ func collectDoctorChecks(cfg config.Config, includeAPIValidation bool) []doctorC
 					Status:  "fail",
 					Code:    "doctor.auth.invalid",
 					Message: "stored auth is rejected (401 Unauthorized)",
-					Hint:    "run `pocketcastsctl auth login` or import a fresh browser session",
+					Hint:    fmt.Sprintf("run `%s` or import a fresh browser session", cliCommand("auth login")),
 				})
 			} else {
 				code, msg, hint := classifyAuthValidationError(err)
@@ -411,17 +460,25 @@ func doctorSuggestedFixes(checks []doctorCheck) []string {
 		switch c.ID {
 		case "config_file":
 			if c.Status != "ok" {
-				add("pocketcastsctl config init")
+				add(cliCommand("config init"))
+			}
+		case "browser_application":
+			if c.Status != "ok" {
+				if applicationAvailable("Safari") {
+					add(cliCommand("config set browser safari"))
+				} else if applicationAvailable("Google Chrome") {
+					add(cliCommand("config set browser chrome"))
+				}
 			}
 		case "api_session":
 			if c.Status != "ok" {
-				add("pocketcastsctl auth login")
-				add("pocketcastsctl auth import-browser --browser dia")
+				add(cliCommand("auth login"))
+				add(cliCommand("auth import-browser --browser dia"))
 			}
 		case "auth_validation":
 			if c.Status != "ok" {
-				add("pocketcastsctl auth login")
-				add("pocketcastsctl auth import-browser --browser dia")
+				add(cliCommand("auth login"))
+				add(cliCommand("auth import-browser --browser dia"))
 			}
 		case "picker_optional":
 			if c.Status != "ok" {
@@ -507,45 +564,60 @@ func doctorCodeCatalog() map[string]doctorCodeEntry {
 			Description: "Configured browser or app name is not supported for automation.",
 			Fix:         "set a supported browser via --browser or POCKETCASTS_BROWSER",
 		},
+		"doctor.browser.app_missing": {
+			Title:       "Browser application missing",
+			Description: "The configured browser name is valid, but the corresponding macOS application is not installed.",
+			Fix:         cliCommand("config set browser safari"),
+		},
+		"doctor.browser.dia_not_running": {
+			Title:       "Dia is not running",
+			Description: "Dia must be launched with AppleScript JavaScript support before Web Player automation can run.",
+			Fix:         cliCommand("web login --browser dia"),
+		},
+		"doctor.browser.dia_javascript_disabled": {
+			Title:       "Dia JavaScript automation disabled",
+			Description: "The running Dia process was not launched with --enable-applescript-javascript.",
+			Fix:         fmt.Sprintf("quit Dia, then run `%s`", cliCommand("web login --browser dia")),
+		},
 		"doctor.config.missing": {
 			Title:       "Config file missing",
 			Description: "No config file was found at the expected location.",
-			Fix:         "pocketcastsctl config init",
+			Fix:         cliCommand("config init"),
 		},
 		"doctor.auth.session_missing": {
 			Title:       "API session missing",
 			Description: "No environment, Keychain, or legacy API credential is available.",
-			Fix:         "pocketcastsctl auth login",
+			Fix:         cliCommand("auth login"),
 		},
 		"doctor.auth.legacy_config": {
 			Title:       "Legacy plaintext credential",
 			Description: "The CLI is using a deprecated Authorization header from the JSON config.",
-			Fix:         "pocketcastsctl auth login or pocketcastsctl auth import-browser --browser dia",
+			Fix:         fmt.Sprintf("%s or %s", cliCommand("auth login"), cliCommand("auth import-browser --browser dia")),
 		},
 		"doctor.auth.invalid": {
 			Title:       "API session rejected",
 			Description: "The API returned 401 after the active session was refreshed or could not be refreshed.",
-			Fix:         "pocketcastsctl auth login or import a fresh browser session",
+			Fix:         cliCommand("auth login"),
 		},
 		"doctor.auth.unverified": {
 			Title:       "Auth not verified",
 			Description: "Auth could not be validated due to transient/API issues right now.",
-			Fix:         "retry `pocketcastsctl auth verify`",
+			Fix:         fmt.Sprintf("retry `%s`", cliCommand("auth verify")),
 		},
 		"doctor.auth.network.timeout": {
 			Title:       "Auth validation timeout",
 			Description: "API validation timed out before a response was received.",
-			Fix:         "check connectivity/VPN and retry `pocketcastsctl auth verify`",
+			Fix:         fmt.Sprintf("check connectivity/VPN and retry `%s`", cliCommand("auth verify")),
 		},
 		"doctor.auth.network.unreachable": {
 			Title:       "Auth validation network issue",
 			Description: "API validation failed due to DNS/connectivity/network transport errors.",
-			Fix:         "check network access and retry `pocketcastsctl auth verify`",
+			Fix:         fmt.Sprintf("check network access and retry `%s`", cliCommand("auth verify")),
 		},
 		"doctor.auth.api.unavailable": {
 			Title:       "Auth validation API unavailable",
 			Description: "Pocket Casts API returned transient server errors during auth validation.",
-			Fix:         "retry later; inspect with `pocketcastsctl queue api ls --raw` if persistent",
+			Fix:         fmt.Sprintf("retry later; inspect with `%s` if persistent", cliCommand("queue api ls --raw")),
 		},
 		"doctor.local_player.missing": {
 			Title:       "No local player found",
@@ -572,17 +644,17 @@ func verifyAuthWithAPI(cfg config.Config) (bool, error) {
 
 func classifyAuthValidationError(err error) (code, message, hint string) {
 	if err == nil {
-		return "doctor.auth.unverified", "unable to validate auth now", "retry `pocketcastsctl auth verify`"
+		return "doctor.auth.unverified", "unable to validate auth now", fmt.Sprintf("retry `%s`", cliCommand("auth verify"))
 	}
 	s := strings.ToLower(strings.TrimSpace(err.Error()))
 	switch {
 	case strings.Contains(s, "timeout"):
-		return "doctor.auth.network.timeout", "auth validation timed out", "check connectivity/VPN and retry `pocketcastsctl auth verify`"
+		return "doctor.auth.network.timeout", "auth validation timed out", fmt.Sprintf("check connectivity/VPN and retry `%s`", cliCommand("auth verify"))
 	case strings.Contains(s, "connection refused"), strings.Contains(s, "no such host"), strings.Contains(s, "network is unreachable"), strings.Contains(s, "connection reset"):
 		return "doctor.auth.network.unreachable", "auth validation failed due to network/connectivity", "check network access to Pocket Casts API and retry"
 	case strings.Contains(s, "http 5"):
-		return "doctor.auth.api.unavailable", "Pocket Casts API unavailable during auth validation", "retry later; if persistent, inspect with `pocketcastsctl queue api ls --raw`"
+		return "doctor.auth.api.unavailable", "Pocket Casts API unavailable during auth validation", fmt.Sprintf("retry later; if persistent, inspect with `%s`", cliCommand("queue api ls --raw"))
 	default:
-		return "doctor.auth.unverified", fmt.Sprintf("unable to validate auth now (%v)", err), "retry `pocketcastsctl auth verify`"
+		return "doctor.auth.unverified", fmt.Sprintf("unable to validate auth now (%v)", err), fmt.Sprintf("retry `%s`", cliCommand("auth verify"))
 	}
 }

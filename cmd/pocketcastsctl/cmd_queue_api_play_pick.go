@@ -24,7 +24,7 @@ func runQueueAPIPlay(args []string, cfg config.Config, client *pocketcasts.Clien
 	if ok, code := parseFlagsOrExit(fs, args); !ok {
 		return code
 	}
-	if ok, code := requireExactPositionalArgsOrExit(fs, 1, "usage: pocketcastsctl queue api play <index|uuid> [--search q] [--dry-run] [--browser chrome|safari] [--url-contains needle]"); !ok {
+	if ok, code := requireExactPositionalArgsOrExit(fs, 1, "usage: pocketcastsctl queue api play <index|uuid> [--search q] [--dry-run] [--browser <name>] [--url-contains needle]"); !ok {
 		return code
 	}
 
@@ -80,7 +80,7 @@ func runQueueAPIPick(args []string, cfg config.Config, client *pocketcasts.Clien
 	if ok, code := parseFlagsOrExit(fs, args); !ok {
 		return code
 	}
-	if ok, code := requireNoPositionalArgsOrExit(fs, "usage: pocketcastsctl queue api pick [--search q] [--limit N] [--recent] [--unplayed|--in-progress] [--no-play] [--browser chrome|safari] [--url-contains needle]"); !ok {
+	if ok, code := requireNoPositionalArgsOrExit(fs, "usage: pocketcastsctl queue api pick [--search q] [--limit N] [--recent] [--unplayed|--in-progress] [--no-play] [--browser <name>] [--url-contains needle]"); !ok {
 		return code
 	}
 	if *unplayed && *inProgress {

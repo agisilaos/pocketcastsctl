@@ -15,23 +15,55 @@ func TestSafariAppleScriptsCompile(t *testing.T) {
 		t.Skip("Safari AppleScript compilation requires macOS")
 	}
 
-	tests := []struct {
-		name   string
-		script string
-	}{
+	testAppleScriptsCompile(t, "Safari", []appleScriptCompileCase{
 		{name: "page JavaScript", script: appleScriptSafari},
 		{name: "set URL", script: appleScriptSafariSetURL},
 		{name: "list URLs", script: appleScriptSafariListURLs},
+	})
+}
+
+func TestDiaAppleScriptsCompile(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("Dia AppleScript compilation requires macOS")
+	}
+	if _, err := os.Stat("/Applications/Dia.app"); err != nil {
+		t.Skip("Dia is not installed")
 	}
 
+	testAppleScriptsCompile(t, "Dia", []appleScriptCompileCase{
+		{name: "page JavaScript", script: appleScriptDia},
+		{name: "set URL", script: appleScriptDiaSetURL},
+		{name: "list URLs", script: appleScriptDiaListURLs},
+	})
+}
+
+type appleScriptCompileCase struct {
+	name   string
+	script string
+}
+
+func testAppleScriptsCompile(t *testing.T, appName string, tests []appleScriptCompileCase) {
+	t.Helper()
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			compiled := filepath.Join(t.TempDir(), "script.scpt")
 			output, err := exec.Command("/usr/bin/osacompile", "-o", compiled, "-e", tt.script).CombinedOutput()
 			if err != nil {
-				t.Fatalf("compile Safari AppleScript: %v\n%s", err, output)
+				t.Fatalf("compile %s AppleScript: %v\n%s", appName, err, output)
 			}
 		})
+	}
+}
+
+func TestSafariScriptPreservesMatchingTabFailure(t *testing.T) {
+	for _, want := range []string{
+		"set matched to matched + 1",
+		"on error errMsg number errNum",
+		"Found \" & matched & \" matching tab(s) but JavaScript execution failed",
+	} {
+		if !strings.Contains(appleScriptSafari, want) {
+			t.Fatalf("Safari script missing %q", want)
+		}
 	}
 }
 

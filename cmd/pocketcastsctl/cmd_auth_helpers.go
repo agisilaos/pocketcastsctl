@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-func openInBrowser(appName, url string) error {
+func openInBrowser(appName, url string, launchArgs ...string) error {
 	url = strings.TrimSpace(url)
 	if url == "" {
 		return fmt.Errorf("url cannot be empty")
@@ -17,6 +17,10 @@ func openInBrowser(appName, url string) error {
 		args = append(args, "-a", appName)
 	}
 	args = append(args, url)
+	if len(launchArgs) > 0 {
+		args = append(args, "--args")
+		args = append(args, launchArgs...)
+	}
 	cmd := exec.Command("open", args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -25,7 +29,9 @@ func openInBrowser(appName, url string) error {
 
 func defaultAppForBrowser(browser string) string {
 	switch strings.ToLower(strings.TrimSpace(browser)) {
-	case "", "chrome", "googlechrome":
+	case "":
+		return "Safari"
+	case "chrome", "googlechrome":
 		return "Google Chrome"
 	case "safari":
 		return "Safari"

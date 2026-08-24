@@ -63,12 +63,17 @@ func runWeb(args []string, cfg config.Config) int {
 		fmt.Fprintf(os.Stderr, "invalid browser options: %v\n", err)
 		return 2
 	}
+	target := newBrowserTarget(*browser, *browserApp, *urlContains)
+	if err := target.applicationError(); err != nil {
+		target.printFailure(subcommand, err)
+		return 1
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	if subcommand != "status" {
-		return runWebAction(ctx, controller, browsercontrol.Action(subcommand))
+		return runWebAction(ctx, controller, browsercontrol.Action(subcommand), target)
 	}
 
 	var st browsercontrol.PlaybackSnapshot
@@ -78,7 +83,7 @@ func runWeb(args []string, cfg config.Config) int {
 		return statusErr
 	})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "status failed: %v\n", err)
+		target.printFailure("status", err)
 		return 1
 	}
 	if *jsonOut {
@@ -101,10 +106,10 @@ func runWeb(args []string, cfg config.Config) int {
 	return 0
 }
 
-func runWebAction(ctx context.Context, controller *browsercontrol.Controller, action browsercontrol.Action) int {
+func runWebAction(ctx context.Context, controller *browsercontrol.Controller, action browsercontrol.Action, target browserTarget) int {
 	res, err := controller.Do(ctx, action)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%s failed: %v\n", action, err)
+		target.printFailure(string(action), err)
 		return 1
 	}
 	if res.ClickedLabel != "" {

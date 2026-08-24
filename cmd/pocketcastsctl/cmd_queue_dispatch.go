@@ -53,6 +53,11 @@ func runQueue(args []string, cfg config.Config) int {
 		fmt.Fprintf(os.Stderr, "invalid browser options: %v\n", err)
 		return 2
 	}
+	target := newBrowserTarget(*browser, *browserApp, *urlContains)
+	if err := target.applicationError(); err != nil {
+		target.printFailure("queue ls", err)
+		return 1
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -64,7 +69,7 @@ func runQueue(args []string, cfg config.Config) int {
 		return listErr
 	})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "queue ls failed: %v\n", err)
+		target.printFailure("queue ls", err)
 		return 1
 	}
 	items = filterQueueItems(items, *search)
