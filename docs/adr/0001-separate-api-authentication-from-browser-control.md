@@ -1,0 +1,3 @@
+# Separate API authentication from browser control
+
+API sessions are independent of the browser configured for Web Player playback. Terminal login creates a session directly, while browser session import always names its Chrome, Dia, or Safari source explicitly. Persistent access and refresh tokens live in separate, account/scope-aware macOS Keychain items without a silent file fallback; config stores only the active item key and non-secret metadata. This gives up the convenience of inferring an authentication source from playback settings in exchange for predictable behavior, explicit Keychain access, and no plaintext credential persistence.

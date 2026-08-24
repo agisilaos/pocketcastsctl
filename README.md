@@ -1,11 +1,11 @@
 # pocketcastsctl
 
-Control Pocket Casts **Web Player** from the command line on macOS.
+Control Pocket Casts playback, Up Next, and API authentication from the command line on macOS.
 
 [![release](https://img.shields.io/github/v/release/agisilaos/pocketcastsctl?display_name=tag&sort=semver)](https://github.com/agisilaos/pocketcastsctl/releases)
 [![platform](https://img.shields.io/badge/platform-macOS-000000)](#)
 
-This project is intentionally starting with **browser automation** (Safari/Chrome via AppleScript) so play/pause/next/prev works without needing Pocket Casts’ private HTTP APIs. Queue/account APIs can be added later by observing the Web Player network calls.
+Web Player controls use browser automation. API-backed queue commands use a separate API session, so signing the CLI in never requires opening or scripting a browser.
 
 Supported browsers for automation depend on whether the macOS app is scriptable; you can set `--browser` to `chrome`, `safari`, `arc`, `dia`, `brave`, `edge`, or pass a custom app name with `--browser-app`.
 
@@ -14,6 +14,7 @@ Supported browsers for automation depend on whether the macOS app is scriptable;
 ```bash
 cd pocketcastsctl
 mkdir -p bin
+# Go 1.25 or newer is required.
 go build -o ./bin/pocketcastsctl ./cmd/pocketcastsctl
 ./bin/pocketcastsctl help
 ```
@@ -58,16 +59,16 @@ Recommended first-run flow:
 ./bin/pocketcastsctl queue api play 1
 ```
 
-`doctor` validates setup (browser automation, config, auth presence, and API auth validity when configured) and suggests next actions.
+`doctor` reports browser automation and API-session health separately and suggests next actions.
 `setup` is the guided onboarding command (`start` is kept as a deprecated alias).
 
 Setup modes:
 
 ```bash
 ./bin/pocketcastsctl setup                 # full guided flow (interactive on TTY)
-./bin/pocketcastsctl setup run --json      # full agentic report
+./bin/pocketcastsctl setup run --json      # non-interactive report; never prompts
 ./bin/pocketcastsctl setup check --plain   # quick readiness checks only
-./bin/pocketcastsctl setup auth --no-input # auth-only non-interactive
+./bin/pocketcastsctl setup auth --no-input # prints exact auth follow-up commands
 ./bin/pocketcastsctl setup verify --json   # verify-only machine output
 ```
 
@@ -99,7 +100,9 @@ Output contract table:
 | `now` | dashboard | key/value lines | full snapshot object |
 | `setup` | guided onboarding | key/value step report | structured step report |
 | `doctor` | checklist | tab-separated checks | structured checks + counts |
-| `auth tabs` | URL list | URL list | JSON array of URLs |
+| `web tabs` | URL list | URL list | JSON array of URLs |
+| `auth login` | guided terminal login | status fields | structured result/error |
+| `auth import-browser` | explicit session import | status fields | structured result/error |
 | `auth status` | checklist | key/value lines | status object |
 | `auth verify` | checklist | key/value lines | verification object |
 | `web status` | single state line | single state line | `{ \"state\": ... }` |
@@ -107,9 +110,11 @@ Output contract table:
 
 ### Playback (Web Player tab)
 
-Open `https://play.pocketcasts.com` and sign in. Then:
+Open and sign into the Web Player, then control it independently from API authentication:
 
 ```bash
+./bin/pocketcastsctl web login --browser dia
+./bin/pocketcastsctl web tabs --browser chrome
 ./bin/pocketcastsctl web status
 ./bin/pocketcastsctl web status --json
 ./bin/pocketcastsctl web toggle
@@ -195,14 +200,42 @@ macOS may prompt you to allow `osascript` to control your browser (Automation pe
 ./bin/pocketcastsctl queue ls --json
 ```
 
-### Queue (API, best effort)
+### API authentication
 
-This path calls Pocket Casts’ private API (currently `up_next/list`, `up_next/play_next`, `up_next/remove`) using an auth token extracted from your logged-in Web Player tab.
+API authentication is independent from the browser configured for Web Player playback. Choose one of these first-run paths:
 
 ```bash
-./bin/pocketcastsctl auth login
-./bin/pocketcastsctl auth refresh
-./bin/pocketcastsctl auth status
+# Native Pocket Casts account: hidden password prompt, no browser interaction.
+./bin/pocketcastsctl auth login --email person@example.com
+
+# Automation: password comes from a secret manager over stdin and is never stored.
+op read 'op://Private/Pocket Casts/password' | \
+  ./bin/pocketcastsctl auth login --email person@example.com --password-stdin
+
+# Existing social or native session: reads only Pocket Casts' auth cookie.
+./bin/pocketcastsctl auth import-browser --browser dia
+./bin/pocketcastsctl auth import-browser --browser chrome --profile 'Profile 1'
+./bin/pocketcastsctl auth import-browser --browser safari
+```
+
+Terminal login and browser import validate the candidate against the API before replacing the active session. Access and refresh tokens are stored as separate, account/scope-aware macOS Keychain items; the JSON config contains only non-secret session metadata. The password and raw browser cookie are never stored or printed.
+
+```bash
+./bin/pocketcastsctl auth status   # local and fast; no API call
+./bin/pocketcastsctl auth verify   # verifies against the API
+./bin/pocketcastsctl auth refresh  # forces refresh-token exchange
+./bin/pocketcastsctl auth logout
+```
+
+Access tokens refresh proactively near expiry and once after a `401`. A process-only `POCKETCASTS_ACCESS_TOKEN` overrides Keychain and legacy credentials; it is never stored or refreshed. If the configured Keychain session is unavailable, the command fails explicitly instead of silently falling back to a plaintext legacy token.
+
+`auth sync`, `auth tabs`, and `auth clear` remain as deprecated compatibility commands for one release. Use `auth import-browser`, `web tabs`, and `auth logout` respectively.
+
+### Queue (API, best effort)
+
+This path calls Pocket Casts’ private API (`up_next/list`, `up_next/play_next`, and `up_next/remove`) with the active API session.
+
+```bash
 ./bin/pocketcastsctl auth verify
 ./bin/pocketcastsctl queue api ls
 ./bin/pocketcastsctl queue api play 1
@@ -212,28 +245,11 @@ This path calls Pocket Casts’ private API (currently `up_next/list`, `up_next/
 ./bin/pocketcastsctl queue api dedupe --dry-run
 ```
 
-`auth refresh` is a guided flow: open login page, sync token, then verify.
-`auth status` shows whether a token exists and, when possible, token expiry signals.
-`auth verify` performs an explicit API verification check for the stored token.
-`doctor explain <code>` explains specific doctor failure/warning codes and the fastest fix.
-
-Examples:
+`doctor explain <code>` explains specific doctor failure/warning codes and the fastest fix:
 
 ```bash
 ./bin/pocketcastsctl doctor explain doctor.auth.invalid
-./bin/pocketcastsctl doctor explain doctor.auth.invalid --json
-```
-
-For automation/non-interactive use:
-
-```bash
-./bin/pocketcastsctl auth refresh --sync-only --no-input
-```
-
-To retry token selection and verification with multiple candidate passes:
-
-```bash
-./bin/pocketcastsctl auth refresh --candidate-passes 2
+./bin/pocketcastsctl doctor explain doctor.auth.session_missing --json
 ```
 
 Deprecated short aliases (still work for now, but print warnings):
@@ -254,21 +270,12 @@ Picker filters:
 
 These are available on both `queue api pick` and `local pick`.
 
-If `auth sync` can’t find a token, reload `https://play.pocketcasts.com` while logged in and try again.
-If it finds the wrong thing, use:
+If `queue api` commands still return `401 Unauthorized` after their automatic refresh retry, create or import a fresh session:
 
 ```bash
-./bin/pocketcastsctl auth sync --dry-run
-./bin/pocketcastsctl auth sync --key-contains token
+./bin/pocketcastsctl auth login
+./bin/pocketcastsctl auth import-browser --browser dia
 ```
-
-If `queue api` commands return `401 Unauthorized`, refresh credentials:
-
-```bash
-./bin/pocketcastsctl auth refresh
-```
-
-Note: some setups appear to work without an explicit stored auth header; `queue api ls` will attempt the request either way.
 
 Remove from Up Next:
 
@@ -294,7 +301,7 @@ Add “Play Next” (requires episode fields observed in HAR; easiest is `--epis
 
 ## Config + environment
 
-Show config path and current config (redacts `api_headers` values by default):
+Show the config path and non-secret settings. `api_headers.Authorization` is read only for one-release migration compatibility and is redacted by default:
 
 ```bash
 ./bin/pocketcastsctl config path
@@ -310,6 +317,7 @@ Environment overrides:
 - `POCKETCASTS_BROWSER_APP`
 - `POCKETCASTS_URL_CONTAINS`
 - `POCKETCASTS_API_BASE_URL`
+- `POCKETCASTS_ACCESS_TOKEN` (process-only override; never persisted or refreshed)
 
 ## Release
 
