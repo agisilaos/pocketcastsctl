@@ -145,6 +145,18 @@ func TestControllerStatusAndQueueList(t *testing.T) {
 		}
 	})
 
+	t.Run("status unwraps a JSON-string result", func(t *testing.T) {
+		t.Setenv("OSASCRIPT_OUT", `"{\"state\":\"paused\",\"episode_title\":\"Episode 7\"}"`)
+		t.Setenv("OSASCRIPT_CODE", "0")
+		st, err := c.Status(context.Background())
+		if err != nil {
+			t.Fatalf("Status error: %v", err)
+		}
+		if st.State != PlaybackStatePaused || st.EpisodeTitle == nil || *st.EpisodeTitle != "Episode 7" {
+			t.Fatalf("unexpected unwrapped snapshot: %+v", st)
+		}
+	})
+
 	t.Run("queue list json parse", func(t *testing.T) {
 		t.Setenv("OSASCRIPT_OUT", `[{"title":"Ep","href":"/ep"}]`)
 		t.Setenv("OSASCRIPT_CODE", "0")
@@ -318,6 +330,36 @@ func TestControllerDoAndErrors(t *testing.T) {
 	_, err = c.Do(context.Background(), ActionNext)
 	if err == nil || !strings.Contains(err.Error(), "boom") {
 		t.Fatalf("error = %v, want stderr message", err)
+	}
+}
+
+func TestControllerToggleIgnoresEpisodeCardControls(t *testing.T) {
+	setupJXAFakeOsa(t)
+	c := testController()
+
+	t.Setenv("MOCK_BROWSER_JS", `
+var episodeCardButton = {click: function() { throw new Error("episode card clicked"); }};
+var document = {querySelector: function(selector) {
+  if (selector.indexOf(".player-controls") >= 0 || selector.indexOf("play_pause_button") >= 0) return null;
+  return episodeCardButton;
+}};`)
+	_, err := c.Do(context.Background(), ActionToggle)
+	if err == nil || !strings.Contains(err.Error(), "no matching control found") {
+		t.Fatalf("error = %v, want safe no-control failure", err)
+	}
+
+	t.Setenv("MOCK_BROWSER_JS", `
+var playerButton = {click: function() {}};
+var document = {querySelector: function(selector) {
+  if (selector.indexOf(".player-controls") >= 0 || selector.indexOf("play_pause_button") >= 0) return playerButton;
+  return null;
+}};`)
+	result, err := c.Do(context.Background(), ActionToggle)
+	if err != nil {
+		t.Fatalf("Do toggle error: %v", err)
+	}
+	if !result.Clicked || result.ClickedLabel != "Pause" {
+		t.Fatalf("unexpected toggle result: %+v", result)
 	}
 }
 

@@ -28,6 +28,10 @@ The bundle constructs `MediaMetadata` from the active episode and podcast, and i
 - Preserve the existing state-only result when rich sources are unavailable.
 - Do not infer `podcast_title` from Media Session `artist`.
 
-## Remaining live validation
+## Live validation on 2026-08-24
 
-No runnable signed-in Chrome or Safari Pocket Casts tab was available in the development environment. Playing, paused, loading, episode-transition, background-tab, and multiple-media-element behavior still require live verification in both browsers before claiming browser parity.
+- A signed-in Safari tab exposed the primary `audio.audio` element plus Media Session identity. Paused, loading, and playing snapshots returned coherent identity, timing, and progress, and the player-scoped Play/Pause control preserved the active episode.
+- A signed-in Dia tab exposed the same identity and timing sources in a background tab. Dia returned JavaScript results with an extra JSON-string layer, which the controller now unwraps.
+- The tested Dia version ignored both scripted player-button clicks and direct `HTMLMediaElement.play()` requests, even after focusing the tab. Playback actions therefore verify the observed state and fail with a Safari/Chrome recovery hint instead of reporting false success.
+- The available Chrome tab blocked JavaScript from Apple Events, so Chrome still requires live state-matrix verification after that browser setting is enabled.
+- Episode-transition and no-episode states remain covered synthetically but still require live Safari and Chrome verification before claiming full browser parity.

@@ -137,6 +137,14 @@ func (t browserTarget) failure(err error) (string, string) {
 		return "Dia is running without AppleScript JavaScript support",
 			fmt.Sprintf("quit Dia, then run `%s`", cliCommand("web login --browser dia"))
 	}
+	if strings.Contains(lower, "reported") && strings.Contains(lower, "playback state remained") {
+		if fallback, ok := browserFallback(appName); ok {
+			return fmt.Sprintf("%s did not apply the Web Player playback action", appName),
+				fmt.Sprintf("run `%s`", cliCommand("config set browser "+fallback))
+		}
+		return fmt.Sprintf("%s did not apply the Web Player playback action", appName),
+			"use Safari or Chrome for Web Player playback actions"
+	}
 
 	if strings.Contains(lower, "is not installed") || strings.Contains(lower, "unable to find application named") {
 		if fallback, ok := browserFallback(appName); ok {

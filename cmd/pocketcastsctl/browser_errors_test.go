@@ -73,6 +73,13 @@ func TestBrowserAutomationFailureExplainsRecovery(t *testing.T) {
 			wantMessage: "Dia is running without AppleScript JavaScript support",
 			wantHint:    "web login --browser dia",
 		},
+		{
+			name:        "Dia ignored playback action",
+			err:         errors.New("Dia reported Play but playback state remained paused"),
+			browser:     "dia",
+			wantMessage: "Dia did not apply the Web Player playback action",
+			wantHint:    "config set browser safari",
+		},
 	}
 
 	for _, tt := range tests {

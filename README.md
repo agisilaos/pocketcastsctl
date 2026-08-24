@@ -196,7 +196,7 @@ Flags:
 - `--url-contains <substring>` (default: `pocketcasts.com`)
 
 macOS may prompt you to allow `osascript` to control your browser (Automation permission).
-Rich Web Player playback details also require the browser to allow JavaScript from Apple Events. Safari exposes this in Settings > Developer. Dia must be launched with `--enable-applescript-javascript`; `web login --browser dia` adds the flag automatically when Dia is not already running. If Dia is already running without it, quit Dia and rerun the login command. Other browser applications are best effort and may not expose a compatible AppleScript interface.
+Rich Web Player playback details also require the browser to allow JavaScript from Apple Events. Safari exposes this in Settings > Developer. Dia must be launched with `--enable-applescript-javascript`; `web login --browser dia` adds the flag automatically when Dia is not already running. If Dia is already running without it, quit Dia and rerun the login command. Dia supports rich status inspection, but some versions refuse scripted playback actions; the CLI verifies those actions and recommends Safari or Chrome instead of reporting false success. Other browser applications are best effort and may not expose a compatible AppleScript interface.
 
 ### Queue (best-effort, from Web UI)
 

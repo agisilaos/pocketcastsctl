@@ -88,3 +88,29 @@ func TestJSForActionUnknown(t *testing.T) {
 		t.Fatalf("jsForAction unknown output mismatch: %q", js)
 	}
 }
+
+func TestPlaybackActionApplied(t *testing.T) {
+	tests := []struct {
+		name   string
+		action Action
+		before PlaybackState
+		after  PlaybackState
+		want   bool
+	}{
+		{name: "play starts", action: ActionPlay, before: PlaybackStatePaused, after: PlaybackStatePlaying, want: true},
+		{name: "play loads", action: ActionPlay, before: PlaybackStatePaused, after: PlaybackStateLoading, want: true},
+		{name: "play unchanged", action: ActionPlay, before: PlaybackStatePaused, after: PlaybackStatePaused, want: false},
+		{name: "pause stops", action: ActionPause, before: PlaybackStatePlaying, after: PlaybackStatePaused, want: true},
+		{name: "toggle starts", action: ActionToggle, before: PlaybackStatePaused, after: PlaybackStatePlaying, want: true},
+		{name: "toggle stops", action: ActionToggle, before: PlaybackStatePlaying, after: PlaybackStatePaused, want: true},
+		{name: "toggle unchanged", action: ActionToggle, before: PlaybackStatePaused, after: PlaybackStatePaused, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := playbackActionApplied(tt.action, tt.before, tt.after); got != tt.want {
+				t.Fatalf("playbackActionApplied() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

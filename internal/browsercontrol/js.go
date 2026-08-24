@@ -21,11 +21,12 @@ func jsForAction(action Action) string {
 
 func jsClickByAriaLabels(labels []string) string {
 	// Returns JSON string: {clicked, clickedLabel}
-	// Best-effort: labels vary between Pocket Casts builds.
+	// Labels vary between Pocket Casts builds. Keep the lookup inside the
+	// persistent player controls so episode-card Play buttons are never clicked.
 	return `(function(){
   function clickByLabels(labels){
     for (const label of labels){
-      const btn = document.querySelector('button[aria-label="'+label+'"]');
+      const btn = document.querySelector('.player-controls button[aria-label="'+label+'"], button.play_pause_button[aria-label="'+label+'"]');
       if (btn){
         btn.click();
         return {clicked:true, clickedLabel: label};
@@ -39,12 +40,12 @@ func jsClickByAriaLabels(labels []string) string {
 
 func jsToggle() string {
 	return `(function(){
-  const pause = document.querySelector('button[aria-label="Pause"], button[aria-label="Pause episode"]');
+  const pause = document.querySelector('.player-controls button[aria-label="Pause"], .player-controls button[aria-label="Pause episode"], button.play_pause_button[aria-label="Pause"], button.play_pause_button[aria-label="Pause episode"]');
   if (pause){
     pause.click();
     return JSON.stringify({clicked:true, clickedLabel:"Pause"});
   }
-  const play = document.querySelector('button[aria-label="Play"], button[aria-label="Resume"], button[aria-label="Play episode"]');
+  const play = document.querySelector('.player-controls button[aria-label="Play"], .player-controls button[aria-label="Resume"], .player-controls button[aria-label="Play episode"], button.play_pause_button[aria-label="Play"], button.play_pause_button[aria-label="Resume"], button.play_pause_button[aria-label="Play episode"]');
   if (play){
     play.click();
     return JSON.stringify({clicked:true, clickedLabel:"Play"});
