@@ -154,6 +154,7 @@ end using terms from
 `
 
 const appleScriptSafari = `
+using terms from application "Safari"
 on run argv
   set appName to item 1 of argv
   set urlNeedle to item 2 of argv
@@ -174,6 +175,7 @@ on run argv
 
   error "No tab found in " & appName & " with URL containing: " & urlNeedle
 end run
+end using terms from
 `
 
 const appleScriptChromiumSetURL = `
@@ -206,6 +208,7 @@ end using terms from
 `
 
 const appleScriptSafariSetURL = `
+using terms from application "Safari"
 on run argv
   set appName to item 1 of argv
   set urlNeedle to item 2 of argv
@@ -227,6 +230,7 @@ on run argv
 
   error "No tab found in " & appName & " with URL containing: " & urlNeedle
 end run
+end using terms from
 `
 
 const appleScriptChromiumListURLs = `
@@ -261,6 +265,7 @@ end using terms from
 `
 
 const appleScriptSafariListURLs = `
+using terms from application "Safari"
 on run argv
   set appName to item 1 of argv
   set urls to {}
@@ -287,4 +292,5 @@ on run argv
   set AppleScript's text item delimiters to ""
   return "[\"" & joined & "\"]"
 end run
+end using terms from
 `

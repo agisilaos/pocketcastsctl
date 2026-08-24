@@ -3,10 +3,37 @@ package browsercontrol
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
+
+func TestSafariAppleScriptsCompile(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("Safari AppleScript compilation requires macOS")
+	}
+
+	tests := []struct {
+		name   string
+		script string
+	}{
+		{name: "page JavaScript", script: appleScriptSafari},
+		{name: "set URL", script: appleScriptSafariSetURL},
+		{name: "list URLs", script: appleScriptSafariListURLs},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			compiled := filepath.Join(t.TempDir(), "script.scpt")
+			output, err := exec.Command("/usr/bin/osacompile", "-o", compiled, "-e", tt.script).CombinedOutput()
+			if err != nil {
+				t.Fatalf("compile Safari AppleScript: %v\n%s", err, output)
+			}
+		})
+	}
+}
 
 func setupFakeOsa(t *testing.T) {
 	t.Helper()
