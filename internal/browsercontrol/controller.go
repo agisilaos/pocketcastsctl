@@ -55,8 +55,19 @@ type PlaybackDetails struct {
 	ProgressPercent *float64 `json:"progress_percent,omitempty"`
 }
 
+type PlaybackState string
+
+const (
+	PlaybackStatePlaying    PlaybackState = "playing"
+	PlaybackStatePaused     PlaybackState = "paused"
+	PlaybackStateLoading    PlaybackState = "loading"
+	PlaybackStateTransition PlaybackState = "transition"
+	PlaybackStateNoEpisode  PlaybackState = "no_episode"
+	PlaybackStateUnknown    PlaybackState = "unknown"
+)
+
 type PlaybackSnapshot struct {
-	State string `json:"state"` // playing|paused|unknown
+	State PlaybackState `json:"state"`
 	PlaybackDetails
 }
 
@@ -91,8 +102,15 @@ func (c *Controller) Status(ctx context.Context) (PlaybackSnapshot, error) {
 	if err := json.Unmarshal([]byte(out), &st); err != nil {
 		return PlaybackSnapshot{}, fmt.Errorf("unexpected JS result: %q", out)
 	}
-	if st.State == "" {
-		st.State = "unknown"
+	switch st.State {
+	case PlaybackStatePlaying,
+		PlaybackStatePaused,
+		PlaybackStateLoading,
+		PlaybackStateTransition,
+		PlaybackStateNoEpisode,
+		PlaybackStateUnknown:
+	default:
+		st.State = PlaybackStateUnknown
 	}
 	return st, nil
 }

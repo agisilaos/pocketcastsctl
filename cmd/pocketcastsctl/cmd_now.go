@@ -123,7 +123,7 @@ func printNowHuman(s app.NowSnapshot, cfg config.Config) {
 		target := newBrowserTarget(cfg.Browser, cfg.BrowserApp, cfg.URLContains)
 		webError, webHint = target.failure(errors.New(webError))
 	}
-	fmt.Printf("Web    : %s%s\n", strings.ToUpper(s.Web.Status), formatInlineErr(webError))
+	fmt.Printf("Web    : %s%s\n", strings.ToUpper(s.Web.State), formatInlineErr(webError))
 	if webHint != "" {
 		fmt.Println("         next:", webHint)
 	}
@@ -170,7 +170,7 @@ func displaySuggestedAction(action string) string {
 
 func printNowPlain(s app.NowSnapshot) {
 	fmt.Printf("generated_at\t%s\n", s.GeneratedAt.Format(time.RFC3339))
-	fmt.Printf("web_status\t%s\n", s.Web.Status)
+	fmt.Printf("web_status\t%s\n", s.Web.State)
 	if strings.TrimSpace(s.Web.Error) != "" {
 		fmt.Printf("web_error\t%s\n", s.Web.Error)
 	}

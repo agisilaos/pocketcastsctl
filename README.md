@@ -122,7 +122,7 @@ Open and sign into the Web Player, then control it independently from API authen
 ./bin/pocketcastsctl web next
 ```
 
-`web status --json` adds available `episode_title`, `podcast_title`, `position_seconds`, `duration_seconds`, and `progress_percent` fields alongside the existing `state`. Missing metadata is omitted from JSON and shown as `unknown` in detailed human/plain output; a snapshot with state only remains successful.
+`web status --json` adds available `episode_title`, `podcast_title`, `position_seconds`, `duration_seconds`, and `progress_percent` fields alongside the existing `state`. State is derived from the primary Web Player audio element—not unrelated page-level Play buttons—and can be `playing`, `paused`, `loading`, `transition`, `no_episode`, or `unknown`. Missing metadata is omitted from JSON and shown as `unknown` in detailed human/plain output; a snapshot with state only remains successful.
 
 ### Now-playing cockpit
 

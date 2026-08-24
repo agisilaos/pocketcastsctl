@@ -8,7 +8,7 @@ import (
 )
 
 func printWebStatusDetails(snapshot browsercontrol.PlaybackSnapshot) {
-	fmt.Printf("State   : %s\n", strings.ToUpper(snapshot.State))
+	fmt.Printf("State   : %s\n", strings.ToUpper(string(snapshot.State)))
 	printPlaybackDetailsHuman(snapshot.PlaybackDetails)
 }
 

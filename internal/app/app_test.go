@@ -49,7 +49,7 @@ func TestIsRetryableTransientError(t *testing.T) {
 func TestSuggestNowActions(t *testing.T) {
 	actions := suggestNowActions(NowSnapshot{
 		Auth:  NowAuthStatus{Status: "missing"},
-		Web:   NowWebPlaybackSnapshot{Status: "paused"},
+		Web:   NowWebPlaybackSnapshot{State: "paused"},
 		Local: NowLocalStatus{Status: "stopped"},
 		Queue: NowQueueStatus{Status: "ready", Total: 2},
 	})

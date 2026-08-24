@@ -18,7 +18,7 @@ func TestNowSnapshotStartsIndependentCollectorsConcurrently(t *testing.T) {
 	collectors := nowCollectorFuncs{
 		web: func(context.Context) NowWebPlaybackSnapshot {
 			wait("web")
-			return NowWebPlaybackSnapshot{Status: "playing"}
+			return NowWebPlaybackSnapshot{State: "playing"}
 		},
 		local: func() NowLocalStatus {
 			wait("local")
@@ -55,7 +55,7 @@ func TestNowSnapshotStartsIndependentCollectorsConcurrently(t *testing.T) {
 	defer finishDeadline.Stop()
 	select {
 	case snapshot := <-done:
-		if snapshot.Web.Status != "playing" || snapshot.Queue.Total != 1 {
+		if snapshot.Web.State != "playing" || snapshot.Queue.Total != 1 {
 			t.Fatalf("unexpected snapshot: %+v", snapshot)
 		}
 	case <-finishDeadline.C:

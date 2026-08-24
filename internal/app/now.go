@@ -39,7 +39,7 @@ type NowSnapshot struct {
 }
 
 type NowWebPlaybackSnapshot struct {
-	Status string `json:"status"` // playing|paused|unknown|unavailable
+	State string `json:"status"` // JSON name retained for compatibility
 	browsercontrol.PlaybackDetails
 	Error string `json:"error,omitempty"`
 }
@@ -127,7 +127,7 @@ func collectNowSnapshot(ctx context.Context, configPath string, collectors nowCo
 
 func collectWebPlaybackSnapshot(ctx context.Context, cfg config.Config) NowWebPlaybackSnapshot {
 	if _, err := exec.LookPath("osascript"); err != nil {
-		return NowWebPlaybackSnapshot{Status: "unavailable", Error: "osascript not found"}
+		return NowWebPlaybackSnapshot{State: "unavailable", Error: "osascript not found"}
 	}
 	controller, err := browsercontrol.New(browsercontrol.Options{
 		Browser:     cfg.Browser,
@@ -135,20 +135,20 @@ func collectWebPlaybackSnapshot(ctx context.Context, cfg config.Config) NowWebPl
 		URLContains: cfg.URLContains,
 	})
 	if err != nil {
-		return NowWebPlaybackSnapshot{Status: "unavailable", Error: err.Error()}
+		return NowWebPlaybackSnapshot{State: "unavailable", Error: err.Error()}
 	}
 	ctx, cancel := context.WithTimeout(ctx, 4*time.Second)
 	defer cancel()
 	st, err := controller.Status(ctx)
 	if err != nil {
-		return NowWebPlaybackSnapshot{Status: "unavailable", Error: err.Error()}
+		return NowWebPlaybackSnapshot{State: "unavailable", Error: err.Error()}
 	}
-	status := strings.TrimSpace(st.State)
+	status := strings.TrimSpace(string(st.State))
 	if status == "" {
 		status = "unknown"
 	}
 	return NowWebPlaybackSnapshot{
-		Status:          status,
+		State:           status,
 		PlaybackDetails: st.PlaybackDetails,
 	}
 }
@@ -265,10 +265,10 @@ func suggestNowActions(s NowSnapshot) []string {
 		add("pocketcastsctl auth login")
 		add("pocketcastsctl auth import-browser --browser dia")
 	}
-	if s.Web.Status == "paused" {
+	if s.Web.State == "paused" {
 		add("pocketcastsctl web toggle")
 	}
-	if s.Web.Status == "playing" {
+	if s.Web.State == "playing" {
 		add("pocketcastsctl web next")
 	}
 	if s.Local.Status == "paused" {

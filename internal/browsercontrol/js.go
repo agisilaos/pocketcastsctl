@@ -55,14 +55,13 @@ func jsToggle() string {
 
 func jsStatus() string {
 	return `(function(){
-  const hasPause = !!document.querySelector('button[aria-label="Pause"], button[aria-label="Pause episode"]');
-  const hasPlay = !!document.querySelector('button[aria-label="Play"], button[aria-label="Resume"], button[aria-label="Play episode"]');
-  const snapshot = {state: hasPause ? "playing" : (hasPlay ? "paused" : "unknown")};
+  const snapshot = {state: "unknown"};
 
   function cleanText(value){
     return typeof value === "string" ? value.replace(/\s+/g, " ").trim() : "";
   }
 
+  let hasIdentity = false;
   try {
     const metadata = typeof navigator !== "undefined" && navigator.mediaSession
       ? navigator.mediaSession.metadata
@@ -71,28 +70,53 @@ func jsStatus() string {
     const podcastTitle = metadata ? cleanText(metadata.album) : "";
     if (episodeTitle) snapshot.episode_title = episodeTitle;
     if (podcastTitle) snapshot.podcast_title = podcastTitle;
+    hasIdentity = !!(episodeTitle || podcastTitle);
   } catch (_) {
-    // Identity is optional; a snapshot with state only remains valid.
+    // Identity is optional; media evidence can still provide a useful state.
   }
 
   try {
     const media = document.querySelector("audio.audio");
-    if (media) {
-      const position = Number(media.currentTime);
-      const duration = Number(media.duration);
-      if (Number.isFinite(position) && position >= 0) {
-        snapshot.position_seconds = Math.floor(position);
-      }
-      if (Number.isFinite(duration) && duration > 0) {
-        snapshot.duration_seconds = Math.floor(duration);
-      }
-      if (Number.isFinite(position) && position >= 0 && Number.isFinite(duration) && duration > 0) {
-        const percent = Math.min(100, Math.max(0, position / duration * 100));
-        snapshot.progress_percent = Math.round(percent * 10) / 10;
-      }
+    if (!media) {
+      snapshot.state = hasIdentity ? "transition" : "no_episode";
+      return JSON.stringify(snapshot);
+    }
+
+    const position = Number(media.currentTime);
+    const duration = Number(media.duration);
+    const readyState = Number(media.readyState);
+    const source = cleanText(media.currentSrc || media.src || "");
+    const hasPosition = Number.isFinite(position) && position > 0;
+    const hasDuration = Number.isFinite(duration) && duration > 0;
+    const hasMediaEvidence = hasIdentity || source || hasPosition || hasDuration;
+
+    if (!hasMediaEvidence) {
+      snapshot.state = "no_episode";
+      return JSON.stringify(snapshot);
+    }
+
+    if (media.ended === true) {
+      snapshot.state = "transition";
+    } else if (typeof media.paused !== "boolean") {
+      snapshot.state = "unknown";
+    } else if (!media.paused && (media.seeking === true || (Number.isFinite(readyState) && readyState < 3))) {
+      snapshot.state = "loading";
+    } else {
+      snapshot.state = media.paused ? "paused" : "playing";
+    }
+
+    if (Number.isFinite(position) && position >= 0) {
+      snapshot.position_seconds = Math.floor(position);
+    }
+    if (hasDuration) {
+      snapshot.duration_seconds = Math.floor(duration);
+    }
+    if (Number.isFinite(position) && position >= 0 && hasDuration) {
+      const percent = Math.min(100, Math.max(0, position / duration * 100));
+      snapshot.progress_percent = Math.round(percent * 10) / 10;
     }
   } catch (_) {
-    // Timing is optional; state and any identity details still succeed.
+    // An incomplete Web Player DOM degrades to unknown with partial identity.
   }
 
   return JSON.stringify(snapshot);

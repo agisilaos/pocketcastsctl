@@ -193,6 +193,79 @@ var document = {
 	}
 }
 
+func TestControllerStatusStateMatrix(t *testing.T) {
+	setupJXAFakeOsa(t)
+
+	tests := []struct {
+		name string
+		mock string
+		want PlaybackState
+	}{
+		{
+			name: "playing",
+			mock: `
+var media = {currentTime: 10, duration: 100, paused: false, ended: false, seeking: false, readyState: 4};
+var navigator = {mediaSession: {metadata: {title: "Episode", album: "Podcast"}}};
+var document = {querySelector: function(selector) { return selector === "audio.audio" ? media : null; }};`,
+			want: PlaybackStatePlaying,
+		},
+		{
+			name: "paused",
+			mock: `
+var media = {currentTime: 10, duration: 100, paused: true, ended: false, seeking: false, readyState: 4};
+var navigator = {mediaSession: {metadata: {title: "Episode", album: "Podcast"}}};
+var document = {querySelector: function(selector) { return selector === "audio.audio" ? media : null; }};`,
+			want: PlaybackStatePaused,
+		},
+		{
+			name: "loading",
+			mock: `
+var media = {currentTime: 10, duration: 100, paused: false, ended: false, seeking: true, readyState: 2};
+var navigator = {mediaSession: {metadata: {title: "Episode", album: "Podcast"}}};
+var document = {querySelector: function(selector) { return selector === "audio.audio" ? media : null; }};`,
+			want: PlaybackStateLoading,
+		},
+		{
+			name: "episode transition",
+			mock: `
+var media = {currentTime: 100, duration: 100, paused: true, ended: true, seeking: false, readyState: 4};
+var navigator = {mediaSession: {metadata: {title: "Previous Episode", album: "Podcast"}}};
+var document = {querySelector: function(selector) { return selector === "audio.audio" ? media : null; }};`,
+			want: PlaybackStateTransition,
+		},
+		{
+			name: "metadata transition without media",
+			mock: `
+var navigator = {mediaSession: {metadata: {title: "Next Episode", album: "Podcast"}}};
+var document = {querySelector: function() { return null; }};`,
+			want: PlaybackStateTransition,
+		},
+		{
+			name: "no episode ignores unrelated play controls",
+			mock: `
+var navigator = {mediaSession: {metadata: null}};
+var document = {querySelector: function(selector) {
+  if (selector.indexOf("Play") >= 0) return {};
+  return null;
+}};`,
+			want: PlaybackStateNoEpisode,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("MOCK_BROWSER_JS", tt.mock)
+			got, err := testController().Status(context.Background())
+			if err != nil {
+				t.Fatalf("Status error: %v", err)
+			}
+			if got.State != tt.want {
+				t.Fatalf("state = %q, want %q; snapshot=%+v", got.State, tt.want, got)
+			}
+		})
+	}
+}
+
 func TestControllerStatusIgnoresUnvalidatedGenericMediaElements(t *testing.T) {
 	setupJXAFakeOsa(t)
 	t.Setenv("MOCK_BROWSER_JS", `
