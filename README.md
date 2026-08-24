@@ -299,6 +299,24 @@ Add “Play Next” (requires episode fields observed in HAR; easiest is `--epis
 ./bin/pocketcastsctl queue api add --episode-json '{"uuid":"...","podcast":"...","published":"...","title":"...","url":"..."}'
 ```
 
+### HAR diagnostics
+
+Inspect the original capture before creating a copy that is safer to share:
+
+```bash
+./bin/pocketcastsctl har summarize capture.har
+./bin/pocketcastsctl har graphql capture.har
+./bin/pocketcastsctl har redact capture.har capture.redacted.har
+```
+
+`har redact` preserves endpoint metadata such as request method, origin/path,
+response status, and timings. It removes request and response header, cookie,
+query, form, and body values, along with browser-specific HAR extension fields.
+Malformed captures fail without replacing an existing output file, and successful
+outputs are written atomically with owner-only (`0600`) permissions. Because body
+values are removed, run `har graphql` on the original capture first. Treat the
+original HAR as sensitive and review redacted files before sharing them.
+
 ## Config + environment
 
 Show the config path and non-secret settings. `api_headers.Authorization` is read only for one-release migration compatibility and is redacted by default:
