@@ -7,57 +7,61 @@ import (
 )
 
 var usageText = map[string]string{
-	"config init":      "pocketcastsctl config init",
-	"config path":      "pocketcastsctl config path",
-	"config show":      "pocketcastsctl config show [--json] [--reveal-secrets]",
-	"auth login":       "pocketcastsctl auth login [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--url-contains needle]",
-	"auth refresh":     "pocketcastsctl auth refresh [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--url-contains needle] [--key-contains q] [--candidate-passes N] [--sync-only] [--no-input]",
-	"auth sync":        "pocketcastsctl auth sync [--browser <name>] [--browser-app <app>] [--url-contains needle] [--header name] [--prefix pfx] [--key-contains q] [--dry-run]",
-	"auth tabs":        "pocketcastsctl auth tabs [--browser <name>] [--browser-app <app>] [--json] [--plain]",
-	"auth status":      "pocketcastsctl auth status [--json] [--plain]",
-	"auth verify":      "pocketcastsctl auth verify [--json] [--plain]",
-	"auth clear":       "pocketcastsctl auth clear",
-	"web play":         "pocketcastsctl web play [--browser <name>] [--browser-app <app>] [--url-contains needle]",
-	"web pause":        "pocketcastsctl web pause [--browser <name>] [--browser-app <app>] [--url-contains needle]",
-	"web toggle":       "pocketcastsctl web toggle [--browser <name>] [--browser-app <app>] [--url-contains needle]",
-	"web next":         "pocketcastsctl web next [--browser <name>] [--browser-app <app>] [--url-contains needle]",
-	"web prev":         "pocketcastsctl web prev [--browser <name>] [--browser-app <app>] [--url-contains needle]",
-	"web status":       "pocketcastsctl web status [--json] [--plain] [--browser <name>] [--browser-app <app>] [--url-contains needle]",
-	"queue ls":         "pocketcastsctl queue ls [--json] [--plain] [--search q] [--limit N] [--browser <name>] [--browser-app <app>] [--url-contains needle]",
-	"queue api ls":     "pocketcastsctl queue api ls [--limit N] [--search q] [--json|--plain|--raw]",
-	"queue api add":    "pocketcastsctl queue api add (--uuid id --podcast id --title t --published rfc3339 --url audioUrl) | (--episode-json json) [--raw]",
-	"queue api rm":     "pocketcastsctl queue api rm [--dry-run] [--force|--no-input] [--raw] <episode-uuid...>",
-	"queue api play":   "pocketcastsctl queue api play <index|uuid> [--search q] [--dry-run] [--browser <name>] [--browser-app <app>] [--url-contains needle] [--web-base url]",
-	"queue api pick":   "pocketcastsctl queue api pick [--search q] [--limit N] [--recent] [--unplayed|--in-progress] [--no-play] [--browser <name>] [--browser-app <app>] [--url-contains needle] [--web-base url]",
-	"queue api bump":   "pocketcastsctl queue api bump <index|uuid> [--dry-run] [--json|--raw]",
-	"queue api move":   "pocketcastsctl queue api move <index|uuid> <to-index> [--dry-run] [--json|--raw]",
-	"queue api dedupe": "pocketcastsctl queue api dedupe [--dry-run] [--json|--raw]",
-	"local pick":       "pocketcastsctl local pick [--search q] [--limit N] [--recent] [--unplayed|--in-progress]",
-	"local play":       "pocketcastsctl local play [--from-start] [--dry-run] <index|uuid>",
-	"local pause":      "pocketcastsctl local pause",
-	"local resume":     "pocketcastsctl local resume",
-	"local stop":       "pocketcastsctl local stop",
-	"local status":     "pocketcastsctl local status [--json] [--plain]",
-	"har summarize":    "pocketcastsctl har summarize [--host host] [--json] <file.har>",
-	"har graphql":      "pocketcastsctl har graphql [--host host] [--json] <file.har>",
-	"har redact":       "pocketcastsctl har redact <in.har> <out.har>",
-	"doctor explain":   "pocketcastsctl doctor explain <code> [--json]",
-	"setup":            "pocketcastsctl setup [run|check|auth|verify] [--json|--plain] [--no-input] [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--url-contains needle]",
-	"setup run":        "pocketcastsctl setup run [--json|--plain] [--no-input] [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--url-contains needle]",
-	"setup check":      "pocketcastsctl setup check [--json|--plain]",
-	"setup auth":       "pocketcastsctl setup auth [--json|--plain] [--no-input] [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--url-contains needle]",
-	"setup verify":     "pocketcastsctl setup verify [--json|--plain]",
-	"start":            "pocketcastsctl start [--json] [--no-input] [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--url-contains needle]",
-	"now":              "pocketcastsctl now [--watch] [--interactive] [--interval 5s] [--verify-auth] [--json|--plain]",
-	"completion":       "pocketcastsctl completion [zsh|bash|fish]",
-	"doctor":           "pocketcastsctl doctor [--json|--plain] [--quick|--full] [--fix [--apply]]",
-	"auth":             "pocketcastsctl auth <login|refresh|sync|tabs|status|verify|clear>",
-	"config":           "pocketcastsctl config <init|path|show>",
-	"web":              "pocketcastsctl web <play|pause|toggle|next|prev|status> [--browser <name>] [--browser-app <app>] [--url-contains needle]",
-	"queue":            "pocketcastsctl queue <ls|api>",
-	"queue api":        "pocketcastsctl queue api <ls|add|rm|play|pick|bump|move|dedupe>",
-	"local":            "pocketcastsctl local <pick|play|pause|resume|stop|status>",
-	"har":              "pocketcastsctl har <summarize|graphql|redact>",
+	"config init":         "pocketcastsctl config init",
+	"config path":         "pocketcastsctl config path",
+	"config show":         "pocketcastsctl config show [--json] [--reveal-secrets]",
+	"auth login":          "pocketcastsctl auth login [--email address] [--password-stdin] [--force] [--no-input] [--json|--plain]",
+	"auth import-browser": "pocketcastsctl auth import-browser --browser <chrome|dia|safari> [--profile name] [--force] [--no-input] [--json|--plain]",
+	"auth refresh":        "pocketcastsctl auth refresh [--json|--plain]",
+	"auth sync":           "pocketcastsctl auth sync --browser <chrome|dia|safari> [--profile name] [--force] [--no-input] [--json|--plain]",
+	"auth tabs":           "pocketcastsctl auth tabs [--browser <name>] [--browser-app <app>] [--json] [--plain]",
+	"auth status":         "pocketcastsctl auth status [--json] [--plain]",
+	"auth verify":         "pocketcastsctl auth verify [--json] [--plain]",
+	"auth clear":          "pocketcastsctl auth clear",
+	"auth logout":         "pocketcastsctl auth logout [--json|--plain]",
+	"web login":           "pocketcastsctl web login [--browser <name>] [--browser-app <app>] [--url url]",
+	"web tabs":            "pocketcastsctl web tabs [--browser <name>] [--browser-app <app>] [--json|--plain]",
+	"web play":            "pocketcastsctl web play [--browser <name>] [--browser-app <app>] [--url-contains needle]",
+	"web pause":           "pocketcastsctl web pause [--browser <name>] [--browser-app <app>] [--url-contains needle]",
+	"web toggle":          "pocketcastsctl web toggle [--browser <name>] [--browser-app <app>] [--url-contains needle]",
+	"web next":            "pocketcastsctl web next [--browser <name>] [--browser-app <app>] [--url-contains needle]",
+	"web prev":            "pocketcastsctl web prev [--browser <name>] [--browser-app <app>] [--url-contains needle]",
+	"web status":          "pocketcastsctl web status [--json] [--plain] [--browser <name>] [--browser-app <app>] [--url-contains needle]",
+	"queue ls":            "pocketcastsctl queue ls [--json] [--plain] [--search q] [--limit N] [--browser <name>] [--browser-app <app>] [--url-contains needle]",
+	"queue api ls":        "pocketcastsctl queue api ls [--limit N] [--search q] [--json|--plain|--raw]",
+	"queue api add":       "pocketcastsctl queue api add (--uuid id --podcast id --title t --published rfc3339 --url audioUrl) | (--episode-json json) [--raw]",
+	"queue api rm":        "pocketcastsctl queue api rm [--dry-run] [--force|--no-input] [--raw] <episode-uuid...>",
+	"queue api play":      "pocketcastsctl queue api play <index|uuid> [--search q] [--dry-run] [--browser <name>] [--browser-app <app>] [--url-contains needle] [--web-base url]",
+	"queue api pick":      "pocketcastsctl queue api pick [--search q] [--limit N] [--recent] [--unplayed|--in-progress] [--no-play] [--browser <name>] [--browser-app <app>] [--url-contains needle] [--web-base url]",
+	"queue api bump":      "pocketcastsctl queue api bump <index|uuid> [--dry-run] [--json|--raw]",
+	"queue api move":      "pocketcastsctl queue api move <index|uuid> <to-index> [--dry-run] [--json|--raw]",
+	"queue api dedupe":    "pocketcastsctl queue api dedupe [--dry-run] [--json|--raw]",
+	"local pick":          "pocketcastsctl local pick [--search q] [--limit N] [--recent] [--unplayed|--in-progress]",
+	"local play":          "pocketcastsctl local play [--from-start] [--dry-run] <index|uuid>",
+	"local pause":         "pocketcastsctl local pause",
+	"local resume":        "pocketcastsctl local resume",
+	"local stop":          "pocketcastsctl local stop",
+	"local status":        "pocketcastsctl local status [--json] [--plain]",
+	"har summarize":       "pocketcastsctl har summarize [--host host] [--json] <file.har>",
+	"har graphql":         "pocketcastsctl har graphql [--host host] [--json] <file.har>",
+	"har redact":          "pocketcastsctl har redact <in.har> <out.har>",
+	"doctor explain":      "pocketcastsctl doctor explain <code> [--json]",
+	"setup":               "pocketcastsctl setup [run|check|auth|verify] [--json|--plain] [--no-input]",
+	"setup run":           "pocketcastsctl setup run [--json|--plain] [--no-input]",
+	"setup check":         "pocketcastsctl setup check [--json|--plain]",
+	"setup auth":          "pocketcastsctl setup auth [--json|--plain] [--no-input]",
+	"setup verify":        "pocketcastsctl setup verify [--json|--plain]",
+	"start":               "pocketcastsctl start [--json|--plain] [--no-input]",
+	"now":                 "pocketcastsctl now [--watch] [--interactive] [--interval 5s] [--verify-auth] [--json|--plain]",
+	"completion":          "pocketcastsctl completion [zsh|bash|fish]",
+	"doctor":              "pocketcastsctl doctor [--json|--plain] [--quick|--full] [--fix [--apply]]",
+	"auth":                "pocketcastsctl auth <login|import-browser|refresh|status|verify|logout>",
+	"config":              "pocketcastsctl config <init|path|show>",
+	"web":                 "pocketcastsctl web <login|tabs|play|pause|toggle|next|prev|status> [--browser <name>] [--browser-app <app>]",
+	"queue":               "pocketcastsctl queue <ls|api>",
+	"queue api":           "pocketcastsctl queue api <ls|add|rm|play|pick|bump|move|dedupe>",
+	"local":               "pocketcastsctl local <pick|play|pause|resume|stop|status>",
+	"har":                 "pocketcastsctl har <summarize|graphql|redact>",
 }
 
 func printUsage(topic string) {
@@ -113,6 +117,8 @@ func runHelp(args []string) int {
 		switch args[1] {
 		case "login":
 			printAuthLoginHelp()
+		case "import-browser":
+			printAuthImportBrowserHelp()
 		case "refresh":
 			printAuthRefreshHelp()
 		case "sync":
@@ -125,6 +131,8 @@ func runHelp(args []string) int {
 			printAuthVerifyHelp()
 		case "clear":
 			printAuthClearHelp()
+		case "logout":
+			printAuthLogoutHelp()
 		default:
 			return unknownHelpTopic(args)
 		}
@@ -134,6 +142,10 @@ func runHelp(args []string) int {
 			return 0
 		}
 		switch args[1] {
+		case "login":
+			printWebLoginHelp()
+		case "tabs":
+			printWebTabsHelp()
 		case "play":
 			printWebPlayHelp()
 		case "pause":
@@ -304,7 +316,7 @@ func aliasWarning(oldCmd, newCmd string) string {
 
 func printRootHelp() {
 	fmt.Print(strings.TrimSpace(`
-pocketcastsctl controls the Pocket Casts Web Player (macOS).
+pocketcastsctl controls Pocket Casts playback and queue workflows from macOS.
 
 Start here:
   pocketcastsctl now
@@ -319,10 +331,9 @@ Common tasks:
   Run guided setup:
   pocketcastsctl setup
 
-  Sign in and sync auth:
+  Authenticate without opening a browser:
   pocketcastsctl auth login
-  pocketcastsctl auth refresh
-  pocketcastsctl auth sync
+  pocketcastsctl auth import-browser --browser dia
   pocketcastsctl auth verify
 
   Control playback:
@@ -340,14 +351,15 @@ Command reference:
   pocketcastsctl now [--watch] [--interactive] [--interval 5s] [--verify-auth] [--json|--plain]
   pocketcastsctl doctor [--json|--plain] [--quick|--full] [--fix [--apply]]
   pocketcastsctl doctor explain <code> [--json]
-  pocketcastsctl setup [run|check|auth|verify] [--json|--plain] [--no-input] [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--url-contains needle]
-  pocketcastsctl auth login [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com]
-  pocketcastsctl auth refresh [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--candidate-passes N]
-  pocketcastsctl auth sync [--browser <name>] [--browser-app <app>] [--url-contains needle]
-  pocketcastsctl auth tabs [--browser <name>] [--browser-app <app>] [--json] [--plain]
+  pocketcastsctl setup [run|check|auth|verify] [--json|--plain] [--no-input]
+  pocketcastsctl auth login [--email address] [--password-stdin] [--force] [--no-input] [--json|--plain]
+  pocketcastsctl auth import-browser --browser <chrome|dia|safari> [--profile name] [--force] [--no-input] [--json|--plain]
+  pocketcastsctl auth refresh [--json|--plain]
   pocketcastsctl auth status [--json] [--plain]
   pocketcastsctl auth verify [--json] [--plain]
-  pocketcastsctl auth clear
+  pocketcastsctl auth logout [--json|--plain]
+  pocketcastsctl web login [--browser <name>] [--browser-app <app>] [--url url]
+  pocketcastsctl web tabs [--browser <name>] [--browser-app <app>] [--json|--plain]
   pocketcastsctl web <play|pause|toggle|next|prev|status> [--browser <name>] [--browser-app <app>] [--url-contains needle]
   pocketcastsctl queue ls [--json] [--browser <name>] [--browser-app <app>] [--url-contains needle]
   pocketcastsctl queue api ls [--limit N] [--search q] [--json|--plain|--raw]
@@ -372,13 +384,18 @@ Deprecated shortcuts (use canonical commands above):
   pocketcastsctl play <index|uuid>
   pocketcastsctl rm <episode-uuid...>
   pocketcastsctl toggle|next|prev|pause|status
+
+Deprecated authentication compatibility commands:
+  pocketcastsctl auth sync
+  pocketcastsctl auth tabs
+  pocketcastsctl auth clear
 `) + "\n")
 }
 
 func printSetupHelp() {
 	fmt.Print(strings.TrimSpace(`
 Usage:
-  pocketcastsctl setup [run|check|auth|verify] [--json|--plain] [--no-input] [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--url-contains needle]
+  pocketcastsctl setup [run|check|auth|verify] [--json|--plain] [--no-input]
   pocketcastsctl setup run [--json|--plain] [--no-input]
   pocketcastsctl setup check [--json|--plain]
   pocketcastsctl setup auth [--json|--plain] [--no-input]
@@ -409,26 +426,30 @@ func printConfigHelp() {
 	printUsageList("config init", "config path", "config show")
 }
 
-func printConfigInitHelp()  { printUsage("config init") }
-func printConfigPathHelp()  { printUsage("config path") }
-func printConfigShowHelp()  { printUsage("config show") }
-func printAuthLoginHelp()   { printUsage("auth login") }
-func printAuthRefreshHelp() { printUsage("auth refresh") }
-func printAuthSyncHelp()    { printUsage("auth sync") }
-func printAuthTabsHelp()    { printUsage("auth tabs") }
-func printAuthStatusHelp()  { printUsage("auth status") }
-func printAuthVerifyHelp()  { printUsage("auth verify") }
-func printAuthClearHelp()   { printUsage("auth clear") }
-func printWebPlayHelp()     { printUsage("web play") }
-func printWebPauseHelp()    { printUsage("web pause") }
-func printWebToggleHelp()   { printUsage("web toggle") }
-func printWebNextHelp()     { printUsage("web next") }
-func printWebPrevHelp()     { printUsage("web prev") }
-func printWebStatusHelp()   { printUsage("web status") }
-func printQueueLSHelp()     { printUsage("queue ls") }
-func printQueueAPILSHelp()  { printUsage("queue api ls") }
-func printQueueAPIAddHelp() { printUsage("queue api add") }
-func printQueueAPIRMHelp()  { printUsage("queue api rm") }
+func printConfigInitHelp()        { printUsage("config init") }
+func printConfigPathHelp()        { printUsage("config path") }
+func printConfigShowHelp()        { printUsage("config show") }
+func printAuthLoginHelp()         { printUsage("auth login") }
+func printAuthImportBrowserHelp() { printUsage("auth import-browser") }
+func printAuthRefreshHelp()       { printUsage("auth refresh") }
+func printAuthSyncHelp()          { printUsage("auth sync") }
+func printAuthTabsHelp()          { printUsage("auth tabs") }
+func printAuthStatusHelp()        { printUsage("auth status") }
+func printAuthVerifyHelp()        { printUsage("auth verify") }
+func printAuthClearHelp()         { printUsage("auth clear") }
+func printAuthLogoutHelp()        { printUsage("auth logout") }
+func printWebLoginHelp()          { printUsage("web login") }
+func printWebTabsHelp()           { printUsage("web tabs") }
+func printWebPlayHelp()           { printUsage("web play") }
+func printWebPauseHelp()          { printUsage("web pause") }
+func printWebToggleHelp()         { printUsage("web toggle") }
+func printWebNextHelp()           { printUsage("web next") }
+func printWebPrevHelp()           { printUsage("web prev") }
+func printWebStatusHelp()         { printUsage("web status") }
+func printQueueLSHelp()           { printUsage("queue ls") }
+func printQueueAPILSHelp()        { printUsage("queue api ls") }
+func printQueueAPIAddHelp()       { printUsage("queue api add") }
+func printQueueAPIRMHelp()        { printUsage("queue api rm") }
 func printQueueAPIPlayHelp() {
 	printUsage("queue api play")
 }
@@ -450,11 +471,12 @@ func printDoctorExplainHelp() {
 }
 
 func printAuthHelp() {
-	printUsageList("auth login", "auth refresh", "auth sync", "auth tabs", "auth status", "auth verify", "auth clear")
+	printUsageList("auth login", "auth import-browser", "auth refresh", "auth status", "auth verify", "auth logout")
+	fmt.Println("\nDeprecated: auth sync, auth tabs, auth clear")
 }
 
 func printWebHelp() {
-	printUsage("web")
+	printUsageList("web login", "web tabs", "web play", "web pause", "web toggle", "web next", "web prev", "web status")
 }
 
 func printQueueHelp() {

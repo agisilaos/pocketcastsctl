@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"pocketcastsctl/internal/authutil"
-	"pocketcastsctl/internal/browsercontrol"
 	"pocketcastsctl/internal/config"
 	"pocketcastsctl/internal/pocketcasts"
 )
@@ -209,7 +208,7 @@ func TestRunAuthStatusDefault(t *testing.T) {
 	if !strings.Contains(stdout, "authorization: missing") {
 		t.Fatalf("stdout missing authorization status: %q", stdout)
 	}
-	if !strings.Contains(stdout, "next: pocketcastsctl auth sync") {
+	if !strings.Contains(stdout, "next: pocketcastsctl auth import-browser --browser dia") {
 		t.Fatalf("stdout missing auth next-step tip: %q", stdout)
 	}
 	if strings.TrimSpace(stderr) != "" {
@@ -263,7 +262,7 @@ func TestRunAuthVerifyMissingAuth(t *testing.T) {
 	if !strings.Contains(stdout, "auth verify: FAIL") {
 		t.Fatalf("stdout missing FAIL status: %q", stdout)
 	}
-	if !strings.Contains(stdout, "next: pocketcastsctl auth refresh") {
+	if !strings.Contains(stdout, "next: pocketcastsctl auth login") {
 		t.Fatalf("stdout missing recovery command: %q", stdout)
 	}
 }
@@ -445,10 +444,10 @@ func TestRunDoctorExplainKnownCode(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0; stderr=%q", code, stderr)
 	}
-	if !strings.Contains(stdout, "Stored auth rejected") {
+	if !strings.Contains(stdout, "API session rejected") {
 		t.Fatalf("stdout missing doctor explain title: %q", stdout)
 	}
-	if !strings.Contains(stdout, "pocketcastsctl auth refresh") {
+	if !strings.Contains(stdout, "pocketcastsctl auth login") {
 		t.Fatalf("stdout missing doctor explain fix: %q", stdout)
 	}
 }
@@ -516,25 +515,25 @@ func TestApplyEpisodeSelectionFilters(t *testing.T) {
 }
 
 func TestRunStartNoInputMissingAuth(t *testing.T) {
-	code, _, stderr := runForTest(t, []string{"start", "--no-input"}, "")
-	if code != 1 {
-		t.Fatalf("exit code = %d, want 1", code)
+	code, stdout, stderr := runForTest(t, []string{"start", "--no-input"}, "")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
 	}
 	if !strings.Contains(stderr, "`start` is deprecated; use `pocketcastsctl setup`") {
 		t.Fatalf("stderr missing deprecation warning: %q", stderr)
 	}
-	if !strings.Contains(stderr, "auth not configured and --no-input is set") {
-		t.Fatalf("stderr missing no-input auth message: %q", stderr)
+	if !strings.Contains(stdout, "pocketcastsctl auth login --email <address> --password-stdin") {
+		t.Fatalf("stdout missing exact auth command: %q", stdout)
 	}
 }
 
 func TestRunStartJSONMissingAuth(t *testing.T) {
 	code, stdout, stderr := runForTest(t, []string{"start", "--json"}, "")
-	if code != 1 {
-		t.Fatalf("exit code = %d, want 1; stderr=%q", code, stderr)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr=%q", code, stderr)
 	}
-	if !strings.Contains(stdout, "\"status\": \"fail\"") {
-		t.Fatalf("stdout missing failed status: %q", stdout)
+	if !strings.Contains(stdout, "\"status\": \"warn\"") {
+		t.Fatalf("stdout missing warning status: %q", stdout)
 	}
 	if !strings.Contains(stdout, "\"id\": \"auth\"") {
 		t.Fatalf("stdout missing auth step: %q", stdout)
@@ -543,11 +542,11 @@ func TestRunStartJSONMissingAuth(t *testing.T) {
 
 func TestRunSetupJSONMissingAuth(t *testing.T) {
 	code, stdout, stderr := runForTest(t, []string{"setup", "--json"}, "")
-	if code != 1 {
-		t.Fatalf("exit code = %d, want 1; stderr=%q", code, stderr)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr=%q", code, stderr)
 	}
-	if !strings.Contains(stdout, "\"status\": \"fail\"") {
-		t.Fatalf("stdout missing failed status: %q", stdout)
+	if !strings.Contains(stdout, "\"status\": \"warn\"") {
+		t.Fatalf("stdout missing warning status: %q", stdout)
 	}
 	if !strings.Contains(stdout, "\"id\": \"auth\"") {
 		t.Fatalf("stdout missing auth step: %q", stdout)
@@ -569,8 +568,8 @@ func TestRunSetupCheckJSON(t *testing.T) {
 
 func TestRunSetupAuthNoInputPlain(t *testing.T) {
 	code, stdout, stderr := runForTest(t, []string{"setup", "auth", "--no-input", "--plain"}, "")
-	if code != 1 {
-		t.Fatalf("exit code = %d, want 1; stderr=%q", code, stderr)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr=%q", code, stderr)
 	}
 	if !strings.Contains(stdout, "command\tauth") {
 		t.Fatalf("stdout missing command auth: %q", stdout)
@@ -725,18 +724,21 @@ func TestRunHelpAuthRefresh(t *testing.T) {
 	if !strings.Contains(stdout, "pocketcastsctl auth refresh") {
 		t.Fatalf("stdout missing auth refresh usage: %q", stdout)
 	}
-	if !strings.Contains(stdout, "--sync-only") {
-		t.Fatalf("stdout missing --sync-only option: %q", stdout)
+	if !strings.Contains(stdout, "--json|--plain") {
+		t.Fatalf("stdout missing output options: %q", stdout)
 	}
 }
 
-func TestRunAuthRefreshNoInputRequiresSyncOnly(t *testing.T) {
-	code, _, stderr := runForTest(t, []string{"auth", "refresh", "--no-input"}, "")
-	if code != 2 {
-		t.Fatalf("exit code = %d, want 2", code)
+func TestRunAuthRefreshMissingSession(t *testing.T) {
+	code, stdout, stderr := runForTest(t, []string{"auth", "refresh", "--json"}, "")
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
 	}
-	if !strings.Contains(stderr, "--no-input requires --sync-only") {
-		t.Fatalf("stderr missing validation message: %q", stderr)
+	if !strings.Contains(stdout, "auth.refresh.failed") {
+		t.Fatalf("stdout missing refresh failure: %q", stdout)
+	}
+	if strings.TrimSpace(stderr) != "" {
+		t.Fatalf("stderr = %q", stderr)
 	}
 }
 
@@ -816,20 +818,6 @@ func TestAuthTokenExpiry(t *testing.T) {
 	}
 	if exp != 4102444800 {
 		t.Fatalf("exp = %d, want 4102444800", exp)
-	}
-}
-
-func TestRankedTokenCandidatesPrefersKeyContains(t *testing.T) {
-	cands := []browsercontrol.TokenCandidate{
-		{SourceKey: "session_token", Token: "abc.def.ghi"},
-		{SourceKey: "access_token", Token: "aaa.bbb.ccc"},
-	}
-	ranked := rankedTokenCandidates(cands, "access")
-	if len(ranked) != 2 {
-		t.Fatalf("ranked len = %d, want 2", len(ranked))
-	}
-	if ranked[0].SourceKey != "access_token" {
-		t.Fatalf("top candidate = %q, want access_token", ranked[0].SourceKey)
 	}
 }
 

@@ -13,15 +13,24 @@ import (
 var ErrNotImplemented = errors.New("not implemented (capture Pocket Casts web endpoints first)")
 
 type Options struct {
-	BaseURL string
-	Headers map[string]string
-	HTTP    *http.Client
+	BaseURL     string
+	Headers     map[string]string
+	HTTP        *http.Client
+	TokenSource TokenSource
+}
+
+// TokenSource supplies API access tokens and can refresh a rejected token.
+// Implementations own persistence; Client never logs or stores token material.
+type TokenSource interface {
+	AccessToken(context.Context) (string, error)
+	ForceRefresh(context.Context) (string, error)
 }
 
 type Client struct {
-	baseURL string
-	headers map[string]string
-	http    *http.Client
+	baseURL     string
+	headers     map[string]string
+	http        *http.Client
+	tokenSource TokenSource
 }
 
 func New(opts Options) *Client {
@@ -34,9 +43,10 @@ func New(opts Options) *Client {
 		hc = &http.Client{Timeout: 15 * time.Second}
 	}
 	return &Client{
-		baseURL: baseURL,
-		headers: cloneHeaderMap(opts.Headers),
-		http:    hc,
+		baseURL:     baseURL,
+		headers:     cloneHeaderMap(opts.Headers),
+		http:        hc,
+		tokenSource: opts.TokenSource,
 	}
 }
 
@@ -54,7 +64,53 @@ func (c *Client) newRequest(ctx context.Context, method, path string, body io.Re
 		return nil, err
 	}
 	applyDefaultAPIHeaders(req.Header, c.headers)
+	if c.tokenSource != nil {
+		token, err := c.tokenSource.AccessToken(ctx)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
 	return req, nil
+}
+
+func (c *Client) do(req *http.Request) (*http.Response, error) {
+	resp, err := c.http.Do(req)
+	if err != nil || resp.StatusCode != http.StatusUnauthorized || c.tokenSource == nil {
+		return resp, err
+	}
+
+	_, _ = io.Copy(io.Discard, resp.Body)
+	_ = resp.Body.Close()
+	token, refreshErr := c.tokenSource.ForceRefresh(req.Context())
+	if refreshErr != nil {
+		if errors.Is(refreshErr, ErrTokenNotRefreshable) {
+			return nil, NewHTTPError(http.StatusUnauthorized, "configured API credential was rejected and cannot be refreshed")
+		}
+		return nil, fmt.Errorf("refresh API session after 401: %w", refreshErr)
+	}
+	retry, cloneErr := cloneRequest(req)
+	if cloneErr != nil {
+		return nil, fmt.Errorf("replay request after token refresh: %w", cloneErr)
+	}
+	retry.Header.Set("Authorization", "Bearer "+token)
+	return c.http.Do(retry)
+}
+
+func cloneRequest(req *http.Request) (*http.Request, error) {
+	retry := req.Clone(req.Context())
+	if req.Body == nil {
+		return retry, nil
+	}
+	if req.GetBody == nil {
+		return nil, errors.New("request body cannot be replayed")
+	}
+	body, err := req.GetBody()
+	if err != nil {
+		return nil, err
+	}
+	retry.Body = body
+	return retry, nil
 }
 
 func cloneHeaderMap(in map[string]string) map[string]string {

@@ -62,7 +62,7 @@ func runLocalPick(args []string, cfg config.Config) int {
 		return 2
 	}
 
-	client := pocketcasts.New(pocketcasts.Options{BaseURL: cfg.APIBaseURL, Headers: cfg.APIHeaders})
+	client, _ := newAuthenticatedClient(cfg)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
@@ -120,7 +120,7 @@ func runLocalPlay(args []string, cfg config.Config) int {
 		return 2
 	}
 
-	client := pocketcasts.New(pocketcasts.Options{BaseURL: cfg.APIBaseURL, Headers: cfg.APIHeaders})
+	client, _ := newAuthenticatedClient(cfg)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 

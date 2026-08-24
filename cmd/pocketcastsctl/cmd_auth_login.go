@@ -1,44 +1,79 @@
 package main
 
 import (
-	"bufio"
+	"context"
+	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"strings"
+	"time"
 
+	"pocketcastsctl/internal/authn"
 	"pocketcastsctl/internal/config"
 )
 
 func runAuthLogin(args []string, cfg config.Config) int {
 	fs := flag.NewFlagSet("auth login", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	browser := fs.String("browser", cfg.Browser, `browser name (chrome/safari/arc/dia/brave/edge or custom app name)`)
-	browserApp := fs.String("browser-app", cfg.BrowserApp, `macOS application name (optional)`)
-	openURL := fs.String("url", "https://pocketcasts.com/podcasts", "URL to open for login")
-	urlContains := fs.String("url-contains", cfg.URLContains, `substring to match the Pocket Casts tab URL`)
+	email := fs.String("email", "", "Pocket Casts account email")
+	passwordStdin := fs.Bool("password-stdin", false, "read the password from stdin")
+	force := fs.Bool("force", false, "replace a different or unknown active account")
+	noInput := fs.Bool("no-input", false, "disable prompts")
+	jsonOut := fs.Bool("json", false, "output JSON")
+	plain := fs.Bool("plain", false, "plain line-oriented output")
 	if ok, code := parseFlagsOrExit(fs, args); !ok {
 		return code
 	}
-
-	appName := *browserApp
-	if strings.TrimSpace(appName) == "" {
-		appName = defaultAppForBrowser(*browser)
+	if fs.NArg() != 0 {
+		return renderAuthCommandError("auth login", "auth.usage", errors.New("usage: pocketcastsctl auth login [--email address] [--password-stdin] [--force] [--no-input] [--json|--plain]"), *jsonOut, *plain, 2)
+	}
+	if *jsonOut && *plain {
+		return renderAuthCommandError("auth login", "auth.usage.output", errors.New("use only one of --json or --plain"), false, false, 2)
+	}
+	interactive := !*noInput && !*jsonOut && !*plain && stdinIsTerminal()
+	loginEmail := strings.ToLower(strings.TrimSpace(*email))
+	if loginEmail == "" && interactive {
+		fmt.Fprint(os.Stderr, "Pocket Casts email: ")
+		_, _ = fmt.Fscanln(os.Stdin, &loginEmail)
+		loginEmail = strings.ToLower(strings.TrimSpace(loginEmail))
+	}
+	if loginEmail == "" {
+		return renderAuthCommandError("auth login", "auth.input.email_missing", errors.New("email is required; pass --email in non-interactive mode"), *jsonOut, *plain, 2)
 	}
 
-	// Persist the user's browser preference (auth sync will write the file).
-	cfg.Browser = *browser
-	cfg.BrowserApp = strings.TrimSpace(*browserApp)
-	cfg.URLContains = *urlContains
-
-	if err := openInBrowser(appName, *openURL); err != nil {
-		fmt.Fprintf(os.Stderr, "failed to open browser: %v\n", err)
-		return 1
+	var password string
+	var err error
+	if *passwordStdin {
+		raw, readErr := io.ReadAll(io.LimitReader(os.Stdin, 64<<10))
+		err = readErr
+		password = strings.TrimRight(string(raw), "\r\n")
+	} else if interactive {
+		password, err = promptSecret("Pocket Casts password: ")
+	} else {
+		return renderAuthCommandError("auth login", "auth.input.password_missing", errors.New("password is required; pipe it with --password-stdin in non-interactive mode"), *jsonOut, *plain, 2)
+	}
+	if err != nil {
+		return renderAuthCommandError("auth login", "auth.input.password_read", err, *jsonOut, *plain, 1)
+	}
+	if password == "" {
+		return renderAuthCommandError("auth login", "auth.input.password_empty", errors.New("password cannot be empty"), *jsonOut, *plain, 2)
 	}
 
-	fmt.Fprintln(os.Stderr, "Complete login in the browser, then press Enter...")
-	_, _ = bufio.NewReader(os.Stdin).ReadString('\n')
-
-	// Reuse sync logic by invoking it directly (no extra prompts).
-	return runAuth([]string{"sync", "--browser", cfg.Browser, "--browser-app", cfg.BrowserApp, "--url-contains", cfg.URLContains}, cfg)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	api := authn.NewAPI(cfg.APIBaseURL, nil)
+	candidate, err := api.Login(ctx, loginEmail, password)
+	password = ""
+	if err != nil {
+		return renderAuthCommandError("auth login", "auth.login.failed", err, *jsonOut, *plain, 1)
+	}
+	if err := confirmSessionReplacement(cfg, candidate, *force, interactive); err != nil {
+		return renderAuthCommandError("auth login", "auth.account.replace_required", err, *jsonOut, *plain, 2)
+	}
+	if _, err := installSession(ctx, cfg, api, candidate); err != nil {
+		return renderAuthCommandError("auth login", "auth.session.install_failed", err, *jsonOut, *plain, 1)
+	}
+	return renderAuthSuccess("auth login", candidate, "", "", *jsonOut, *plain)
 }

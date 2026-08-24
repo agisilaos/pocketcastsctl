@@ -11,8 +11,8 @@ import (
 	"pocketcastsctl/internal/config"
 )
 
-func runAuthTabs(args []string, cfg config.Config) int {
-	fs := flag.NewFlagSet("auth tabs", flag.ContinueOnError)
+func runWebTabs(args []string, cfg config.Config) int {
+	fs := flag.NewFlagSet("web tabs", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	browser := fs.String("browser", cfg.Browser, `browser name`)
 	browserApp := fs.String("browser-app", cfg.BrowserApp, `macOS application name (optional)`)
@@ -40,7 +40,7 @@ func runAuthTabs(args []string, cfg config.Config) int {
 		return tabErr
 	})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "auth tabs failed: %v\n", err)
+		fmt.Fprintf(os.Stderr, "web tabs failed: %v\n", err)
 		return 1
 	}
 	if len(urls) == 0 {
@@ -56,7 +56,7 @@ func runAuthTabs(args []string, cfg config.Config) int {
 	}
 	if *jsonOut {
 		if err := printJSON(urls); err != nil {
-			errf("failed to render auth tabs JSON: %v\n", err)
+			errf("failed to render web tabs JSON: %v\n", err)
 			return 1
 		}
 		return 0

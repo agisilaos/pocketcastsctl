@@ -12,7 +12,6 @@ import (
 
 	"pocketcastsctl/internal/browsercontrol"
 	"pocketcastsctl/internal/config"
-	"pocketcastsctl/internal/pocketcasts"
 )
 
 func runQueue(args []string, cfg config.Config) int {
@@ -107,10 +106,7 @@ func runQueueAPI(args []string, cfg config.Config) int {
 		return 0
 	}
 
-	client := pocketcasts.New(pocketcasts.Options{
-		BaseURL: cfg.APIBaseURL,
-		Headers: cfg.APIHeaders,
-	})
+	client, _ := newAuthenticatedClient(cfg)
 
 	serverModified := strconv.FormatInt(time.Now().UnixMilli(), 10)
 

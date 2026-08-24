@@ -1,6 +1,7 @@
 package authutil
 
 import (
+	"encoding/base64"
 	"errors"
 	"testing"
 )
@@ -77,6 +78,14 @@ func TestTokenExpFromToken(t *testing.T) {
 		if got, ok := TokenExpFromToken(tok); ok || got != 0 {
 			t.Fatalf("TokenExpFromToken(%q) = (%d, %v), want (0, false)", tok, got, ok)
 		}
+	}
+}
+
+func TestTokenIdentityFromToken(t *testing.T) {
+	payload := base64.RawURLEncoding.EncodeToString([]byte(`{"sub":"account-1","email":"Person@Example.com"}`))
+	accountID, email := TokenIdentityFromToken("x." + payload + ".y")
+	if accountID != "account-1" || email != "person@example.com" {
+		t.Fatalf("identity=(%q, %q)", accountID, email)
 	}
 }
 

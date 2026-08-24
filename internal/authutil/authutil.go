@@ -3,6 +3,7 @@ package authutil
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"strings"
 )
 
@@ -18,6 +19,10 @@ func HasAuthorizationHeader(headers map[string]string) bool {
 func IsUnauthorizedError(err error) bool {
 	if err == nil {
 		return false
+	}
+	var statusErr interface{ HTTPStatusCode() int }
+	if errors.As(err, &statusErr) {
+		return statusErr.HTTPStatusCode() == 401
 	}
 	s := strings.ToLower(err.Error())
 	return strings.Contains(s, "401") && strings.Contains(s, "unauthorized")
@@ -35,16 +40,8 @@ func TokenExpiryUnix(headers map[string]string) (int64, bool) {
 }
 
 func TokenExpFromToken(tok string) (int64, bool) {
-	parts := strings.Split(strings.TrimSpace(tok), ".")
-	if len(parts) != 3 {
-		return 0, false
-	}
-	payload, err := decodeJWTPart(parts[1])
-	if err != nil {
-		return 0, false
-	}
-	var m map[string]any
-	if err := json.Unmarshal(payload, &m); err != nil {
+	m, ok := tokenClaims(tok)
+	if !ok {
 		return 0, false
 	}
 	switch v := m["exp"].(type) {
@@ -59,6 +56,25 @@ func TokenExpFromToken(tok string) (int64, bool) {
 	}
 }
 
+// TokenIdentityFromToken extracts stable, non-secret account metadata from a
+// JWT when the issuer includes it. Missing or opaque claims are ignored.
+func TokenIdentityFromToken(tok string) (accountID, email string) {
+	claims, ok := tokenClaims(tok)
+	if !ok {
+		return "", ""
+	}
+	for _, key := range []string{"sub", "user_id", "userId", "account_id", "accountId", "uuid"} {
+		if value, ok := claims[key].(string); ok && strings.TrimSpace(value) != "" {
+			accountID = strings.TrimSpace(value)
+			break
+		}
+	}
+	if value, ok := claims["email"].(string); ok {
+		email = strings.ToLower(strings.TrimSpace(value))
+	}
+	return accountID, email
+}
+
 func NormalizeToken(token string) string {
 	token = strings.TrimSpace(token)
 	token = strings.TrimPrefix(token, "Bearer ")
@@ -71,4 +87,20 @@ func decodeJWTPart(s string) ([]byte, error) {
 		s += strings.Repeat("=", 4-l)
 	}
 	return base64.RawURLEncoding.DecodeString(s)
+}
+
+func tokenClaims(tok string) (map[string]any, bool) {
+	parts := strings.Split(strings.TrimSpace(tok), ".")
+	if len(parts) != 3 {
+		return nil, false
+	}
+	payload, err := decodeJWTPart(parts[1])
+	if err != nil {
+		return nil, false
+	}
+	var claims map[string]any
+	if err := json.Unmarshal(payload, &claims); err != nil {
+		return nil, false
+	}
+	return claims, true
 }
