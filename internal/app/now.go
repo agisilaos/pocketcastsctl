@@ -4,6 +4,7 @@ import (
 	"context"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
 
 	"pocketcastsctl/internal/authn"
@@ -19,20 +20,28 @@ type NowOptions struct {
 	VerifyAuth bool
 }
 
-type NowSnapshot struct {
-	GeneratedAt time.Time         `json:"generated_at"`
-	Web         NowWebStatus      `json:"web"`
-	Local       NowLocalStatus    `json:"local"`
-	Queue       NowQueueStatus    `json:"queue"`
-	Auth        NowAuthStatus     `json:"auth"`
-	Actions     []string          `json:"actions"`
-	Warnings    []string          `json:"warnings,omitempty"`
-	Meta        map[string]string `json:"meta,omitempty"`
+type nowCollectorFuncs struct {
+	web   func(context.Context) NowWebPlaybackSnapshot
+	local func() NowLocalStatus
+	auth  func(context.Context) NowAuthStatus
+	queue func(context.Context) NowQueueStatus
 }
 
-type NowWebStatus struct {
-	Status string `json:"status"` // playing|paused|unknown|unavailable
-	Error  string `json:"error,omitempty"`
+type NowSnapshot struct {
+	GeneratedAt time.Time              `json:"generated_at"`
+	Web         NowWebPlaybackSnapshot `json:"web"`
+	Local       NowLocalStatus         `json:"local"`
+	Queue       NowQueueStatus         `json:"queue"`
+	Auth        NowAuthStatus          `json:"auth"`
+	Actions     []string               `json:"actions"`
+	Warnings    []string               `json:"warnings,omitempty"`
+	Meta        map[string]string      `json:"meta,omitempty"`
+}
+
+type NowWebPlaybackSnapshot struct {
+	State browsercontrol.PlaybackState `json:"status"`
+	browsercontrol.PlaybackDetails
+	Error string `json:"error,omitempty"`
 }
 
 type NowLocalStatus struct {
@@ -60,28 +69,65 @@ type NowAuthStatus struct {
 }
 
 func CollectNowSnapshot(ctx context.Context, cfg config.Config, opts NowOptions) NowSnapshot {
+	return collectNowSnapshot(ctx, config.Path(), nowCollectorFuncs{
+		web: func(ctx context.Context) NowWebPlaybackSnapshot {
+			return collectWebPlaybackSnapshot(ctx, cfg)
+		},
+		local: func() NowLocalStatus {
+			return collectLocalStatus(cfg)
+		},
+		auth: func(ctx context.Context) NowAuthStatus {
+			return collectAuthStatus(ctx, cfg, opts)
+		},
+		queue: func(ctx context.Context) NowQueueStatus {
+			return collectQueueStatus(ctx, cfg)
+		},
+	})
+}
+
+func collectNowSnapshot(ctx context.Context, configPath string, collectors nowCollectorFuncs) NowSnapshot {
+	generatedAt := time.Now()
+	var web NowWebPlaybackSnapshot
+	var local NowLocalStatus
+	var auth NowAuthStatus
+	var queue NowQueueStatus
+	var wg sync.WaitGroup
+	wg.Add(4)
+	go func() {
+		defer wg.Done()
+		web = collectors.web(ctx)
+	}()
+	go func() {
+		defer wg.Done()
+		local = collectors.local()
+	}()
+	go func() {
+		defer wg.Done()
+		auth = collectors.auth(ctx)
+	}()
+	go func() {
+		defer wg.Done()
+		queue = collectors.queue(ctx)
+	}()
+	wg.Wait()
+
 	s := NowSnapshot{
-		GeneratedAt: time.Now(),
-		Web:         NowWebStatus{Status: "unavailable"},
-		Local:       NowLocalStatus{Status: "stopped"},
-		Queue:       NowQueueStatus{Status: "unavailable"},
-		Auth:        NowAuthStatus{Status: "missing", AuthorizationExists: false},
+		GeneratedAt: generatedAt,
+		Web:         web,
+		Local:       local,
+		Queue:       queue,
+		Auth:        auth,
 		Meta: map[string]string{
-			"config_path": config.Path(),
+			"config_path": configPath,
 		},
 	}
-
-	s.Web = collectWebStatus(ctx, cfg)
-	s.Local = collectLocalStatus(cfg)
-	s.Auth = collectAuthStatus(ctx, cfg, opts)
-	s.Queue = collectQueueStatus(ctx, cfg)
 	s.Actions = suggestNowActions(s)
 	return s
 }
 
-func collectWebStatus(ctx context.Context, cfg config.Config) NowWebStatus {
+func collectWebPlaybackSnapshot(ctx context.Context, cfg config.Config) NowWebPlaybackSnapshot {
 	if _, err := exec.LookPath("osascript"); err != nil {
-		return NowWebStatus{Status: "unavailable", Error: "osascript not found"}
+		return NowWebPlaybackSnapshot{State: browsercontrol.PlaybackStateUnknown, Error: "osascript not found"}
 	}
 	controller, err := browsercontrol.New(browsercontrol.Options{
 		Browser:     cfg.Browser,
@@ -89,19 +135,18 @@ func collectWebStatus(ctx context.Context, cfg config.Config) NowWebStatus {
 		URLContains: cfg.URLContains,
 	})
 	if err != nil {
-		return NowWebStatus{Status: "unavailable", Error: err.Error()}
+		return NowWebPlaybackSnapshot{State: browsercontrol.PlaybackStateUnknown, Error: err.Error()}
 	}
 	ctx, cancel := context.WithTimeout(ctx, 4*time.Second)
 	defer cancel()
 	st, err := controller.Status(ctx)
 	if err != nil {
-		return NowWebStatus{Status: "unavailable", Error: err.Error()}
+		return NowWebPlaybackSnapshot{State: browsercontrol.PlaybackStateUnknown, Error: err.Error()}
 	}
-	status := strings.TrimSpace(st.State)
-	if status == "" {
-		status = "unknown"
+	return NowWebPlaybackSnapshot{
+		State:           st.State,
+		PlaybackDetails: st.PlaybackDetails,
 	}
-	return NowWebStatus{Status: status}
 }
 
 func collectLocalStatus(cfg config.Config) NowLocalStatus {
@@ -216,10 +261,10 @@ func suggestNowActions(s NowSnapshot) []string {
 		add("pocketcastsctl auth login")
 		add("pocketcastsctl auth import-browser --browser dia")
 	}
-	if s.Web.Status == "paused" {
+	if s.Web.State == "paused" {
 		add("pocketcastsctl web toggle")
 	}
-	if s.Web.Status == "playing" {
+	if s.Web.State == "playing" {
 		add("pocketcastsctl web next")
 	}
 	if s.Local.Status == "paused" {

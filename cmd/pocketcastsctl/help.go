@@ -10,6 +10,7 @@ var usageText = map[string]string{
 	"config init":         "pocketcastsctl config init",
 	"config path":         "pocketcastsctl config path",
 	"config show":         "pocketcastsctl config show [--json] [--reveal-secrets]",
+	"config set":          "pocketcastsctl config set browser <name>",
 	"auth login":          "pocketcastsctl auth login [--email address] [--password-stdin] [--force] [--no-input] [--json|--plain]",
 	"auth import-browser": "pocketcastsctl auth import-browser --browser <chrome|dia|safari> [--profile name] [--force] [--no-input] [--json|--plain]",
 	"auth refresh":        "pocketcastsctl auth refresh [--json|--plain]",
@@ -26,7 +27,7 @@ var usageText = map[string]string{
 	"web toggle":          "pocketcastsctl web toggle [--browser <name>] [--browser-app <app>] [--url-contains needle]",
 	"web next":            "pocketcastsctl web next [--browser <name>] [--browser-app <app>] [--url-contains needle]",
 	"web prev":            "pocketcastsctl web prev [--browser <name>] [--browser-app <app>] [--url-contains needle]",
-	"web status":          "pocketcastsctl web status [--json] [--plain] [--browser <name>] [--browser-app <app>] [--url-contains needle]",
+	"web status":          "pocketcastsctl web status [--details] [--json] [--plain] [--browser <name>] [--browser-app <app>] [--url-contains needle]",
 	"queue ls":            "pocketcastsctl queue ls [--json] [--plain] [--search q] [--limit N] [--browser <name>] [--browser-app <app>] [--url-contains needle]",
 	"queue api ls":        "pocketcastsctl queue api ls [--limit N] [--search q] [--json|--plain|--raw]",
 	"queue api add":       "pocketcastsctl queue api add (--uuid id --podcast id --title t --published rfc3339 --url audioUrl) | (--episode-json json) [--raw]",
@@ -56,7 +57,7 @@ var usageText = map[string]string{
 	"completion":          "pocketcastsctl completion [zsh|bash|fish]",
 	"doctor":              "pocketcastsctl doctor [--json|--plain] [--quick|--full] [--fix [--apply]]",
 	"auth":                "pocketcastsctl auth <login|import-browser|refresh|status|verify|logout>",
-	"config":              "pocketcastsctl config <init|path|show>",
+	"config":              "pocketcastsctl config <init|path|show|set>",
 	"web":                 "pocketcastsctl web <login|tabs|play|pause|toggle|next|prev|status> [--browser <name>] [--browser-app <app>]",
 	"queue":               "pocketcastsctl queue <ls|api>",
 	"queue api":           "pocketcastsctl queue api <ls|add|rm|play|pick|bump|move|dedupe>",
@@ -106,6 +107,8 @@ func runHelp(args []string) int {
 			printConfigPathHelp()
 		case "show":
 			printConfigShowHelp()
+		case "set":
+			printConfigSetHelp()
 		default:
 			return unknownHelpTopic(args)
 		}
@@ -338,6 +341,7 @@ Common tasks:
 
   Control playback:
   pocketcastsctl web status
+  pocketcastsctl web status --details
   pocketcastsctl web toggle
   pocketcastsctl web next
 
@@ -373,7 +377,7 @@ Command reference:
   pocketcastsctl har summarize [--host host] [--json] <file.har>   (use --host= to disable filtering)
   pocketcastsctl har graphql [--host host] [--json] <file.har>     (use --host= to disable filtering)
   pocketcastsctl har redact <in.har> <out.har>
-  pocketcastsctl config init|path|show
+  pocketcastsctl config init|path|show|set
   pocketcastsctl help [now|setup|start|doctor|auth|web|queue|local|har|config|completion]
 
 Deprecated shortcuts (use canonical commands above):
@@ -423,12 +427,13 @@ Examples:
 }
 
 func printConfigHelp() {
-	printUsageList("config init", "config path", "config show")
+	printUsageList("config init", "config path", "config show", "config set")
 }
 
 func printConfigInitHelp()        { printUsage("config init") }
 func printConfigPathHelp()        { printUsage("config path") }
 func printConfigShowHelp()        { printUsage("config show") }
+func printConfigSetHelp()         { printUsage("config set") }
 func printAuthLoginHelp()         { printUsage("auth login") }
 func printAuthImportBrowserHelp() { printUsage("auth import-browser") }
 func printAuthRefreshHelp()       { printUsage("auth refresh") }

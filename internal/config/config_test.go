@@ -14,6 +14,12 @@ func TestPathFromEnv(t *testing.T) {
 	}
 }
 
+func TestDefaultUsesBuiltInBrowser(t *testing.T) {
+	if got := Default().Browser; got != "chrome" {
+		t.Fatalf("Default().Browser = %q, want chrome", got)
+	}
+}
+
 func TestLoadEnvOverrides(t *testing.T) {
 	cfgPath := filepath.Join(t.TempDir(), "config.json")
 	t.Setenv(EnvConfigPath, cfgPath)

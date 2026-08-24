@@ -8,12 +8,14 @@ import (
 )
 
 var (
-	version = "dev"
-	commit  = "none"
-	date    = "unknown"
+	version        = "dev"
+	commit         = "none"
+	date           = "unknown"
+	invokedCommand = "pocketcastsctl"
 )
 
 func main() {
+	invokedCommand = os.Args[0]
 	os.Exit(run(os.Args[1:]))
 }
 

@@ -69,6 +69,36 @@ func runConfig(args []string, cfg config.Config) int {
 			fmt.Printf("  %s: %s\n", k, outCfg.APIHeaders[k])
 		}
 		return 0
+	case "set":
+		if len(args) != 3 || args[1] != "browser" || strings.TrimSpace(args[2]) == "" {
+			fmt.Fprintln(os.Stderr, "usage: pocketcastsctl config set browser <name>")
+			return 2
+		}
+		browser := strings.ToLower(strings.TrimSpace(args[2]))
+		target := newBrowserTarget(browser, "", cfg.URLContains)
+		if err := target.applicationError(); err != nil {
+			target.printFailure("config set", err)
+			return 1
+		}
+		cfg.Browser = browser
+		cfg.BrowserApp = ""
+		if err := config.Save(cfg); err != nil {
+			fmt.Fprintf(os.Stderr, "config set failed: %v\n", err)
+			return 1
+		}
+		fmt.Println("browser:", browser)
+		fmt.Println("saved:", redactUserPath(config.Path()))
+		if !isSupportedAutomationBrowser(browser) {
+			fmt.Fprintln(os.Stderr, "warning: Safari, Chrome, and Dia are the supported automation targets; other browsers are best effort")
+		}
+		if override := strings.TrimSpace(os.Getenv(config.EnvBrowser)); override != "" {
+			fmt.Fprintf(os.Stderr, "warning: %s=%s overrides the saved browser in this shell\n", config.EnvBrowser, override)
+		}
+		if override := strings.TrimSpace(os.Getenv(config.EnvBrowserApp)); override != "" {
+			fmt.Fprintf(os.Stderr, "warning: %s=%s overrides the saved browser application in this shell\n", config.EnvBrowserApp, override)
+		}
+		fmt.Println("next:", cliCommand("doctor --quick"))
+		return 0
 	default:
 		fmt.Fprintf(os.Stderr, "unknown config subcommand: %s\n", args[0])
 		return 2

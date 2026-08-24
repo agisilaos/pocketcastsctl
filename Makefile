@@ -2,6 +2,7 @@
 
 build:
 	go build -o pocketcastsctl ./cmd/pocketcastsctl
+	@echo "built: ./pocketcastsctl"
 
 test:
 	go test ./...

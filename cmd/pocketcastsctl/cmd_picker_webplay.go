@@ -16,6 +16,7 @@ import (
 )
 
 func playEpisodeInWebPlayer(ctx context.Context, browser, browserApp, urlContains, webBase string, ep pocketcasts.UpNextEpisode) int {
+	target := newBrowserTarget(browser, browserApp, urlContains)
 	controller, err := browsercontrol.New(browsercontrol.Options{
 		Browser:     browser,
 		BrowserApp:  browserApp,
@@ -25,10 +26,14 @@ func playEpisodeInWebPlayer(ctx context.Context, browser, browserApp, urlContain
 		fmt.Fprintf(os.Stderr, "invalid browser options: %v\n", err)
 		return 2
 	}
+	if err := target.applicationError(); err != nil {
+		target.printFailure("web player playback", err)
+		return 1
+	}
 
 	episodeURL := strings.TrimRight(strings.TrimSpace(webBase), "/") + "/episode/" + ep.UUID
 	if err := controller.SetTabURL(ctx, episodeURL); err != nil {
-		fmt.Fprintf(os.Stderr, "failed to navigate web player: %v\n", err)
+		target.printFailure("web player navigation", err)
 		return 1
 	}
 
@@ -43,7 +48,7 @@ func playEpisodeInWebPlayer(ctx context.Context, browser, browserApp, urlContain
 		}
 		time.Sleep(300 * time.Millisecond)
 	}
-	fmt.Fprintf(os.Stderr, "failed to start playback: %v\n", lastErr)
+	target.printFailure("web player playback", lastErr)
 	return 1
 }
 

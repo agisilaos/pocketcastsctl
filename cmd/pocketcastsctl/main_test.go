@@ -452,6 +452,71 @@ func TestRunDoctorExplainKnownCode(t *testing.T) {
 	}
 }
 
+func TestRunDoctorRejectsConfiguredBrowserThatIsNotInstalled(t *testing.T) {
+	cfgPath := filepath.Join(t.TempDir(), "config.json")
+	t.Setenv(config.EnvConfigPath, cfgPath)
+	if err := os.WriteFile(cfgPath, []byte(`{
+  "browser":"chrome",
+  "url_contains":"pocketcasts.com",
+  "api_base_url":"https://api.pocketcasts.com",
+  "api_headers":{}
+}`), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	previous := applicationAvailable
+	applicationAvailable = func(appName string) bool { return appName == "Safari" }
+	t.Cleanup(func() { applicationAvailable = previous })
+
+	code, stdout, stderr := runForTest(t, []string{"doctor", "--quick"}, "")
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1; stderr=%q", code, stderr)
+	}
+	for _, want := range []string{
+		`[FAIL] browser_application: browser application "Google Chrome" is not installed`,
+		"next: run `pocketcastsctl config set browser safari`",
+	} {
+		if !strings.Contains(stdout, want) {
+			t.Fatalf("stdout missing %q: %q", want, stdout)
+		}
+	}
+}
+
+func TestRunDoctorExplainsDiaLaunchRequirement(t *testing.T) {
+	cfgPath := filepath.Join(t.TempDir(), "config.json")
+	t.Setenv(config.EnvConfigPath, cfgPath)
+	if err := os.WriteFile(cfgPath, []byte(`{
+  "browser":"dia",
+  "url_contains":"pocketcasts.com",
+  "api_base_url":"https://api.pocketcasts.com",
+  "api_headers":{}
+}`), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	previousAvailable := applicationAvailable
+	previousInspect := inspectDiaProcess
+	applicationAvailable = func(appName string) bool { return appName == "Dia" }
+	inspectDiaProcess = func(string) diaProcessState {
+		return diaProcessState{Running: true, AppleScriptJavaScript: false}
+	}
+	t.Cleanup(func() {
+		applicationAvailable = previousAvailable
+		inspectDiaProcess = previousInspect
+	})
+
+	code, stdout, stderr := runForTest(t, []string{"doctor", "--quick"}, "")
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1; stderr=%q", code, stderr)
+	}
+	for _, want := range []string{
+		"[FAIL] browser_javascript: Dia is running without AppleScript JavaScript support",
+		"quit Dia, then run `pocketcastsctl web login --browser dia`",
+	} {
+		if !strings.Contains(stdout, want) {
+			t.Fatalf("stdout missing %q: %q", want, stdout)
+		}
+	}
+}
+
 func TestRunDoctorExplainKnownCodeJSONFlagAfterCode(t *testing.T) {
 	code, stdout, stderr := runForTest(t, []string{"doctor", "explain", "doctor.auth.invalid", "--json"}, "")
 	if code != 0 {

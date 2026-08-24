@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"context"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -54,12 +53,11 @@ func runNow(args []string, cfg config.Config) int {
 	render := func(s app.NowSnapshot) {
 		switch {
 		case *jsonOut:
-			b, _ := json.MarshalIndent(s, "", "  ")
-			fmt.Println(string(b))
+			_ = printJSON(s)
 		case *plain:
 			printNowPlain(s)
 		default:
-			printNowHuman(s)
+			printNowHuman(s, cfg)
 		}
 	}
 
@@ -115,11 +113,21 @@ func runNowInteractive(actions []string) int {
 	return run(actionArgs)
 }
 
-func printNowHuman(s app.NowSnapshot) {
+func printNowHuman(s app.NowSnapshot, cfg config.Config) {
 	fmt.Println("POCKETCASTS NOW")
 	fmt.Println(strings.Repeat("=", 72))
 	fmt.Printf("Updated: %s\n", s.GeneratedAt.Local().Format("2006-01-02 15:04:05"))
-	fmt.Printf("Web    : %s%s\n", strings.ToUpper(s.Web.Status), formatInlineErr(s.Web.Error))
+	webError := strings.TrimSpace(s.Web.Error)
+	webHint := ""
+	if webError != "" {
+		target := newBrowserTarget(cfg.Browser, cfg.BrowserApp, cfg.URLContains)
+		webError, webHint = target.failure(errors.New(webError))
+	}
+	fmt.Printf("Web    : %s%s\n", strings.ToUpper(string(s.Web.State)), formatInlineErr(webError))
+	if webHint != "" {
+		fmt.Println("         next:", webHint)
+	}
+	printPlaybackDetailsHuman(s.Web.PlaybackDetails)
 	local := strings.ToUpper(s.Local.Status)
 	if strings.TrimSpace(s.Local.Title) != "" {
 		local += " - " + strings.TrimSpace(s.Local.Title)
@@ -145,19 +153,28 @@ func printNowHuman(s app.NowSnapshot) {
 	fmt.Println(strings.Repeat("-", 72))
 	fmt.Println("Recommended next actions:")
 	for i, a := range s.Actions {
-		fmt.Printf("  %d. %s\n", i+1, a)
+		fmt.Printf("  %d. %s\n", i+1, displaySuggestedAction(a))
 		if i >= 4 {
 			break
 		}
 	}
 }
 
+func displaySuggestedAction(action string) string {
+	action = strings.TrimSpace(action)
+	if args := strings.TrimPrefix(action, "pocketcastsctl "); args != action {
+		return cliCommand(args)
+	}
+	return action
+}
+
 func printNowPlain(s app.NowSnapshot) {
 	fmt.Printf("generated_at\t%s\n", s.GeneratedAt.Format(time.RFC3339))
-	fmt.Printf("web_status\t%s\n", s.Web.Status)
+	fmt.Printf("web_status\t%s\n", s.Web.State)
 	if strings.TrimSpace(s.Web.Error) != "" {
 		fmt.Printf("web_error\t%s\n", s.Web.Error)
 	}
+	printPlaybackDetailsPlain("web_", s.Web.PlaybackDetails)
 	fmt.Printf("local_status\t%s\n", s.Local.Status)
 	if strings.TrimSpace(s.Local.Title) != "" {
 		fmt.Printf("local_title\t%s\n", s.Local.Title)

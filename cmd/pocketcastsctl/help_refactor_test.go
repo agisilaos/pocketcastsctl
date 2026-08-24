@@ -32,3 +32,13 @@ func TestRunHelpQueueAPIRmIncludesUsage(t *testing.T) {
 		t.Fatalf("stdout missing usage line for queue api rm: %q", stdout)
 	}
 }
+
+func TestWebStatusHelpIncludesDetails(t *testing.T) {
+	code, stdout, stderr := runForTest(t, []string{"help", "web", "status"}, "")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr=%q", code, stderr)
+	}
+	if !strings.Contains(stdout, "--details") {
+		t.Fatalf("stdout missing --details: %q", stdout)
+	}
+}

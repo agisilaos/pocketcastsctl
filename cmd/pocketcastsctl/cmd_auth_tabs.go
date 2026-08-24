@@ -30,6 +30,11 @@ func runWebTabs(args []string, cfg config.Config) int {
 		fmt.Fprintf(os.Stderr, "invalid browser options: %v\n", err)
 		return 2
 	}
+	target := newBrowserTarget(*browser, *browserApp, "pocketcasts")
+	if err := target.applicationError(); err != nil {
+		target.printFailure("web tabs", err)
+		return 1
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -40,7 +45,7 @@ func runWebTabs(args []string, cfg config.Config) int {
 		return tabErr
 	})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "web tabs failed: %v\n", err)
+		target.printFailure("web tabs", err)
 		return 1
 	}
 	if len(urls) == 0 {

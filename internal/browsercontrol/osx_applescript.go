@@ -10,11 +10,18 @@ type browser struct {
 	appName string
 }
 
+type browserScripts struct {
+	evaluate string
+	setURL   string
+	listURLs string
+}
+
 type browserKind int
 
 const (
 	kindChromium browserKind = iota
 	kindSafari
+	kindDia
 )
 
 func parseBrowser(name string, appOverride string) (browser, error) {
@@ -36,7 +43,7 @@ func parseBrowser(name string, appOverride string) (browser, error) {
 	case "arc":
 		return browser{kind: kindChromium, appName: chooseApp(appOverride, "Arc")}, nil
 	case "dia":
-		return browser{kind: kindChromium, appName: chooseApp(appOverride, "Dia")}, nil
+		return browser{kind: kindDia, appName: chooseApp(appOverride, "Dia")}, nil
 	case "safari":
 		return browser{kind: kindSafari, appName: chooseApp(appOverride, "Safari")}, nil
 	default:
@@ -51,37 +58,45 @@ func parseBrowser(name string, appOverride string) (browser, error) {
 	}
 }
 
-func (b browser) appleScript() string {
+func (b browser) scripts() browserScripts {
 	switch b.kind {
 	case kindChromium:
-		return appleScriptChromium
+		return browserScripts{
+			evaluate: appleScriptChromium,
+			setURL:   appleScriptChromiumSetURL,
+			listURLs: appleScriptChromiumListURLs,
+		}
 	case kindSafari:
-		return appleScriptSafari
+		return browserScripts{
+			evaluate: appleScriptSafari,
+			setURL:   appleScriptSafariSetURL,
+			listURLs: appleScriptSafariListURLs,
+		}
+	case kindDia:
+		return browserScripts{
+			evaluate: appleScriptDia,
+			setURL:   appleScriptDiaSetURL,
+			listURLs: appleScriptDiaListURLs,
+		}
 	default:
-		return appleScriptChromium
+		return browserScripts{
+			evaluate: appleScriptChromium,
+			setURL:   appleScriptChromiumSetURL,
+			listURLs: appleScriptChromiumListURLs,
+		}
 	}
+}
+
+func (b browser) appleScript() string {
+	return b.scripts().evaluate
 }
 
 func (b browser) appleScriptSetURL() string {
-	switch b.kind {
-	case kindChromium:
-		return appleScriptChromiumSetURL
-	case kindSafari:
-		return appleScriptSafariSetURL
-	default:
-		return appleScriptChromiumSetURL
-	}
+	return b.scripts().setURL
 }
 
 func (b browser) appleScriptListURLs() string {
-	switch b.kind {
-	case kindChromium:
-		return appleScriptChromiumListURLs
-	case kindSafari:
-		return appleScriptSafariListURLs
-	default:
-		return appleScriptChromiumListURLs
-	}
+	return b.scripts().listURLs
 }
 
 func normalize(s string) string {
@@ -153,11 +168,21 @@ end run
 end using terms from
 `
 
-const appleScriptSafari = `
+var (
+	appleScriptSafari = nativeEvaluateScript("Safari", "return do JavaScript js in t")
+	appleScriptDia    = nativeEvaluateScript("Dia", "return execute t javascript js")
+)
+
+func nativeEvaluateScript(application, executeJavaScript string) string {
+	return fmt.Sprintf(`
+using terms from application %q
 on run argv
   set appName to item 1 of argv
   set urlNeedle to item 2 of argv
   set js to item 3 of argv
+  set matched to 0
+  set lastErr to ""
+  set lastURL to ""
 
   tell application appName
     repeat with w in windows
@@ -165,16 +190,28 @@ on run argv
         try
           set u to URL of t
           if u contains urlNeedle then
-            return do JavaScript js in t
+            set matched to matched + 1
+            set lastURL to u
+            try
+              %s
+            on error errMsg number errNum
+              set lastErr to errMsg & " (" & errNum & ")"
+            end try
           end if
         end try
       end repeat
     end repeat
   end tell
 
+  if matched > 0 then
+    error "Found " & matched & " matching tab(s) but JavaScript execution failed (lastURL=" & lastURL & "): " & lastErr
+  end if
+
   error "No tab found in " & appName & " with URL containing: " & urlNeedle
 end run
-`
+end using terms from
+`, application, executeJavaScript)
+}
 
 const appleScriptChromiumSetURL = `
 using terms from application "Google Chrome"
@@ -205,7 +242,14 @@ end run
 end using terms from
 `
 
-const appleScriptSafariSetURL = `
+var (
+	appleScriptSafariSetURL = nativeSetURLScript("Safari")
+	appleScriptDiaSetURL    = nativeSetURLScript("Dia")
+)
+
+func nativeSetURLScript(application string) string {
+	return fmt.Sprintf(`
+using terms from application %q
 on run argv
   set appName to item 1 of argv
   set urlNeedle to item 2 of argv
@@ -227,10 +271,19 @@ on run argv
 
   error "No tab found in " & appName & " with URL containing: " & urlNeedle
 end run
-`
+end using terms from
+`, application)
+}
 
-const appleScriptChromiumListURLs = `
-using terms from application "Google Chrome"
+var (
+	appleScriptChromiumListURLs = listURLsScript("Google Chrome")
+	appleScriptSafariListURLs   = listURLsScript("Safari")
+	appleScriptDiaListURLs      = listURLsScript("Dia")
+)
+
+func listURLsScript(application string) string {
+	return fmt.Sprintf(`
+using terms from application %q
 on run argv
   set appName to item 1 of argv
   set urls to {}
@@ -258,33 +311,5 @@ on run argv
   return "[\"" & joined & "\"]"
 end run
 end using terms from
-`
-
-const appleScriptSafariListURLs = `
-on run argv
-  set appName to item 1 of argv
-  set urls to {}
-
-  tell application appName
-    repeat with w in windows
-      repeat with t in tabs of w
-        try
-          set u to URL of t
-          if u is not missing value then
-            copy u to end of urls
-          end if
-        end try
-      end repeat
-    end repeat
-  end tell
-
-  if (count of urls) is 0 then
-    return "[]"
-  end if
-
-  set AppleScript's text item delimiters to "\",\""
-  set joined to urls as text
-  set AppleScript's text item delimiters to ""
-  return "[\"" & joined & "\"]"
-end run
-`
+`, application)
+}
