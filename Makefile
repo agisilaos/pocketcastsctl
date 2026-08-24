@@ -1,4 +1,4 @@
-.PHONY: build test test-scripts test-scripts-cover vet fmt fmt-check check-help check-help-docs docs-check release-preflight release-check release release-dry-run
+.PHONY: build test test-scripts test-scripts-cover vet fmt fmt-check check-help check-help-docs docs-check release-preflight release-check release-check-ci release release-dry-run
 
 build:
 	go build -o pocketcastsctl ./cmd/pocketcastsctl
@@ -7,7 +7,7 @@ test:
 	go test ./...
 
 test-scripts:
-	go test ./scripts -run 'TestReleasePreflightFailurePaths|TestCheckHelpDocsDriftScript'
+	go test ./scripts -run 'TestReleasePreflightFailurePaths|TestReleaseCheckModes|TestCheckHelpDocsDriftScript'
 
 test-scripts-cover:
 	go test -cover ./scripts
@@ -37,6 +37,9 @@ release-preflight:
 release-check:
 	@if [ -z "$(VERSION)" ]; then echo "VERSION is required (e.g. make release-check VERSION=v0.1.0)"; exit 2; fi
 	./scripts/release-check.sh "$(VERSION)"
+
+release-check-ci:
+	./scripts/release-check.sh --ci
 
 release:
 	@if [ -z "$(VERSION)" ]; then echo "VERSION is required (e.g. make release VERSION=v0.1.0)"; exit 2; fi

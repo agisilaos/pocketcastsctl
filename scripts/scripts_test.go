@@ -65,6 +65,37 @@ func TestReleasePreflightFailurePaths(t *testing.T) {
 	})
 }
 
+func TestReleaseCheckModes(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("release-check.sh requires Darwin")
+	}
+
+	t.Run("release mode rejects an existing tag", func(t *testing.T) {
+		repo := setupReleaseCheckRepo(t)
+		out, err := runCmd(repo, "bash", "scripts/release-check.sh", "v0.1.0")
+		if err == nil {
+			t.Fatalf("expected failure when release tag exists")
+		}
+		if !strings.Contains(out, "tag already exists: v0.1.0") {
+			t.Fatalf("unexpected output: %s", out)
+		}
+	})
+
+	t.Run("CI mode accepts the changelog version when its tag exists", func(t *testing.T) {
+		repo := setupReleaseCheckRepo(t)
+		out, err := runCmd(repo, "bash", "scripts/release-check.sh", "--ci")
+		if err != nil {
+			t.Fatalf("CI mode failed: %v\n%s", err, out)
+		}
+		if strings.Contains(out, "tag already exists") {
+			t.Fatalf("CI mode unexpectedly enforced release tag uniqueness: %s", out)
+		}
+		if !strings.Contains(out, "[release-check] ok") || !strings.Contains(out, "version:   v0.1.0") {
+			t.Fatalf("CI mode did not validate the changelog version: %s", out)
+		}
+	})
+}
+
 func TestCheckHelpDocsDriftScript(t *testing.T) {
 	t.Run("drift detected", func(t *testing.T) {
 		repo := setupHelpDriftRepo(t, true)
@@ -107,6 +138,45 @@ func setupPreflightRepo(t *testing.T) string {
 	mustRun(t, repo, "git", "config", "commit.gpgsign", "false")
 	mustRun(t, repo, "git", "add", ".")
 	mustRun(t, repo, "git", "commit", "-m", "init")
+	return repo
+}
+
+func setupReleaseCheckRepo(t *testing.T) string {
+	t.Helper()
+	repo := t.TempDir()
+	mustCopyFile(t, repoRootPath(t, "scripts/release-check.sh"), filepath.Join(repo, "scripts/release-check.sh"))
+	mustWriteFile(t, filepath.Join(repo, "go.mod"), "module example.com/releasecheck\n\ngo 1.24\n")
+	mustWriteFile(t, filepath.Join(repo, "cmd/pocketcastsctl/main.go"), `package main
+
+import (
+	"fmt"
+	"os"
+)
+
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+)
+
+func main() {
+	if len(os.Args) > 1 && os.Args[1] == "--version" {
+		fmt.Printf("pocketcastsctl %s (%s, %s)\n", version, commit, date)
+	}
+}
+`)
+	mustWriteFile(t, filepath.Join(repo, "internal/fixture/fixture.go"), "package fixture\n")
+	mustWriteFile(t, filepath.Join(repo, "scripts/fixture.go"), "package scripts\n")
+	mustWriteFile(t, filepath.Join(repo, "scripts/docs-check.sh"), "#!/usr/bin/env bash\nset -euo pipefail\n")
+	mustWriteFile(t, filepath.Join(repo, "README.md"), "fixture\n")
+	mustWriteFile(t, filepath.Join(repo, "CHANGELOG.md"), "# Changelog\n\n## [v0.1.0] - 2026-01-01\n")
+	mustRun(t, repo, "git", "init")
+	mustRun(t, repo, "git", "config", "user.name", "Codex")
+	mustRun(t, repo, "git", "config", "user.email", "codex@example.com")
+	mustRun(t, repo, "git", "config", "commit.gpgsign", "false")
+	mustRun(t, repo, "git", "add", ".")
+	mustRun(t, repo, "git", "commit", "-m", "init")
+	mustRun(t, repo, "git", "tag", "v0.1.0")
 	return repo
 }
 

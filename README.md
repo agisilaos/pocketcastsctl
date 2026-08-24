@@ -317,6 +317,7 @@ The release workflow mirrors [`homepodctl`](https://github.com/agisilaos/homepod
 
 - Version metadata is embedded via ldflags (`main.version`, `main.commit`, `main.date`); `pocketcastsctl --version` shows it.
 - `make release-check VERSION=vX.Y.Z` runs `scripts/release-check.sh` and validates tests/vet/docs/format + stamped version output.
+- `make release-check-ci` validates the repository using the latest changelog version, even when that release tag already exists.
 - `make release-dry-run VERSION=vX.Y.Z` builds release archives without changelog/tag/push/release/tap writes.
 - `make release VERSION=vX.Y.Z` runs `scripts/release.sh` to:
   - Generate release notes from commit titles and descriptions since the previous tag

@@ -21,4 +21,4 @@ jobs:
       # Intentionally no extra dependency install step (brew/apt).
       # release-check scripts must rely on stock runner tooling.
       - name: Run release check
-        run: make release-check VERSION=v0.0.0
+        run: make release-check-ci
