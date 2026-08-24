@@ -107,6 +107,20 @@ func TestReleaseCheckModes(t *testing.T) {
 	})
 }
 
+func TestReleaseUsesConfigurableHTTPSHomebrewTapRemote(t *testing.T) {
+	releaseScript := mustReadFile(t, repoRootPath(t, "scripts/release.sh"))
+
+	if !strings.Contains(releaseScript, `tap_url="${HOMEBREW_TAP_URL:-https://github.com/${tap_repo}.git}"`) {
+		t.Fatal("release.sh must default the Homebrew tap URL to HTTPS and allow an override")
+	}
+	if !strings.Contains(releaseScript, `git clone "$tap_url" "$tap_dir"`) {
+		t.Fatal("release.sh must clone the configured Homebrew tap URL")
+	}
+	if strings.Contains(releaseScript, "git@github.com:${tap_repo}.git") {
+		t.Fatal("release.sh must not require SSH access to clone the Homebrew tap")
+	}
+}
+
 func TestCheckHelpDocsDriftScript(t *testing.T) {
 	t.Run("drift detected", func(t *testing.T) {
 		repo := setupHelpDriftRepo(t, true)

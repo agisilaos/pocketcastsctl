@@ -352,6 +352,7 @@ The release workflow mirrors [`homepodctl`](https://github.com/agisilaos/homepod
   - Build macOS arm64/amd64 tarballs under `dist/` with checksums
   - Create a GitHub Release
   - Update the Homebrew tap (`agisilaos/homebrew-tap`)
+- Homebrew tap updates clone over HTTPS by default; set `HOMEBREW_TAP_URL` to use a different authenticated remote.
 - Release scripts: `scripts/release-check.sh` and `scripts/release.sh`
 
 Run the release on macOS with a clean git tree.
