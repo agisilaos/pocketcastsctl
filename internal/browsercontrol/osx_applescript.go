@@ -10,6 +10,12 @@ type browser struct {
 	appName string
 }
 
+type browserScripts struct {
+	evaluate string
+	setURL   string
+	listURLs string
+}
+
 type browserKind int
 
 const (
@@ -52,43 +58,45 @@ func parseBrowser(name string, appOverride string) (browser, error) {
 	}
 }
 
-func (b browser) appleScript() string {
+func (b browser) scripts() browserScripts {
 	switch b.kind {
 	case kindChromium:
-		return appleScriptChromium
+		return browserScripts{
+			evaluate: appleScriptChromium,
+			setURL:   appleScriptChromiumSetURL,
+			listURLs: appleScriptChromiumListURLs,
+		}
 	case kindSafari:
-		return appleScriptSafari
+		return browserScripts{
+			evaluate: appleScriptSafari,
+			setURL:   appleScriptSafariSetURL,
+			listURLs: appleScriptSafariListURLs,
+		}
 	case kindDia:
-		return appleScriptDia
+		return browserScripts{
+			evaluate: appleScriptDia,
+			setURL:   appleScriptDiaSetURL,
+			listURLs: appleScriptDiaListURLs,
+		}
 	default:
-		return appleScriptChromium
+		return browserScripts{
+			evaluate: appleScriptChromium,
+			setURL:   appleScriptChromiumSetURL,
+			listURLs: appleScriptChromiumListURLs,
+		}
 	}
+}
+
+func (b browser) appleScript() string {
+	return b.scripts().evaluate
 }
 
 func (b browser) appleScriptSetURL() string {
-	switch b.kind {
-	case kindChromium:
-		return appleScriptChromiumSetURL
-	case kindSafari:
-		return appleScriptSafariSetURL
-	case kindDia:
-		return appleScriptDiaSetURL
-	default:
-		return appleScriptChromiumSetURL
-	}
+	return b.scripts().setURL
 }
 
 func (b browser) appleScriptListURLs() string {
-	switch b.kind {
-	case kindChromium:
-		return appleScriptChromiumListURLs
-	case kindSafari:
-		return appleScriptSafariListURLs
-	case kindDia:
-		return appleScriptDiaListURLs
-	default:
-		return appleScriptChromiumListURLs
-	}
+	return b.scripts().listURLs
 }
 
 func normalize(s string) string {
