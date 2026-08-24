@@ -39,7 +39,7 @@ type NowSnapshot struct {
 }
 
 type NowWebPlaybackSnapshot struct {
-	State string `json:"status"` // JSON name retained for compatibility
+	State browsercontrol.PlaybackState `json:"status"`
 	browsercontrol.PlaybackDetails
 	Error string `json:"error,omitempty"`
 }
@@ -127,7 +127,7 @@ func collectNowSnapshot(ctx context.Context, configPath string, collectors nowCo
 
 func collectWebPlaybackSnapshot(ctx context.Context, cfg config.Config) NowWebPlaybackSnapshot {
 	if _, err := exec.LookPath("osascript"); err != nil {
-		return NowWebPlaybackSnapshot{State: "unavailable", Error: "osascript not found"}
+		return NowWebPlaybackSnapshot{State: browsercontrol.PlaybackStateUnknown, Error: "osascript not found"}
 	}
 	controller, err := browsercontrol.New(browsercontrol.Options{
 		Browser:     cfg.Browser,
@@ -135,20 +135,16 @@ func collectWebPlaybackSnapshot(ctx context.Context, cfg config.Config) NowWebPl
 		URLContains: cfg.URLContains,
 	})
 	if err != nil {
-		return NowWebPlaybackSnapshot{State: "unavailable", Error: err.Error()}
+		return NowWebPlaybackSnapshot{State: browsercontrol.PlaybackStateUnknown, Error: err.Error()}
 	}
 	ctx, cancel := context.WithTimeout(ctx, 4*time.Second)
 	defer cancel()
 	st, err := controller.Status(ctx)
 	if err != nil {
-		return NowWebPlaybackSnapshot{State: "unavailable", Error: err.Error()}
-	}
-	status := strings.TrimSpace(string(st.State))
-	if status == "" {
-		status = "unknown"
+		return NowWebPlaybackSnapshot{State: browsercontrol.PlaybackStateUnknown, Error: err.Error()}
 	}
 	return NowWebPlaybackSnapshot{
-		State:           status,
+		State:           st.State,
 		PlaybackDetails: st.PlaybackDetails,
 	}
 }

@@ -13,7 +13,7 @@ func runWebLogin(args []string, cfg config.Config) int {
 	fs.SetOutput(os.Stderr)
 	browser := fs.String("browser", cfg.Browser, "browser name")
 	browserApp := fs.String("browser-app", cfg.BrowserApp, "macOS application name")
-	openURL := fs.String("url", "https://pocketcasts.com/podcasts", "Pocket Casts URL to open")
+	openURL := fs.String("url", defaultWebPlayerURL, "Pocket Casts URL to open")
 	if ok, code := parseFlagsOrExit(fs, args); !ok {
 		return code
 	}

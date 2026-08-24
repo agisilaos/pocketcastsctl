@@ -72,6 +72,16 @@ type PlaybackSnapshot struct {
 	PlaybackDetails
 }
 
+type ActionNotAppliedError struct {
+	Application string
+	Label       string
+	State       PlaybackState
+}
+
+func (e *ActionNotAppliedError) Error() string {
+	return fmt.Sprintf("%s reported %s but playback state remained %s", e.Application, e.Label, e.State)
+}
+
 type QueueItem struct {
 	Title string `json:"title"`
 	Href  string `json:"href"`
@@ -131,19 +141,19 @@ func (c *Controller) verifyPlaybackAction(ctx context.Context, action Action, be
 	if strings.TrimSpace(label) == "" {
 		label = string(action)
 	}
-	return fmt.Errorf("%s reported %s but playback state remained %s", c.browser.appName, label, after)
+	return &ActionNotAppliedError{Application: c.browser.appName, Label: label, State: after}
 }
 
 func playbackActionApplied(action Action, before, after PlaybackState) bool {
 	switch action {
 	case ActionPlay:
-		return after == PlaybackStatePlaying || after == PlaybackStateLoading || after == PlaybackStateTransition
+		return playbackStarted(after)
 	case ActionPause:
 		return after == PlaybackStatePaused
 	case ActionToggle:
 		switch before {
 		case PlaybackStatePaused:
-			return after == PlaybackStatePlaying || after == PlaybackStateLoading || after == PlaybackStateTransition
+			return playbackStarted(after)
 		case PlaybackStatePlaying, PlaybackStateLoading:
 			return after == PlaybackStatePaused
 		default:
@@ -152,6 +162,10 @@ func playbackActionApplied(action Action, before, after PlaybackState) bool {
 	default:
 		return true
 	}
+}
+
+func playbackStarted(state PlaybackState) bool {
+	return state == PlaybackStatePlaying || state == PlaybackStateLoading || state == PlaybackStateTransition
 }
 
 func (c *Controller) Status(ctx context.Context) (PlaybackSnapshot, error) {
@@ -163,17 +177,24 @@ func (c *Controller) Status(ctx context.Context) (PlaybackSnapshot, error) {
 	if err := json.Unmarshal([]byte(out), &st); err != nil {
 		return PlaybackSnapshot{}, fmt.Errorf("unexpected JS result: %q", out)
 	}
-	switch st.State {
+	if !st.State.valid() {
+		st.State = PlaybackStateUnknown
+	}
+	return st, nil
+}
+
+func (s PlaybackState) valid() bool {
+	switch s {
 	case PlaybackStatePlaying,
 		PlaybackStatePaused,
 		PlaybackStateLoading,
 		PlaybackStateTransition,
 		PlaybackStateNoEpisode,
 		PlaybackStateUnknown:
+		return true
 	default:
-		st.State = PlaybackStateUnknown
+		return false
 	}
-	return st, nil
 }
 
 func (c *Controller) QueueList(ctx context.Context) ([]QueueItem, error) {
@@ -189,17 +210,11 @@ func (c *Controller) QueueList(ctx context.Context) ([]QueueItem, error) {
 }
 
 func (c *Controller) runJS(ctx context.Context, js string) (string, error) {
-	script := c.browser.appleScript()
-	cmd := exec.CommandContext(ctx, "osascript", "-e", script, c.browser.appName, c.urlContains, js)
-	b, err := cmd.CombinedOutput()
+	out, err := runAppleScript(ctx, c.browser.appleScript(), c.browser.appName, c.urlContains, js)
 	if err != nil {
-		msg := strings.TrimSpace(string(b))
-		if msg == "" {
-			msg = err.Error()
-		}
-		return "", errors.New(msg)
+		return "", err
 	}
-	return unwrapJavaScriptResult(strings.TrimSpace(string(b))), nil
+	return unwrapJavaScriptResult(out), nil
 }
 
 func unwrapJavaScriptResult(result string) string {
@@ -216,33 +231,33 @@ func (c *Controller) SetTabURL(ctx context.Context, newURL string) error {
 		return errors.New("new URL cannot be empty")
 	}
 
-	script := c.browser.appleScriptSetURL()
-	cmd := exec.CommandContext(ctx, "osascript", "-e", script, c.browser.appName, c.urlContains, newURL)
-	b, err := cmd.CombinedOutput()
-	if err != nil {
-		msg := strings.TrimSpace(string(b))
-		if msg == "" {
-			msg = err.Error()
-		}
-		return errors.New(msg)
-	}
-	return nil
+	_, err := runAppleScript(ctx, c.browser.appleScriptSetURL(), c.browser.appName, c.urlContains, newURL)
+	return err
 }
 
 func (c *Controller) TabURLs(ctx context.Context) ([]string, error) {
-	script := c.browser.appleScriptListURLs()
-	cmd := exec.CommandContext(ctx, "osascript", "-e", script, c.browser.appName)
-	b, err := cmd.CombinedOutput()
+	out, err := runAppleScript(ctx, c.browser.appleScriptListURLs(), c.browser.appName)
 	if err != nil {
-		msg := strings.TrimSpace(string(b))
-		if msg == "" {
-			msg = err.Error()
-		}
-		return nil, errors.New(msg)
+		return nil, err
 	}
 	var urls []string
-	if err := json.Unmarshal([]byte(strings.TrimSpace(string(b))), &urls); err != nil {
-		return nil, fmt.Errorf("unexpected JS result: %q", strings.TrimSpace(string(b)))
+	if err := json.Unmarshal([]byte(out), &urls); err != nil {
+		return nil, fmt.Errorf("unexpected JS result: %q", out)
 	}
 	return urls, nil
+}
+
+func runAppleScript(ctx context.Context, script string, args ...string) (string, error) {
+	commandArgs := make([]string, 0, len(args)+2)
+	commandArgs = append(commandArgs, "-e", script)
+	commandArgs = append(commandArgs, args...)
+	output, err := exec.CommandContext(ctx, "osascript", commandArgs...).CombinedOutput()
+	result := strings.TrimSpace(string(output))
+	if err != nil {
+		if result == "" {
+			result = err.Error()
+		}
+		return "", errors.New(result)
+	}
+	return result, nil
 }

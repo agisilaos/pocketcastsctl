@@ -340,8 +340,8 @@ func TestControllerToggleIgnoresEpisodeCardControls(t *testing.T) {
 	t.Setenv("MOCK_BROWSER_JS", `
 var episodeCardButton = {click: function() { throw new Error("episode card clicked"); }};
 var document = {querySelector: function(selector) {
-  if (selector.indexOf(".player-controls") >= 0 || selector.indexOf("play_pause_button") >= 0) return null;
-  return episodeCardButton;
+  if (selector.indexOf(", button.play_pause_button") >= 0) return episodeCardButton;
+  return null;
 }};`)
 	_, err := c.Do(context.Background(), ActionToggle)
 	if err == nil || !strings.Contains(err.Error(), "no matching control found") {
@@ -351,7 +351,7 @@ var document = {querySelector: function(selector) {
 	t.Setenv("MOCK_BROWSER_JS", `
 var playerButton = {click: function() {}};
 var document = {querySelector: function(selector) {
-  if (selector.indexOf(".player-controls") >= 0 || selector.indexOf("play_pause_button") >= 0) return playerButton;
+  if (selector.indexOf(".player-controls") >= 0) return playerButton;
   return null;
 }};`)
 	result, err := c.Do(context.Background(), ActionToggle)

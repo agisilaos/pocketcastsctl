@@ -4,6 +4,8 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"pocketcastsctl/internal/browsercontrol"
 )
 
 func TestCLICommandPreservesLocalInvocation(t *testing.T) {
@@ -75,7 +77,7 @@ func TestBrowserAutomationFailureExplainsRecovery(t *testing.T) {
 		},
 		{
 			name:        "Dia ignored playback action",
-			err:         errors.New("Dia reported Play but playback state remained paused"),
+			err:         &browsercontrol.ActionNotAppliedError{Application: "Dia", Label: "Play", State: browsercontrol.PlaybackStatePaused},
 			browser:     "dia",
 			wantMessage: "Dia did not apply the Web Player playback action",
 			wantHint:    "config set browser safari",

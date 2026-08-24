@@ -123,7 +123,7 @@ func printNowHuman(s app.NowSnapshot, cfg config.Config) {
 		target := newBrowserTarget(cfg.Browser, cfg.BrowserApp, cfg.URLContains)
 		webError, webHint = target.failure(errors.New(webError))
 	}
-	fmt.Printf("Web    : %s%s\n", strings.ToUpper(s.Web.State), formatInlineErr(webError))
+	fmt.Printf("Web    : %s%s\n", strings.ToUpper(string(s.Web.State)), formatInlineErr(webError))
 	if webHint != "" {
 		fmt.Println("         next:", webHint)
 	}
