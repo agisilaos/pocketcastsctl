@@ -90,5 +90,5 @@ func isRetryableTransientError(err error) bool {
 }
 
 func printAuthRecoveryHint() {
-	fmt.Fprintln(os.Stderr, "next: run `pocketcastsctl auth refresh`")
+	fmt.Fprintln(os.Stderr, "next: run `pocketcastsctl auth login` or import a fresh browser session")
 }

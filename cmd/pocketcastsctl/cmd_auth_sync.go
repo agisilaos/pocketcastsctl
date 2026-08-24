@@ -1,92 +1,61 @@
 package main
 
 import (
-	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
-	"strings"
-	"time"
 
-	"pocketcastsctl/internal/browsercontrol"
 	"pocketcastsctl/internal/config"
 )
 
+// runAuthSync keeps the deprecated command name for one release, but routes
+// it through the Keychain-backed browser importer. It must never recreate the
+// old plaintext Authorization-header behavior.
 func runAuthSync(args []string, cfg config.Config) int {
+	fmt.Fprintln(os.Stderr, "warning: `auth sync` is deprecated; use `pocketcastsctl auth import-browser --browser <chrome|dia|safari>` (planned removal: v0.3.0)")
 	fs := flag.NewFlagSet("auth sync", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	browser := fs.String("browser", cfg.Browser, `chrome or safari`)
-	browserApp := fs.String("browser-app", cfg.BrowserApp, `macOS application name (optional)`)
-	urlContains := fs.String("url-contains", cfg.URLContains, `substring to match the Pocket Casts tab URL`)
-	header := fs.String("header", "Authorization", "header name to store in config")
-	prefix := fs.String("prefix", "Bearer ", "prefix to add to token (set empty to store raw token)")
-	keyContains := fs.String("key-contains", "", "prefer tokens whose sourceKey contains this substring")
-	dryRun := fs.Bool("dry-run", false, "print token candidate keys only (no token values) and exit")
+	browser := fs.String("browser", cfg.Browser, "browser source: chrome, dia, or safari")
+	profile := fs.String("profile", "", "browser profile directory name (for example, Profile 1)")
+	force := fs.Bool("force", false, "replace a different or unknown active account")
+	noInput := fs.Bool("no-input", false, "disable prompts")
+	jsonOut := fs.Bool("json", false, "output JSON")
+	plain := fs.Bool("plain", false, "plain line-oriented output")
+
+	// Accepted only so old invocations fail safely with a useful migration
+	// path instead of persisting a credential in config.json.
+	fs.String("browser-app", cfg.BrowserApp, "deprecated and ignored")
+	fs.String("url-contains", cfg.URLContains, "deprecated and ignored")
+	fs.String("header", "Authorization", "deprecated and ignored")
+	fs.String("prefix", "Bearer ", "deprecated and ignored")
+	fs.String("key-contains", "", "deprecated and ignored")
+	dryRun := fs.Bool("dry-run", false, "deprecated; browser imports are always validated before saving")
 	if ok, code := parseFlagsOrExit(fs, args); !ok {
 		return code
 	}
-
-	controller, err := browsercontrol.New(browsercontrol.Options{
-		Browser:     *browser,
-		BrowserApp:  *browserApp,
-		URLContains: *urlContains,
-	})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "invalid browser options: %v\n", err)
-		return 2
+	if fs.NArg() != 0 {
+		return renderAuthCommandError("auth sync", "auth.usage", errors.New("usage: pocketcastsctl auth sync --browser <chrome|dia|safari> [--profile name]"), *jsonOut, *plain, 2)
 	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	var cands []browsercontrol.TokenCandidate
-	err = retryTransient(ctx, 3, 150*time.Millisecond, func() error {
-		var tokenErr error
-		cands, tokenErr = controller.TokenCandidates(ctx)
-		return tokenErr
-	})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "auth sync failed: %v\n", err)
-		if isBrowserAutomationHintError(err) {
-			_ = printTabHints(ctx, controller)
-			fmt.Fprintln(os.Stderr, "tip: run `pocketcastsctl auth login` (or `pocketcastsctl login`) then try again")
-			fmt.Fprintln(os.Stderr, "tip: if your Pocket Casts URL is `pocketcasts.com/...`, use `--url-contains pocketcasts.com`")
-			fmt.Fprintln(os.Stderr, "tip: if this browser isn't scriptable, try `--browser chrome` or `--browser safari`")
-		}
-		return 1
-	}
-	if len(cands) == 0 {
-		fmt.Fprintln(os.Stderr, "no token candidates found in localStorage (try reloading play.pocketcasts.com while logged in)")
-		return 1
-	}
-
 	if *dryRun {
-		for _, c := range cands {
-			fmt.Printf("%s (len=%d)\n", c.SourceKey, len(c.Token))
-		}
-		return 0
+		return renderAuthCommandError("auth sync", "auth.sync.dry_run_removed", errors.New("--dry-run cannot import a session; use `pocketcastsctl auth import-browser --browser <name>` when ready"), *jsonOut, *plain, 2)
 	}
 
-	token := selectBestToken(cands, *keyContains)
-	if token == "" {
-		fmt.Fprintln(os.Stderr, "no suitable token candidate found (try --dry-run and --key-contains)")
-		return 1
+	translated := []string{"--browser", *browser}
+	if *profile != "" {
+		translated = append(translated, "--profile", *profile)
 	}
-
-	value := token
-	if *prefix != "" && !strings.HasPrefix(strings.ToLower(value), strings.ToLower(*prefix)) {
-		value = *prefix + value
+	if *force {
+		translated = append(translated, "--force")
 	}
-
-	if cfg.APIHeaders == nil {
-		cfg.APIHeaders = map[string]string{}
+	if *noInput {
+		translated = append(translated, "--no-input")
 	}
-	cfg.APIHeaders[*header] = value
-
-	if err := config.Save(cfg); err != nil {
-		fmt.Fprintf(os.Stderr, "failed to save config: %v\n", err)
-		return 1
+	if *jsonOut {
+		translated = append(translated, "--json")
 	}
-	fmt.Printf("stored %q header in: %s\n", *header, config.Path())
-	return 0
+	if *plain {
+		translated = append(translated, "--plain")
+	}
+	return runAuthImportBrowser(translated, cfg)
 }

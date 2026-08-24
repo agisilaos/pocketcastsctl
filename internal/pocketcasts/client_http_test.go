@@ -3,11 +3,38 @@ package pocketcasts
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 )
+
+type rotatingTokenSource struct {
+	accessToken string
+	refreshed   bool
+}
+
+type failingRefreshTokenSource struct{ err error }
+
+func (s failingRefreshTokenSource) AccessToken(context.Context) (string, error) {
+	return "stale-token", nil
+}
+
+func (s failingRefreshTokenSource) ForceRefresh(context.Context) (string, error) {
+	return "", s.err
+}
+
+func (s *rotatingTokenSource) AccessToken(context.Context) (string, error) {
+	return s.accessToken, nil
+}
+
+func (s *rotatingTokenSource) ForceRefresh(context.Context) (string, error) {
+	s.refreshed = true
+	s.accessToken = "fresh-token"
+	return s.accessToken, nil
+}
 
 func TestNewAppliesDefaultsAndClonesHeaders(t *testing.T) {
 	opts := Options{Headers: map[string]string{" Authorization ": "Bearer abc", "": "x"}}
@@ -115,5 +142,59 @@ func TestUpNextMutationsRequests(t *testing.T) {
 	}
 	if got := seen[1]["version"]; got != float64(2) {
 		t.Fatalf("remove version = %v, want 2", got)
+	}
+}
+
+func TestClientRefreshesOnceAfterUnauthorizedAndReplaysBody(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		body, _ := io.ReadAll(r.Body)
+		if len(body) == 0 {
+			t.Fatal("request body was empty")
+		}
+		if requests == 1 {
+			if got := r.Header.Get("Authorization"); got != "Bearer stale-token" {
+				t.Fatalf("first Authorization = %q", got)
+			}
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer fresh-token" {
+			t.Fatalf("retry Authorization = %q", got)
+		}
+		_, _ = w.Write([]byte(`{"episodes":[]}`))
+	}))
+	defer server.Close()
+
+	source := &rotatingTokenSource{accessToken: "stale-token"}
+	client := New(Options{BaseURL: server.URL, HTTP: server.Client(), TokenSource: source})
+	if _, err := client.UpNextList(context.Background(), UpNextListRequest{Model: "webplayer", Version: 2}); err != nil {
+		t.Fatal(err)
+	}
+	if requests != 2 || !source.refreshed {
+		t.Fatalf("requests=%d refreshed=%v", requests, source.refreshed)
+	}
+}
+
+func TestClientSurfacesRefreshFailureAfterUnauthorized(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer server.Close()
+
+	refreshErr := errors.New("refresh network unavailable")
+	client := New(Options{
+		BaseURL:     server.URL,
+		HTTP:        server.Client(),
+		TokenSource: failingRefreshTokenSource{err: refreshErr},
+	})
+	_, err := client.UpNextList(context.Background(), UpNextListRequest{Model: "webplayer", Version: 2})
+	if !errors.Is(err, refreshErr) {
+		t.Fatalf("error=%v, want refresh failure", err)
+	}
+	var statusErr interface{ HTTPStatusCode() int }
+	if errors.As(err, &statusErr) {
+		t.Fatalf("refresh failure was incorrectly reported as HTTP %d", statusErr.HTTPStatusCode())
 	}
 }

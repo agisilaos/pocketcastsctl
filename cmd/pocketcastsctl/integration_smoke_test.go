@@ -112,7 +112,7 @@ func TestCLISmokeQueueAPILSPlainUnauthorized(t *testing.T) {
 	if !strings.Contains(stderr, "queue api ls failed") {
 		t.Fatalf("stderr missing failure line: %q", stderr)
 	}
-	if !strings.Contains(stderr, "auth refresh") {
+	if !strings.Contains(stderr, "auth login") {
 		t.Fatalf("stderr missing auth recovery hint: %q", stderr)
 	}
 }

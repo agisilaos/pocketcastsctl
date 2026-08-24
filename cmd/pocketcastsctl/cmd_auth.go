@@ -16,6 +16,8 @@ func runAuth(args []string, cfg config.Config) int {
 	switch args[0] {
 	case "login":
 		return runAuthLogin(args[1:], cfg)
+	case "import-browser":
+		return runAuthImportBrowser(args[1:], cfg)
 	case "refresh":
 		return runAuthRefresh(args[1:], cfg)
 	case "status":
@@ -25,16 +27,14 @@ func runAuth(args []string, cfg config.Config) int {
 	case "sync":
 		return runAuthSync(args[1:], cfg)
 
+	case "logout":
+		return runAuthLogout(args[1:], cfg)
 	case "clear":
-		cfg.APIHeaders = map[string]string{}
-		if err := config.Save(cfg); err != nil {
-			fmt.Fprintf(os.Stderr, "failed to save config: %v\n", err)
-			return 1
-		}
-		fmt.Println("cleared API auth in:", config.Path())
-		return 0
+		fmt.Fprintln(os.Stderr, "warning: `auth clear` is deprecated; use `pocketcastsctl auth logout` (planned removal: v0.3.0)")
+		return runAuthLogout(args[1:], cfg)
 	case "tabs":
-		return runAuthTabs(args[1:], cfg)
+		fmt.Fprintln(os.Stderr, "warning: `auth tabs` moved to `pocketcastsctl web tabs` (planned removal: v0.3.0)")
+		return runWebTabs(args[1:], cfg)
 
 	default:
 		fmt.Fprintf(os.Stderr, "unknown auth subcommand: %s\n", args[0])

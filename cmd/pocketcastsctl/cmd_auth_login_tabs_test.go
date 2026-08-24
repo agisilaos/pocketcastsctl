@@ -5,12 +5,12 @@ import (
 	"testing"
 )
 
-func TestRunAuthLoginRejectsEmptyURL(t *testing.T) {
-	code, _, stderr := runForTest(t, []string{"auth", "login", "--url", ""}, "")
+func TestRunWebLoginRejectsEmptyURL(t *testing.T) {
+	code, _, stderr := runForTest(t, []string{"web", "login", "--url", ""}, "")
 	if code != 1 {
 		t.Fatalf("exit code = %d, want 1", code)
 	}
-	if !strings.Contains(stderr, "failed to open browser: url cannot be empty") {
+	if !strings.Contains(stderr, "web login: failed to open") || !strings.Contains(stderr, "url cannot be empty") {
 		t.Fatalf("stderr missing empty-url error: %q", stderr)
 	}
 }

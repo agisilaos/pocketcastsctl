@@ -17,6 +17,7 @@ import (
 )
 
 func runNow(args []string, cfg config.Config) int {
+	warnLegacyCredential(cfg)
 	fs := flag.NewFlagSet("now", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	jsonOut := fs.Bool("json", false, "output JSON")
@@ -134,6 +135,9 @@ func printNowHuman(s app.NowSnapshot) {
 	}
 	fmt.Printf("Queue  : %s%s\n", queue, formatInlineErr(s.Queue.Error))
 	authLine := fmt.Sprintf("%s", strings.ToUpper(s.Auth.Status))
+	if strings.TrimSpace(s.Auth.Source) != "" {
+		authLine += " | source " + s.Auth.Source
+	}
 	if s.Auth.TokenExpiryKnown {
 		authLine += fmt.Sprintf(" | expiry %s", formatRelativeExpiry(s.Auth.TokenExpiryUnix))
 	}
@@ -166,6 +170,9 @@ func printNowPlain(s app.NowSnapshot) {
 	}
 	fmt.Printf("auth_status\t%s\n", s.Auth.Status)
 	fmt.Printf("auth_present\t%v\n", s.Auth.AuthorizationExists)
+	if strings.TrimSpace(s.Auth.Source) != "" {
+		fmt.Printf("auth_source\t%s\n", s.Auth.Source)
+	}
 	for i, a := range s.Actions {
 		fmt.Printf("action_%d\t%s\n", i+1, a)
 	}

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -9,7 +10,7 @@ import (
 	"time"
 
 	"pocketcastsctl/internal/app"
-	"pocketcastsctl/internal/authutil"
+	"pocketcastsctl/internal/authn"
 	"pocketcastsctl/internal/config"
 )
 
@@ -35,8 +36,11 @@ func runAuthStatus(args []string, cfg config.Config) int {
 			count++
 		}
 	}
-	authHeader := false
-	authHeader = authutil.HasAuthorizationHeader(headers)
+	manager := newAuthManager(cfg)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	session, source, loadErr := manager.Snapshot(ctx)
+	cancel()
+	authHeader := loadErr == nil && strings.TrimSpace(session.AccessToken) != ""
 
 	status := map[string]any{
 		"config_path":            redactUserPath(config.Path()),
@@ -46,9 +50,26 @@ func runAuthStatus(args []string, cfg config.Config) int {
 		"token_expiry_known":     false,
 		"browser":                cfg.Browser,
 		"url_contains":           cfg.URLContains,
+		"source":                 string(source),
+	}
+	if session.Method != "" {
+		status["method"] = session.Method
+	}
+	if session.Scope != "" {
+		status["scope"] = session.Scope
+	}
+	if session.Email != "" {
+		status["email"] = session.Email
+	}
+	if session.AccountID != "" {
+		status["account_id"] = session.AccountID
+	}
+	missingOnly := errors.Is(loadErr, authn.ErrNotConfigured)
+	if loadErr != nil && !missingOnly {
+		status["error"] = loadErr.Error()
 	}
 	var tokenExpiryText string
-	if exp, ok := authutil.TokenExpiryUnix(headers); ok {
+	if exp := session.ExpiresAt; exp > 0 {
 		status["token_expiry_known"] = true
 		status["token_expiry_unix"] = exp
 		remaining := exp - time.Now().Unix()
@@ -77,11 +98,17 @@ func runAuthStatus(args []string, cfg config.Config) int {
 			"authorization_present",
 			"authorization_verified",
 			"token_expiry_known",
+			"source",
 			"browser",
 			"url_contains",
 		}
 		for _, k := range keys {
 			fmt.Printf("%s\t%v\n", k, status[k])
+		}
+		for _, key := range []string{"account_id", "email", "method", "scope", "error"} {
+			if value, ok := status[key]; ok {
+				fmt.Printf("%s\t%v\n", key, value)
+			}
 		}
 		if exp, ok := status["token_expiry_unix"]; ok {
 			fmt.Printf("token_expiry_unix\t%v\n", exp)
@@ -96,6 +123,18 @@ func runAuthStatus(args []string, cfg config.Config) int {
 	if authHeader {
 		fmt.Println("auth status:", overall)
 		fmt.Println("[OK] authorization: configured")
+		fmt.Printf("[OK] credential_source: %s\n", source)
+		if session.Method != "" {
+			fmt.Printf("[OK] method: %s\n", session.Method)
+		}
+		if session.Scope != "" {
+			fmt.Printf("[OK] scope: %s\n", session.Scope)
+		}
+		if session.Email != "" {
+			fmt.Printf("[OK] account: %s\n", session.Email)
+		} else if session.AccountID != "" {
+			fmt.Printf("[OK] account: %s\n", session.AccountID)
+		}
 		fmt.Println("[WARN] authorization validity: not verified (run `pocketcastsctl doctor`)")
 		if tokenExpiryText != "" {
 			fmt.Printf("[OK] token_expiry: %s\n", tokenExpiryText)
@@ -107,7 +146,10 @@ func runAuthStatus(args []string, cfg config.Config) int {
 		fmt.Println("auth status:", overall)
 		fmt.Println("[WARN] authorization: missing")
 		fmt.Println("      next: pocketcastsctl auth login")
-		fmt.Println("      next: pocketcastsctl auth sync")
+		fmt.Println("      next: pocketcastsctl auth import-browser --browser dia")
+		if loadErr != nil && !missingOnly {
+			fmt.Printf("[WARN] credential_source: %v\n", loadErr)
+		}
 	}
 	fmt.Printf("[OK] api_headers_count: %v\n", status["api_headers_count"])
 	fmt.Printf("[OK] browser: %v\n", status["browser"])
@@ -127,6 +169,7 @@ func runAuthVerify(args []string, cfg config.Config) int {
 	if ok, code := requireNoPositionalArgsOrExit(fs, "usage: pocketcastsctl auth verify [--json] [--plain]"); !ok {
 		return code
 	}
+	warnLegacyCredential(cfg)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
@@ -184,7 +227,8 @@ func runAuthVerify(args []string, cfg config.Config) int {
 	case app.KindUnauthorized:
 		fmt.Println("auth verify: FAIL")
 		fmt.Println("[FAIL] authorization: rejected by API (401 Unauthorized)")
-		fmt.Println("next: pocketcastsctl auth refresh")
+		fmt.Println("next: pocketcastsctl auth login")
+		fmt.Println("next: pocketcastsctl auth import-browser --browser dia")
 		return 1
 	case app.KindTransient:
 		fmt.Println("auth verify: WARN")
@@ -194,7 +238,7 @@ func runAuthVerify(args []string, cfg config.Config) int {
 	default:
 		fmt.Println("auth verify: FAIL")
 		fmt.Printf("[FAIL] authorization: %v\n", err)
-		fmt.Println("next: pocketcastsctl auth refresh")
+		fmt.Println("next: pocketcastsctl auth login")
 		return 1
 	}
 }

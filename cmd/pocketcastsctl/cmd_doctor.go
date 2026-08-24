@@ -181,8 +181,6 @@ func applyDoctorFixes(checks []doctorCheck) []doctorFixResult {
 		switch c.ID {
 		case "config_file":
 			add("config_init", "pocketcastsctl config init")
-		case "auth_header", "auth_validation":
-			add("auth_refresh_sync", "pocketcastsctl auth refresh --sync-only --no-input")
 		}
 	}
 
@@ -206,19 +204,6 @@ func applyDoctorFixes(checks []doctorCheck) []doctorFixResult {
 				res.Message = fmt.Sprintf("write config: %v", err)
 			} else {
 				res.Message = fmt.Sprintf("wrote default config to %s", redactUserPath(config.Path()))
-			}
-		case "auth_refresh_sync":
-			cfgNow, err := config.Load()
-			if err != nil {
-				res.Status = "fail"
-				res.Message = fmt.Sprintf("load config: %v", err)
-				break
-			}
-			if code := runAuthRefresh([]string{"--sync-only", "--no-input"}, cfgNow); code != 0 {
-				res.Status = "fail"
-				res.Message = fmt.Sprintf("auth refresh exited with code %d", code)
-			} else {
-				res.Message = "synced and verified auth from current browser session"
 			}
 		default:
 			res.Status = "fail"
@@ -294,20 +279,36 @@ func collectDoctorChecks(cfg config.Config, includeAPIValidation bool) []doctorC
 		})
 	}
 
-	authConfigured := authutil.HasAuthorizationHeader(cfg.APIHeaders)
-	if authConfigured {
+	authManager := newAuthManager(cfg)
+	authCtx, authCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	authSession, authSource, authErr := authManager.Snapshot(authCtx)
+	authCancel()
+	authConfigured := authErr == nil && strings.TrimSpace(authSession.AccessToken) != ""
+	if authConfigured && string(authSource) != "legacy_config" {
 		checks = append(checks, doctorCheck{
-			ID:      "auth_header",
+			ID:      "api_session",
 			Status:  "ok",
-			Message: "Authorization header configured",
+			Message: fmt.Sprintf("API session available from %s", authSource),
+		})
+	} else if authConfigured {
+		checks = append(checks, doctorCheck{
+			ID:      "api_session",
+			Status:  "warn",
+			Code:    "doctor.auth.legacy_config",
+			Message: "legacy plaintext Authorization config is in use",
+			Hint:    "run `pocketcastsctl auth login` or `pocketcastsctl auth import-browser --browser dia`",
 		})
 	} else {
+		message := "API session missing"
+		if authErr != nil {
+			message = authErr.Error()
+		}
 		checks = append(checks, doctorCheck{
-			ID:      "auth_header",
+			ID:      "api_session",
 			Status:  "warn",
-			Code:    "doctor.auth.header_missing",
-			Message: "Authorization header missing",
-			Hint:    "run `pocketcastsctl auth login` then `pocketcastsctl auth sync`",
+			Code:    "doctor.auth.session_missing",
+			Message: message,
+			Hint:    "run `pocketcastsctl auth login` or `pocketcastsctl auth import-browser --browser dia`",
 		})
 	}
 
@@ -319,7 +320,7 @@ func collectDoctorChecks(cfg config.Config, includeAPIValidation bool) []doctorC
 					Status:  "fail",
 					Code:    "doctor.auth.invalid",
 					Message: "stored auth is rejected (401 Unauthorized)",
-					Hint:    "run `pocketcastsctl auth sync` (or `auth login` then `auth sync`)",
+					Hint:    "run `pocketcastsctl auth login` or import a fresh browser session",
 				})
 			} else {
 				code, msg, hint := classifyAuthValidationError(err)
@@ -412,16 +413,15 @@ func doctorSuggestedFixes(checks []doctorCheck) []string {
 			if c.Status != "ok" {
 				add("pocketcastsctl config init")
 			}
-		case "auth_header":
+		case "api_session":
 			if c.Status != "ok" {
 				add("pocketcastsctl auth login")
-				add("pocketcastsctl auth sync")
+				add("pocketcastsctl auth import-browser --browser dia")
 			}
 		case "auth_validation":
 			if c.Status != "ok" {
-				add("pocketcastsctl auth sync")
 				add("pocketcastsctl auth login")
-				add("pocketcastsctl auth sync")
+				add("pocketcastsctl auth import-browser --browser dia")
 			}
 		case "picker_optional":
 			if c.Status != "ok" {
@@ -512,15 +512,20 @@ func doctorCodeCatalog() map[string]doctorCodeEntry {
 			Description: "No config file was found at the expected location.",
 			Fix:         "pocketcastsctl config init",
 		},
-		"doctor.auth.header_missing": {
-			Title:       "Authorization header missing",
-			Description: "No API auth token is stored in config.",
-			Fix:         "pocketcastsctl auth refresh",
+		"doctor.auth.session_missing": {
+			Title:       "API session missing",
+			Description: "No environment, Keychain, or legacy API credential is available.",
+			Fix:         "pocketcastsctl auth login",
+		},
+		"doctor.auth.legacy_config": {
+			Title:       "Legacy plaintext credential",
+			Description: "The CLI is using a deprecated Authorization header from the JSON config.",
+			Fix:         "pocketcastsctl auth login or pocketcastsctl auth import-browser --browser dia",
 		},
 		"doctor.auth.invalid": {
-			Title:       "Stored auth rejected",
-			Description: "The API returned 401 for the stored Authorization header.",
-			Fix:         "pocketcastsctl auth refresh",
+			Title:       "API session rejected",
+			Description: "The API returned 401 after the active session was refreshed or could not be refreshed.",
+			Fix:         "pocketcastsctl auth login or import a fresh browser session",
 		},
 		"doctor.auth.unverified": {
 			Title:       "Auth not verified",
@@ -567,7 +572,7 @@ func verifyAuthWithAPI(cfg config.Config) (bool, error) {
 
 func classifyAuthValidationError(err error) (code, message, hint string) {
 	if err == nil {
-		return "doctor.auth.unverified", "unable to validate auth now", "retry later; if queue commands fail, run `pocketcastsctl auth sync`"
+		return "doctor.auth.unverified", "unable to validate auth now", "retry `pocketcastsctl auth verify`"
 	}
 	s := strings.ToLower(strings.TrimSpace(err.Error()))
 	switch {
@@ -578,6 +583,6 @@ func classifyAuthValidationError(err error) (code, message, hint string) {
 	case strings.Contains(s, "http 5"):
 		return "doctor.auth.api.unavailable", "Pocket Casts API unavailable during auth validation", "retry later; if persistent, inspect with `pocketcastsctl queue api ls --raw`"
 	default:
-		return "doctor.auth.unverified", fmt.Sprintf("unable to validate auth now (%v)", err), "retry later; if queue commands fail, run `pocketcastsctl auth sync`"
+		return "doctor.auth.unverified", fmt.Sprintf("unable to validate auth now (%v)", err), "retry `pocketcastsctl auth verify`"
 	}
 }

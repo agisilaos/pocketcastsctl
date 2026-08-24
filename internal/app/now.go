@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"pocketcastsctl/internal/authn"
 	"pocketcastsctl/internal/authutil"
 	"pocketcastsctl/internal/browsercontrol"
 	"pocketcastsctl/internal/config"
@@ -51,6 +52,8 @@ type NowQueueStatus struct {
 type NowAuthStatus struct {
 	Status              string `json:"status"` // configured|missing|verified|unauthorized|unverified
 	AuthorizationExists bool   `json:"authorization_present"`
+	Source              string `json:"source,omitempty"`
+	Method              string `json:"method,omitempty"`
 	TokenExpiryKnown    bool   `json:"token_expiry_known"`
 	TokenExpiryUnix     int64  `json:"token_expiry_unix,omitempty"`
 	Error               string `json:"error,omitempty"`
@@ -120,10 +123,7 @@ func collectLocalStatus(cfg config.Config) NowLocalStatus {
 }
 
 func collectQueueStatus(ctx context.Context, cfg config.Config) NowQueueStatus {
-	if !authutil.HasAuthorizationHeader(cfg.APIHeaders) {
-		return NowQueueStatus{Status: "unauthorized", Error: "Authorization header missing"}
-	}
-	client := pocketcasts.New(pocketcasts.Options{BaseURL: cfg.APIBaseURL, Headers: cfg.APIHeaders})
+	client, _ := authn.NewPocketCastsClient(cfg, authn.ManagerOptions{})
 	ctx, cancel := context.WithTimeout(ctx, 6*time.Second)
 	defer cancel()
 	body, err := client.UpNextList(ctx, pocketcasts.UpNextListRequest{
@@ -133,6 +133,9 @@ func collectQueueStatus(ctx context.Context, cfg config.Config) NowQueueStatus {
 		Version:        2,
 	})
 	if err != nil {
+		if isMissingAuthError(err) {
+			return NowQueueStatus{Status: "unauthorized", Error: "API authentication is not configured"}
+		}
 		if authutil.IsUnauthorizedError(err) {
 			return NowQueueStatus{Status: "unauthorized", Error: "API returned 401 Unauthorized"}
 		}
@@ -161,14 +164,22 @@ func collectQueueStatus(ctx context.Context, cfg config.Config) NowQueueStatus {
 }
 
 func collectAuthStatus(ctx context.Context, cfg config.Config, opts NowOptions) NowAuthStatus {
-	auth := NowAuthStatus{Status: "missing", AuthorizationExists: authutil.HasAuthorizationHeader(cfg.APIHeaders)}
-	if !auth.AuthorizationExists {
+	manager := authn.NewManager(cfg, authn.ManagerOptions{})
+	session, source, loadErr := manager.Snapshot(ctx)
+	auth := NowAuthStatus{Status: "missing"}
+	if loadErr != nil || session.AccessToken == "" {
+		if loadErr != nil && !isMissingAuthError(loadErr) {
+			auth.Error = loadErr.Error()
+		}
 		return auth
 	}
+	auth.AuthorizationExists = true
+	auth.Source = string(source)
+	auth.Method = session.Method
 	auth.Status = "configured"
-	if exp, ok := authutil.TokenExpiryUnix(cfg.APIHeaders); ok {
+	if session.ExpiresAt > 0 {
 		auth.TokenExpiryKnown = true
-		auth.TokenExpiryUnix = exp
+		auth.TokenExpiryUnix = session.ExpiresAt
 	}
 	if !opts.VerifyAuth {
 		return auth
@@ -202,7 +213,8 @@ func suggestNowActions(s NowSnapshot) []string {
 	}
 
 	if s.Auth.Status == "missing" || s.Auth.Status == "unauthorized" {
-		add("pocketcastsctl auth refresh")
+		add("pocketcastsctl auth login")
+		add("pocketcastsctl auth import-browser --browser dia")
 	}
 	if s.Web.Status == "paused" {
 		add("pocketcastsctl web toggle")

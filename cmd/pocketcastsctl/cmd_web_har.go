@@ -20,6 +20,12 @@ func runWeb(args []string, cfg config.Config) int {
 		printWebHelp()
 		return 0
 	}
+	if args[0] == "login" {
+		return runWebLogin(args[1:], cfg)
+	}
+	if args[0] == "tabs" {
+		return runWebTabs(args[1:], cfg)
+	}
 
 	fs := flag.NewFlagSet("web", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)

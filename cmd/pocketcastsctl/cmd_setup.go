@@ -7,12 +7,10 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
 	"pocketcastsctl/internal/app"
-	"pocketcastsctl/internal/authutil"
 	"pocketcastsctl/internal/config"
 )
 
@@ -38,15 +36,9 @@ type setupReport struct {
 }
 
 type setupOptions struct {
-	jsonOut         bool
-	plainOut        bool
-	noInput         bool
-	browser         string
-	browserApp      string
-	openURL         string
-	urlContains     string
-	keyContains     string
-	candidatePasses int
+	jsonOut  bool
+	plainOut bool
+	noInput  bool
 }
 
 func runSetup(args []string, cfg config.Config) int {
@@ -58,7 +50,7 @@ func runSetup(args []string, cfg config.Config) int {
 			args = args[1:]
 		default:
 			fmt.Fprintf(os.Stderr, "unknown setup subcommand: %s\n", args[0])
-			fmt.Fprintln(os.Stderr, "usage: pocketcastsctl setup [run|check|auth|verify] [--json|--plain] [--no-input] [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--url-contains needle]")
+			fmt.Fprintln(os.Stderr, "usage: pocketcastsctl setup [run|check|auth|verify] [--json|--plain] [--no-input]")
 			return 2
 		}
 	}
@@ -68,12 +60,6 @@ func runSetup(args []string, cfg config.Config) int {
 	jsonOut := fs.Bool("json", false, "output JSON onboarding report")
 	plainOut := fs.Bool("plain", false, "plain key/value output")
 	noInput := fs.Bool("no-input", false, "disable interactive prompts")
-	browser := fs.String("browser", cfg.Browser, `browser name`)
-	browserApp := fs.String("browser-app", cfg.BrowserApp, `macOS application name (optional)`)
-	openURL := fs.String("url", "https://pocketcasts.com/podcasts", "URL to open for login")
-	urlContains := fs.String("url-contains", cfg.URLContains, `substring to match the Pocket Casts tab URL`)
-	keyContains := fs.String("key-contains", "", "prefer tokens whose sourceKey contains this substring")
-	candidatePasses := fs.Int("candidate-passes", 1, "number of candidate verification passes")
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0
@@ -82,7 +68,7 @@ func runSetup(args []string, cfg config.Config) int {
 		return 2
 	}
 	if fs.NArg() != 0 {
-		fmt.Fprintln(os.Stderr, "usage: pocketcastsctl setup [run|check|auth|verify] [--json|--plain] [--no-input] [--browser <name>] [--browser-app <app>] [--url https://play.pocketcasts.com] [--url-contains needle]")
+		fmt.Fprintln(os.Stderr, "usage: pocketcastsctl setup [run|check|auth|verify] [--json|--plain] [--no-input]")
 		return 2
 	}
 	if *jsonOut && *plainOut {
@@ -91,15 +77,9 @@ func runSetup(args []string, cfg config.Config) int {
 	}
 
 	opts := setupOptions{
-		jsonOut:         *jsonOut,
-		plainOut:        *plainOut,
-		noInput:         *noInput || *jsonOut || *plainOut,
-		browser:         *browser,
-		browserApp:      *browserApp,
-		openURL:         *openURL,
-		urlContains:     *urlContains,
-		keyContains:     *keyContains,
-		candidatePasses: *candidatePasses,
+		jsonOut:  *jsonOut,
+		plainOut: *plainOut,
+		noInput:  *noInput || *jsonOut || *plainOut || !stdinIsTerminal(),
 	}
 	mode := "interactive"
 	if opts.noInput {
@@ -144,6 +124,10 @@ func runSetup(args []string, cfg config.Config) int {
 			return renderSetupOutput(report, opts, code)
 		}
 		cfgNow, _ = config.Load()
+		if !setupAuthConfigured(cfgNow) {
+			report.Status = "warn"
+			return renderSetupOutput(report, opts, 0)
+		}
 		if code := setupStepVerify(cfgNow, &report); code != 0 {
 			return renderSetupOutput(report, opts, code)
 		}
@@ -183,58 +167,73 @@ func setupStepCheck(cfg config.Config, report *setupReport) int {
 
 func setupStepAuth(cfg config.Config, opts setupOptions, report *setupReport) int {
 	fmt.Fprintln(os.Stderr, "setup step 2/4: ensure auth is configured")
-	cfgNow, _ := config.Load()
-	if authutil.HasAuthorizationHeader(cfgNow.APIHeaders) {
+	if setupAuthConfigured(cfg) {
 		report.Steps = append(report.Steps, setupStep{ID: "auth", Status: "ok", Message: "auth configured"})
 		return 0
 	}
 	if opts.noInput {
-		report.Status = "fail"
-		report.Error = "auth not configured and --no-input is set"
+		report.Status = "warn"
 		report.Steps = append(report.Steps, setupStep{
 			ID:      "auth",
-			Status:  "fail",
-			Message: "auth not configured and --no-input is set",
-			Hint:    "run `pocketcastsctl auth refresh --sync-only --no-input` after logging in",
+			Status:  "skip",
+			Message: "auth setup skipped in non-interactive mode",
+			Hint:    "pipe a password to `pocketcastsctl auth login --email <address> --password-stdin` or run `pocketcastsctl auth import-browser --browser <chrome|dia|safari>`",
 		})
-		return 1
+		report.Next = []string{
+			"pocketcastsctl auth login --email <address> --password-stdin",
+			"pocketcastsctl auth import-browser --browser <chrome|dia|safari> [--profile <name>]",
+		}
+		return 0
 	}
-	fmt.Fprint(os.Stderr, "Run `pocketcastsctl auth refresh` now? [Y/n]: ")
-	line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
-	answer := strings.ToLower(strings.TrimSpace(line))
-	if answer != "" && answer != "y" && answer != "yes" {
+	fmt.Fprintln(os.Stderr, "Choose an authentication method:")
+	fmt.Fprintln(os.Stderr, "  1. Log in with Pocket Casts email and password")
+	fmt.Fprintln(os.Stderr, "  2. Import an existing Chrome, Dia, or Safari session")
+	fmt.Fprint(os.Stderr, "Method [1]: ")
+	reader := bufio.NewReader(os.Stdin)
+	line, _ := reader.ReadString('\n')
+	answer := strings.TrimSpace(line)
+	if answer == "" || answer == "1" {
+		if code := runAuthLogin(nil, cfg); code != 0 {
+			report.Status = "fail"
+			report.Error = "terminal login failed"
+			report.Steps = append(report.Steps, setupStep{ID: "auth", Status: "fail", Message: "terminal login failed", Hint: "run `pocketcastsctl auth login`"})
+			return code
+		}
+		report.Steps = append(report.Steps, setupStep{ID: "auth", Status: "ok", Message: "terminal login complete"})
+		return 0
+	}
+	if answer != "2" {
 		report.Status = "fail"
-		report.Error = "auth refresh skipped"
+		report.Error = "invalid authentication method"
+		report.Steps = append(report.Steps, setupStep{ID: "auth", Status: "fail", Message: "invalid authentication method", Hint: "choose 1 or 2"})
+		return 2
+	}
+	fmt.Fprint(os.Stderr, "Browser [dia]: ")
+	browserLine, _ := reader.ReadString('\n')
+	browser := strings.ToLower(strings.TrimSpace(browserLine))
+	if browser == "" {
+		browser = "dia"
+	}
+	if code := runAuthImportBrowser([]string{"--browser", browser}, cfg); code != 0 {
+		report.Status = "fail"
+		report.Error = "browser session import failed"
 		report.Steps = append(report.Steps, setupStep{
 			ID:      "auth",
 			Status:  "fail",
-			Message: "auth refresh skipped",
-			Hint:    "run `pocketcastsctl auth refresh`",
-		})
-		return 1
-	}
-
-	refreshArgs := []string{
-		"--browser", opts.browser,
-		"--browser-app", opts.browserApp,
-		"--url", opts.openURL,
-		"--url-contains", opts.urlContains,
-		"--key-contains", opts.keyContains,
-		"--candidate-passes", strconv.Itoa(opts.candidatePasses),
-	}
-	if code := runAuthRefresh(refreshArgs, cfgNow); code != 0 {
-		report.Status = "fail"
-		report.Error = "auth refresh failed"
-		report.Steps = append(report.Steps, setupStep{
-			ID:      "auth",
-			Status:  "fail",
-			Message: "auth refresh failed",
-			Hint:    "run `pocketcastsctl auth refresh`",
+			Message: "browser session import failed",
+			Hint:    fmt.Sprintf("run `pocketcastsctl auth import-browser --browser %s`", browser),
 		})
 		return code
 	}
-	report.Steps = append(report.Steps, setupStep{ID: "auth", Status: "ok", Message: "auth configured"})
+	report.Steps = append(report.Steps, setupStep{ID: "auth", Status: "ok", Message: "browser session imported"})
 	return 0
+}
+
+func setupAuthConfigured(cfg config.Config) bool {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	session, _, err := newAuthManager(cfg).Snapshot(ctx)
+	return err == nil && strings.TrimSpace(session.AccessToken) != ""
 }
 
 func setupStepVerify(cfg config.Config, report *setupReport) int {
@@ -243,7 +242,7 @@ func setupStepVerify(cfg config.Config, report *setupReport) int {
 	err := app.VerifyAuth(ctx, cfg, app.VerifyOptions{Attempts: 3, BaseDelay: 200 * time.Millisecond})
 	cancel()
 	if err != nil {
-		hint := "run `pocketcastsctl auth refresh`"
+		hint := "run `pocketcastsctl auth login` or import a browser session"
 		if app.KindOf(err) == app.KindTransient {
 			hint = "retry `pocketcastsctl auth verify` after checking network"
 		}

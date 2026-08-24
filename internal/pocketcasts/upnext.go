@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 )
@@ -31,7 +30,7 @@ func (c *Client) UpNextList(ctx context.Context, req UpNextListRequest) ([]byte,
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Accept", "application/json")
 
-	resp, err := c.http.Do(httpReq)
+	resp, err := c.do(httpReq)
 	if err != nil {
 		return nil, err
 	}
@@ -42,7 +41,7 @@ func (c *Client) UpNextList(ctx context.Context, req UpNextListRequest) ([]byte,
 		return nil, err
 	}
 	if resp.StatusCode >= 400 {
-		return nil, fmt.Errorf("http %d: %s", resp.StatusCode, string(body))
+		return nil, NewHTTPError(resp.StatusCode, string(body))
 	}
 	return body, nil
 }

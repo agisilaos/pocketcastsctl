@@ -4,10 +4,8 @@ import (
 	"context"
 	"errors"
 	"reflect"
-	"strings"
 	"testing"
 
-	"pocketcastsctl/internal/browsercontrol"
 	"pocketcastsctl/internal/config"
 )
 
@@ -48,24 +46,6 @@ func TestIsRetryableTransientError(t *testing.T) {
 	}
 }
 
-func TestRankedTokenCandidates(t *testing.T) {
-	in := []browsercontrol.TokenCandidate{
-		{SourceKey: "session", Token: ""},
-		{SourceKey: "auth_token", Token: "abc"},
-		{SourceKey: "access_token", Token: "def"},
-	}
-	got := rankedTokenCandidates(in, "access")
-	want := []string{"access_token", "auth_token"}
-	if len(got) != len(want) {
-		t.Fatalf("ranked len = %d, want %d", len(got), len(want))
-	}
-	for i := range want {
-		if got[i].SourceKey != want[i] {
-			t.Fatalf("ranked[%d] = %q, want %q", i, got[i].SourceKey, want[i])
-		}
-	}
-}
-
 func TestSuggestNowActions(t *testing.T) {
 	actions := suggestNowActions(NowSnapshot{
 		Auth:  NowAuthStatus{Status: "missing"},
@@ -74,7 +54,8 @@ func TestSuggestNowActions(t *testing.T) {
 		Queue: NowQueueStatus{Status: "ready", Total: 2},
 	})
 	want := []string{
-		"pocketcastsctl auth refresh",
+		"pocketcastsctl auth login",
+		"pocketcastsctl auth import-browser --browser dia",
 		"pocketcastsctl web toggle",
 		"pocketcastsctl local pick --in-progress --recent",
 		"pocketcastsctl queue api pick --recent",
@@ -99,13 +80,5 @@ func TestCollectAuthStatusNoVerify(t *testing.T) {
 	}
 	if !status.TokenExpiryKnown {
 		t.Fatalf("TokenExpiryKnown = false, want true")
-	}
-}
-
-func TestTokenCandidateScorePrefersKeyContains(t *testing.T) {
-	hit := tokenCandidateScore(browsercontrol.TokenCandidate{SourceKey: "access_token", Token: strings.Repeat("x", 48)}, "access")
-	miss := tokenCandidateScore(browsercontrol.TokenCandidate{SourceKey: "session_token", Token: strings.Repeat("x", 48)}, "access")
-	if hit <= miss {
-		t.Fatalf("expected keyContains hit score (%d) to be greater than miss (%d)", hit, miss)
 	}
 }

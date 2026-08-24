@@ -66,11 +66,3 @@ func TestJSForActionUnknown(t *testing.T) {
 		t.Fatalf("jsForAction unknown output mismatch: %q", js)
 	}
 }
-
-func TestScoreTokenCandidate(t *testing.T) {
-	jwt := TokenCandidate{SourceKey: "access_token", Token: "aaa.bbb.ccc"}
-	plain := TokenCandidate{SourceKey: "session", Token: "short"}
-	if scoreTokenCandidate(jwt) <= scoreTokenCandidate(plain) {
-		t.Fatalf("expected jwt-like token candidate to score higher")
-	}
-}
