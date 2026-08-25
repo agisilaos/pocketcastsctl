@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"pocketcastsctl/internal/config"
@@ -86,26 +87,83 @@ func dispatch(args []string, cfg config.Config) int {
 }
 
 func hasDirectHelpArg(args []string) bool {
-	argumentStart := 1
-	for end := len(args); end > 1; end-- {
-		if _, ok := usageText[strings.Join(args[:end], " ")]; ok {
-			argumentStart = end
-			break
-		}
+	topic, argumentStart := commandTopic(args)
+	if argumentStart >= len(args) {
+		return false
 	}
+	if args[argumentStart] == "help" && hasHelpSubtopics(topic) {
+		return true
+	}
+
 	for _, arg := range args[argumentStart:] {
 		switch {
 		case arg == "-h" || arg == "--help":
 			return true
 		case arg == "--" || !strings.HasPrefix(arg, "-"):
 			return false
-		case !strings.Contains(arg, "="):
-			// Without the leaf FlagSet, the following token might be this
-			// flag's value. Fall back to normal config-first dispatch.
+		case !isBooleanFlagForTopic(topic, arg):
+			// Help after a value-taking or unknown flag is ambiguous without
+			// parsing that leaf command. Fall back to config-first dispatch.
 			return false
 		}
 	}
 	return false
+}
+
+func commandTopic(args []string) (string, int) {
+	for end := len(args); end > 0; end-- {
+		topic := strings.Join(args[:end], " ")
+		if _, ok := usageText[topic]; ok {
+			return topic, end
+		}
+	}
+	return "", 1
+}
+
+func hasHelpSubtopics(topic string) bool {
+	prefix := topic + " "
+	for candidate := range usageText {
+		if strings.HasPrefix(candidate, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+func isBooleanFlagForTopic(topic, arg string) bool {
+	name, value, hasValue := strings.Cut(arg, "=")
+	if !usageHasFlag(topic, name) || !isBooleanHelpFlag(name) {
+		return false
+	}
+	if !hasValue {
+		return true
+	}
+	_, err := strconv.ParseBool(value)
+	return err == nil
+}
+
+func usageHasFlag(topic, name string) bool {
+	for _, field := range strings.FieldsFunc(usageText[topic], func(r rune) bool {
+		return r == ' ' || r == '[' || r == ']' || r == '(' || r == ')' || r == '|'
+	}) {
+		if field == name {
+			return true
+		}
+	}
+	return false
+}
+
+func isBooleanHelpFlag(name string) bool {
+	switch name {
+	case "--apply", "--details", "--dry-run", "--fix", "--force",
+		"--from-start", "--full", "--in-progress", "--interactive",
+		"--json", "--no-input", "--no-play", "--password-stdin",
+		"--plain", "--quick", "--raw", "--recent", "--reveal-secrets",
+		"--saved", "--unplayed", "--verify-auth", "--watch":
+		return true
+	default:
+		return false
+	}
 }
 
 func formatVersion() string {

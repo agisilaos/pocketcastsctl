@@ -905,8 +905,11 @@ func TestNestedHelpBypassesMalformedConfig(t *testing.T) {
 
 	for _, args := range [][]string{
 		{"auth", "--help"},
+		{"auth", "help"},
 		{"web", "login", "--help"},
-		{"web", "login", "--url=https://example.com", "--help"},
+		{"auth", "login", "--no-input", "--help"},
+		{"auth", "login", "--no-input=TRUE", "--help"},
+		{"queue", "api", "help"},
 		{"queue", "api", "ls", "--help"},
 	} {
 		t.Run(strings.Join(args, "_"), func(t *testing.T) {
@@ -919,6 +922,9 @@ func TestNestedHelpBypassesMalformedConfig(t *testing.T) {
 	for _, args := range [][]string{
 		{"now", "help"},
 		{"web", "login", "--url", "--help"},
+		{"auth", "login", "--bogus=value", "--help"},
+		{"now", "--interval=bogus", "--help"},
+		{"auth", "login", "--no-input=bogus", "--help"},
 		{"web", "login", "--", "--help"},
 		{"queue", "api", "play", "1", "--help"},
 	} {
