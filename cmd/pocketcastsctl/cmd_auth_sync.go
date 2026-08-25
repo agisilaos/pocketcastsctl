@@ -18,7 +18,7 @@ func runAuthSync(args []string, cfg config.Config) int {
 	fs.SetOutput(os.Stderr)
 	browser := fs.String("browser", cfg.Browser, "browser source: chrome, dia, or safari")
 	profile := fs.String("profile", "", "browser profile directory name (for example, Profile 1)")
-	force := fs.Bool("force", false, "skip account confirmation for a saved or legacy session; cannot override "+config.EnvAccessToken)
+	force := fs.Bool("force", false, sessionReplacementForceHelp)
 	noInput := fs.Bool("no-input", false, "disable prompts")
 	jsonOut := fs.Bool("json", false, "output JSON")
 	plain := fs.Bool("plain", false, "plain line-oriented output")

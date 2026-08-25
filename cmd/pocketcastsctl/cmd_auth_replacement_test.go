@@ -352,6 +352,9 @@ func TestAuthLoginFailsClosedWhenSavedSessionCannotResolve(t *testing.T) {
 	if !strings.Contains(stdout, `"code": "auth.session.resolve_failed"`) {
 		t.Fatalf("resolve error missing from stdout: %s", stdout)
 	}
+	if !strings.Contains(stdout, "restore Keychain access") || !strings.Contains(stdout, "pocketcastsctl auth logout") {
+		t.Fatalf("recovery guidance missing from stdout: %s", stdout)
+	}
 	if apiCalls.Load() != 0 || store.loads != 1 || store.saves != 0 || store.deletes != 0 {
 		t.Fatalf("unexpected work: api=%d loads=%d saves=%d deletes=%d", apiCalls.Load(), store.loads, store.saves, store.deletes)
 	}

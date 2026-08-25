@@ -20,6 +20,8 @@ import (
 var credentialStoreFactory = authn.NewKeyringStore
 var browserReaderFactory = func() authn.BrowserReader { return authn.NewSweetCookieReader() }
 
+const sessionReplacementForceHelp = "skip account confirmation for a saved API session or legacy credential; cannot override " + config.EnvAccessToken
+
 var errEnvironmentOverrideActive = errors.New(config.EnvAccessToken + " is the active credential source; unset it before replacing the API session (--force cannot override an environment credential)")
 
 func newAuthenticatedClient(cfg config.Config) (*pocketcasts.Client, *authn.Manager) {
@@ -66,7 +68,7 @@ func sessionReplacementPreflight(cfg config.Config) (authn.Session, error) {
 		return authn.Session{}, nil
 	}
 	if err != nil {
-		return authn.Session{}, fmt.Errorf("resolve active API session: %w", err)
+		return authn.Session{}, fmt.Errorf("resolve active API session: %w; restore Keychain access or run `pocketcastsctl auth logout` before retrying", err)
 	}
 	if source == authn.SourceEnvironment {
 		return authn.Session{}, errEnvironmentOverrideActive
