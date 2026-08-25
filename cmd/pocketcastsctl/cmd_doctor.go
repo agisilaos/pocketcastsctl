@@ -29,7 +29,7 @@ func runDoctor(args []string, cfg config.Config) int {
 	full := fs.Bool("full", false, "run full checks including API validation")
 	fix := fs.Bool("fix", false, "print suggested fix commands (no changes are made)")
 	apply := fs.Bool("apply", false, "apply supported doctor fixes (use with --fix)")
-	if err := fs.Parse(args); err != nil {
+	if err := parseCommandFlags(fs, args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0
 		}
@@ -509,7 +509,7 @@ func runDoctorExplain(args []string) int {
 	fs := flag.NewFlagSet("doctor explain", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	jsonOut := fs.Bool("json", false, "output JSON")
-	if err := fs.Parse(reordered); err != nil {
+	if err := parseCommandFlags(fs, reordered); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0
 		}

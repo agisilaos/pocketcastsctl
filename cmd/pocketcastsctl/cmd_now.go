@@ -27,7 +27,7 @@ func runNow(args []string, cfg config.Config) int {
 	interval := fs.Duration("interval", 5*time.Second, "refresh interval in watch mode")
 	verifyAuth := fs.Bool("verify-auth", false, "verify auth with API (slower)")
 	maxUpdates := fs.Int("max-updates", 0, "max snapshots in watch mode (0 = unlimited)")
-	if err := fs.Parse(args); err != nil {
+	if err := parseCommandFlags(fs, args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0
 		}

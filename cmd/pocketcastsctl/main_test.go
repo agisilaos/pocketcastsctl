@@ -909,8 +909,14 @@ func TestNestedHelpBypassesMalformedConfig(t *testing.T) {
 		{"web", "login", "--help"},
 		{"auth", "login", "--no-input", "--help"},
 		{"auth", "login", "--no-input=TRUE", "--help"},
+		{"auth", "sync", "--dry-run", "--help"},
+		{"doctor", "--quick", "--help"},
+		{"doctor", "explain", "CODE", "--help"},
+		{"local", "pick", "--from-start", "--help"},
 		{"queue", "api", "help"},
 		{"queue", "api", "ls", "--help"},
+		{"setup", "--no-input", "--help"},
+		{"web", "login", "--url=https://example.com", "--help"},
 	} {
 		t.Run(strings.Join(args, "_"), func(t *testing.T) {
 			code, stdout, stderr := runForTest(t, args, "")
@@ -920,7 +926,9 @@ func TestNestedHelpBypassesMalformedConfig(t *testing.T) {
 		})
 	}
 	for _, args := range [][]string{
+		{"doctor", "help"},
 		{"now", "help"},
+		{"setup", "help"},
 		{"web", "login", "--url", "--help"},
 		{"auth", "login", "--bogus=value", "--help"},
 		{"now", "--interval=bogus", "--help"},

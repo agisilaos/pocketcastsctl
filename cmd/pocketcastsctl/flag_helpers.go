@@ -3,10 +3,40 @@ package main
 import (
 	"errors"
 	"flag"
+	"io"
+	"os"
+	"strings"
 )
 
+type flagHelpProbeState struct {
+	output    strings.Builder
+	requested bool
+}
+
+var activeFlagHelpProbe *flagHelpProbeState
+
+func parseCommandFlags(fs *flag.FlagSet, args []string) error {
+	if activeFlagHelpProbe == nil {
+		return fs.Parse(args)
+	}
+	fs.SetOutput(&activeFlagHelpProbe.output)
+	err := fs.Parse(args)
+	activeFlagHelpProbe.requested = errors.Is(err, flag.ErrHelp)
+	// Stop the leaf command after parsing, regardless of whether help was
+	// reached. The caller uses requested to distinguish help from invalid or
+	// positional input without executing the command against default config.
+	return flag.ErrHelp
+}
+
+func commandErrorWriter() io.Writer {
+	if activeFlagHelpProbe != nil {
+		return &activeFlagHelpProbe.output
+	}
+	return os.Stderr
+}
+
 func parseFlagsOrExit(fs *flag.FlagSet, args []string) (bool, int) {
-	if err := fs.Parse(args); err != nil {
+	if err := parseCommandFlags(fs, args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return false, 0
 		}

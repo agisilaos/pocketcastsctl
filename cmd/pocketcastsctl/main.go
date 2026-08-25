@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"strconv"
 	"strings"
 
 	"pocketcastsctl/internal/config"
@@ -39,11 +38,18 @@ func run(args []string) int {
 	if args[0] == "config" {
 		return runConfig(args[1:])
 	}
-	if hasDirectHelpArg(args) {
+	if hasDirectGroupHelp(args) {
 		if aliasWarning != "" {
 			fmt.Fprintln(os.Stderr, aliasWarning)
 		}
 		return dispatch(args, config.Default())
+	}
+	if help, ok := probeDirectFlagHelp(args); ok {
+		if aliasWarning != "" {
+			fmt.Fprintln(os.Stderr, aliasWarning)
+		}
+		fmt.Fprint(os.Stderr, help)
+		return 0
 	}
 
 	cfg, err := config.Load()
@@ -86,28 +92,19 @@ func dispatch(args []string, cfg config.Config) int {
 	}
 }
 
-func hasDirectHelpArg(args []string) bool {
+func hasDirectGroupHelp(args []string) bool {
 	topic, argumentStart := commandTopic(args)
 	if argumentStart >= len(args) {
 		return false
 	}
-	if args[argumentStart] == "help" && hasHelpSubtopics(topic) {
-		return true
+	switch topic {
+	case "auth", "completion", "har", "local", "queue", "queue api", "web":
+		return isHelpArg(args[argumentStart])
+	case "doctor", "setup":
+		return args[argumentStart] == "-h" || args[argumentStart] == "--help"
+	default:
+		return false
 	}
-
-	for _, arg := range args[argumentStart:] {
-		switch {
-		case arg == "-h" || arg == "--help":
-			return true
-		case arg == "--" || !strings.HasPrefix(arg, "-"):
-			return false
-		case !isBooleanFlagForTopic(topic, arg):
-			// Help after a value-taking or unknown flag is ambiguous without
-			// parsing that leaf command. Fall back to config-first dispatch.
-			return false
-		}
-	}
-	return false
 }
 
 func commandTopic(args []string) (string, int) {
@@ -130,40 +127,33 @@ func hasHelpSubtopics(topic string) bool {
 	return false
 }
 
-func isBooleanFlagForTopic(topic, arg string) bool {
-	name, value, hasValue := strings.Cut(arg, "=")
-	if !usageHasFlag(topic, name) || !isBooleanHelpFlag(name) {
-		return false
+func probeDirectFlagHelp(args []string) (string, bool) {
+	topic, argumentStart := commandTopic(args)
+	if topic == "" || !strings.Contains(usageText[topic], "--") {
+		return "", false
 	}
-	if !hasValue {
-		return true
+	if hasHelpSubtopics(topic) && topic != "doctor" && topic != "setup" {
+		return "", false
 	}
-	_, err := strconv.ParseBool(value)
-	return err == nil
-}
-
-func usageHasFlag(topic, name string) bool {
-	for _, field := range strings.FieldsFunc(usageText[topic], func(r rune) bool {
-		return r == ' ' || r == '[' || r == ']' || r == '(' || r == ')' || r == '|'
-	}) {
-		if field == name {
-			return true
+	found := false
+	for _, arg := range args[argumentStart:] {
+		if arg == "-h" || arg == "--help" {
+			found = true
+			break
+		}
+		if topic == "setup" && !strings.HasPrefix(arg, "-") {
+			return "", false
 		}
 	}
-	return false
-}
-
-func isBooleanHelpFlag(name string) bool {
-	switch name {
-	case "--apply", "--details", "--dry-run", "--fix", "--force",
-		"--from-start", "--full", "--in-progress", "--interactive",
-		"--json", "--no-input", "--no-play", "--password-stdin",
-		"--plain", "--quick", "--raw", "--recent", "--reveal-secrets",
-		"--saved", "--unplayed", "--verify-auth", "--watch":
-		return true
-	default:
-		return false
+	if !found {
+		return "", false
 	}
+
+	probe := &flagHelpProbeState{}
+	activeFlagHelpProbe = probe
+	defer func() { activeFlagHelpProbe = nil }()
+	dispatch(args, config.Default())
+	return probe.output.String(), probe.requested
 }
 
 func formatVersion() string {

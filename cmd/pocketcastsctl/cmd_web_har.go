@@ -202,7 +202,7 @@ func runHARSummarize(args []string) int {
 	fs.SetOutput(os.Stderr)
 	host := fs.String("host", "api.pocketcasts.com", "filter requests by host (empty = no filter)")
 	jsonOut := fs.Bool("json", false, "output JSON")
-	if err := fs.Parse(args); err != nil {
+	if err := parseCommandFlags(fs, args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0
 		}
@@ -248,7 +248,7 @@ func runHARGraphQL(args []string) int {
 	fs.SetOutput(os.Stderr)
 	host := fs.String("host", "api.pocketcasts.com", "filter requests by host (empty = no filter)")
 	jsonOut := fs.Bool("json", false, "output JSON")
-	if err := fs.Parse(args); err != nil {
+	if err := parseCommandFlags(fs, args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0
 		}

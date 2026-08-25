@@ -42,7 +42,7 @@ func runConfigInit(args []string) int {
 	fs := flag.NewFlagSet("config init", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	force := fs.Bool("force", false, "replace an existing config file")
-	if err := fs.Parse(args); err != nil {
+	if err := parseCommandFlags(fs, args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0
 		}
@@ -66,7 +66,7 @@ func runConfigShow(args []string) int {
 	jsonOut := fs.Bool("json", false, "output JSON")
 	reveal := fs.Bool("reveal-secrets", false, "show raw api_headers values")
 	saved := fs.Bool("saved", false, "show persisted values without defaults or environment settings")
-	if err := fs.Parse(args); err != nil {
+	if err := parseCommandFlags(fs, args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0
 		}

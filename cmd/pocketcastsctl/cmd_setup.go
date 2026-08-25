@@ -15,7 +15,7 @@ import (
 )
 
 func runStart(args []string, cfg config.Config) int {
-	fmt.Fprintln(os.Stderr, "warning: `start` is deprecated; use `pocketcastsctl setup`")
+	fmt.Fprintln(commandErrorWriter(), "warning: `start` is deprecated; use `pocketcastsctl setup`")
 	return runSetup(args, cfg)
 }
 
@@ -60,7 +60,7 @@ func runSetup(args []string, cfg config.Config) int {
 	jsonOut := fs.Bool("json", false, "output JSON onboarding report")
 	plainOut := fs.Bool("plain", false, "plain key/value output")
 	noInput := fs.Bool("no-input", false, "disable interactive prompts")
-	if err := fs.Parse(args); err != nil {
+	if err := parseCommandFlags(fs, args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0
 		}
