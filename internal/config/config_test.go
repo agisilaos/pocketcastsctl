@@ -66,6 +66,32 @@ func TestLoadAppliesEnvironmentWhenConfigIsMissing(t *testing.T) {
 	}
 }
 
+func TestLoadReturnsNoRuntimeConfigAfterReadOrParseFailure(t *testing.T) {
+	t.Run("malformed", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "config.json")
+		if err := os.WriteFile(path, []byte("{broken\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		assertLoadFailureReturnsNoRuntimeConfig(t, path)
+	})
+	t.Run("read failure", func(t *testing.T) {
+		assertLoadFailureReturnsNoRuntimeConfig(t, t.TempDir())
+	})
+}
+
+func assertLoadFailureReturnsNoRuntimeConfig(t *testing.T, path string) {
+	t.Helper()
+	t.Setenv(EnvConfigPath, path)
+	t.Setenv(EnvAPIBaseURL, "https://must-not-be-selected.example")
+	cfg, err := Load()
+	if err == nil {
+		t.Fatal("Load() error = nil")
+	}
+	if cfg.Browser != "" || cfg.BrowserApp != "" || cfg.URLContains != "" || cfg.APIBaseURL != "" || cfg.APIHeaders != nil || cfg.Auth != (AuthConfig{}) {
+		t.Fatalf("Load() returned partial runtime config after failure: %#v", cfg)
+	}
+}
+
 func TestInitRequiresForceAndLoadSavedPreservesAbsence(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.json")
 	t.Setenv(EnvConfigPath, path)

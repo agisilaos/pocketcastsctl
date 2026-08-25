@@ -243,6 +243,33 @@ func TestConfigBootstrapErrorsFailClosedButRecoveryCommandsWork(t *testing.T) {
 	}
 }
 
+func TestConfigConsumingCommandsRejectInvalidConfig(t *testing.T) {
+	t.Run("malformed", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "config.json")
+		if err := os.WriteFile(path, []byte("{broken\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		assertConfigConsumingCommandsRejectPath(t, path)
+	})
+	t.Run("read failure", func(t *testing.T) {
+		assertConfigConsumingCommandsRejectPath(t, t.TempDir())
+	})
+}
+
+func assertConfigConsumingCommandsRejectPath(t *testing.T, path string) {
+	t.Helper()
+	t.Setenv(config.EnvConfigPath, path)
+	for _, args := range [][]string{
+		{"config", "show"},
+		{"config", "set", "browser", "safari"},
+	} {
+		code, stdout, stderr := runForTest(t, args, "")
+		if code != 1 || stdout != "" || !strings.Contains(stderr, "failed to load config") {
+			t.Fatalf("args=%v code=%d stdout=%q stderr=%q", args, code, stdout, stderr)
+		}
+	}
+}
+
 func TestRunWebLoginPersistsOnlyExplicitBrowserFlags(t *testing.T) {
 	tests := []struct {
 		name           string

@@ -14,9 +14,9 @@ import (
 	"pocketcastsctl/internal/config"
 )
 
-func runStart(args []string, cfg config.Config) int {
+func runStart(args []string, cfg config.Config, loadConfig configLoader) int {
 	fmt.Fprintln(commandErrorWriter(), "warning: `start` is deprecated; use `pocketcastsctl setup`")
-	return runSetup(args, cfg)
+	return runSetup(args, cfg, loadConfig)
 }
 
 type setupStep struct {
@@ -41,7 +41,7 @@ type setupOptions struct {
 	noInput  bool
 }
 
-func runSetup(args []string, cfg config.Config) int {
+func runSetup(args []string, cfg config.Config, loadConfig configLoader) int {
 	subcmd := "run"
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
 		switch args[0] {
@@ -123,7 +123,12 @@ func runSetup(args []string, cfg config.Config) int {
 		if code := setupStepAuth(cfgNow, opts, &report); code != 0 {
 			return renderSetupOutput(report, opts, code)
 		}
-		cfgNow, _ = config.Load()
+		reloaded, err := loadConfig()
+		if err != nil {
+			message := fmt.Sprintf("failed to reload config: %v", err)
+			return fail("config", message, fmt.Sprintf("run `%s` to locate the config file", cliCommand("config path")), 1)
+		}
+		cfgNow = reloaded
 		if !setupAuthConfigured(cfgNow) {
 			report.Status = "warn"
 			return renderSetupOutput(report, opts, 0)

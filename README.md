@@ -356,6 +356,14 @@ Player browser and clears a stale application-name override. `config init`
 creates a missing config and refuses to replace an existing file; use
 `config init --force` for an explicit reset or recovery from malformed JSON.
 
+Malformed or unreadable config stops commands that consume runtime settings
+before browser, credential-store, or API setup begins. Recovery and
+config-independent commands remain available: help and version output,
+completion generation, HAR diagnostics, `config path`, `config init`,
+`doctor explain`, and `local pause|resume|stop|status`. If `setup run` cannot
+reload config after its authentication step, it reports a failed `config` step
+in the selected output format and stops before API verification.
+
 Environment overrides:
 
 - `POCKETCASTS_CONFIG` (override config file path)
