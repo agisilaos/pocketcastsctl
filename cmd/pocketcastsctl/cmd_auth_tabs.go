@@ -21,7 +21,14 @@ func runWebTabs(args []string, cfg config.Config) int {
 	if ok, code := parseFlagsOrExit(fs, args); !ok {
 		return code
 	}
-	controller, err := browsercontrol.New(browsercontrol.Options{
+	if ok, code := requireNoPositionalArgsOrExit(fs, "usage: "+usageText["web tabs"]); !ok {
+		return code
+	}
+	if *jsonOut && *plain {
+		fmt.Fprintln(os.Stderr, "web tabs: use only one of --json or --plain")
+		return 2
+	}
+	controller, err := webControllerFactory(browsercontrol.Options{
 		Browser:     *browser,
 		BrowserApp:  *browserApp,
 		URLContains: "pocketcasts", // not used for TabURLs

@@ -104,10 +104,13 @@ _pocketcastsctl_completions() {
     web)
       if [[ $COMP_CWORD -eq 2 ]]; then
         COMPREPLY=( $(compgen -W "login tabs play pause toggle next prev status" -- "$cur") )
-      elif [[ "$sub" == "status" ]]; then
-        COMPREPLY=( $(compgen -W "--browser --browser-app --url-contains --details --json --plain" -- "$cur") )
       else
-        COMPREPLY=( $(compgen -W "--browser --browser-app --url-contains --json --plain" -- "$cur") )
+        case "$sub" in
+          login) COMPREPLY=( $(compgen -W "--browser --browser-app --url" -- "$cur") ) ;;
+          tabs) COMPREPLY=( $(compgen -W "--browser --browser-app --json --plain" -- "$cur") ) ;;
+          play|pause|toggle|next|prev) COMPREPLY=( $(compgen -W "--browser --browser-app --url-contains" -- "$cur") ) ;;
+          status) COMPREPLY=( $(compgen -W "--browser --browser-app --url-contains --details --json --plain" -- "$cur") ) ;;
+        esac
       fi
       return 0
       ;;
@@ -234,10 +237,13 @@ _pocketcastsctl_completions() {
     web)
       if (( CURRENT == 3 )); then
         _values "web subcommands" "login" "tabs" "play" "pause" "toggle" "next" "prev" "status"
-      elif [[ "$sub" == "status" ]]; then
-        _values "flags" "--browser" "--browser-app" "--url-contains" "--details" "--json" "--plain"
       else
-        _values "flags" "--browser" "--browser-app" "--url-contains" "--json" "--plain"
+        case "$sub" in
+          login) _values "flags" "--browser" "--browser-app" "--url" ;;
+          tabs) _values "flags" "--browser" "--browser-app" "--json" "--plain" ;;
+          play|pause|toggle|next|prev) _values "flags" "--browser" "--browser-app" "--url-contains" ;;
+          status) _values "flags" "--browser" "--browser-app" "--url-contains" "--details" "--json" "--plain" ;;
+        esac
       fi
       ;;
     queue)
@@ -301,6 +307,8 @@ complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from web' -a 'login tab
 complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from auth; and __fish_seen_subcommand_from login' -l email -l password-stdin -l force -l no-input -l json -l plain
 complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from auth; and __fish_seen_subcommand_from import-browser' -l browser -l profile -l force -l no-input -l json -l plain
 complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from auth; and __fish_seen_subcommand_from sync' -l browser -l profile -l force -l no-input -l json -l plain
+complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from web; and __fish_seen_subcommand_from login' -l browser -l browser-app -l url
+complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from web; and __fish_seen_subcommand_from tabs' -l browser -l browser-app -l json -l plain
 complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from web; and __fish_seen_subcommand_from play pause toggle next prev' -l browser -l browser-app -l url-contains
 complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from web; and __fish_seen_subcommand_from status' -l details -l json -l plain -l browser -l browser-app -l url-contains
 complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from queue' -a 'ls api'
