@@ -20,7 +20,13 @@ func main() {
 	os.Exit(run(os.Args[1:]))
 }
 
+type configLoader func() (config.Config, error)
+
 func run(args []string) int {
+	return runWithConfigLoader(args, config.Load)
+}
+
+func runWithConfigLoader(args []string, loadConfig configLoader) int {
 	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" {
 		printRootHelp()
 		return 0
@@ -35,14 +41,22 @@ func run(args []string) int {
 
 	args, aliasWarning := rewriteAliases(args)
 
-	if args[0] == "config" {
-		return runConfig(args[1:])
+	if !isKnownRootCommand(args[0]) {
+		fmt.Fprintf(os.Stderr, "unknown command: %s\n\n", args[0])
+		printRootHelp()
+		return 2
+	}
+	if !requiresConfig(args) {
+		if aliasWarning != "" {
+			fmt.Fprintln(os.Stderr, aliasWarning)
+		}
+		return dispatch(args, config.Default(), loadConfig)
 	}
 	if hasDirectGroupHelp(args) {
 		if aliasWarning != "" {
 			fmt.Fprintln(os.Stderr, aliasWarning)
 		}
-		return dispatch(args, config.Default())
+		return dispatch(args, config.Default(), loadConfig)
 	}
 	if help, ok := probeDirectFlagHelp(args); ok {
 		if aliasWarning != "" {
@@ -52,7 +66,7 @@ func run(args []string) int {
 		return 0
 	}
 
-	cfg, err := config.Load()
+	cfg, err := loadConfig()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to load config: %v\n", err)
 		return 1
@@ -60,15 +74,17 @@ func run(args []string) int {
 	if aliasWarning != "" {
 		fmt.Fprintln(os.Stderr, aliasWarning)
 	}
-	return dispatch(args, cfg)
+	return dispatch(args, cfg, loadConfig)
 }
 
-func dispatch(args []string, cfg config.Config) int {
+func dispatch(args []string, cfg config.Config, loadConfig configLoader) int {
 	switch args[0] {
+	case "config":
+		return runConfig(args[1:])
 	case "setup":
-		return runSetup(args[1:], cfg)
+		return runSetup(args[1:], cfg, loadConfig)
 	case "start", "getting-started":
-		return runStart(args[1:], cfg)
+		return runStart(args[1:], cfg, loadConfig)
 	case "now":
 		return runNow(args[1:], cfg)
 	case "doctor":
@@ -89,6 +105,39 @@ func dispatch(args []string, cfg config.Config) int {
 		fmt.Fprintf(os.Stderr, "unknown command: %s\n\n", args[0])
 		printRootHelp()
 		return 2
+	}
+}
+
+func isKnownRootCommand(command string) bool {
+	if command == "getting-started" {
+		return true
+	}
+	_, ok := usageText[command]
+	return ok
+}
+
+func requiresConfig(args []string) bool {
+	switch args[0] {
+	case "config", "completion", "har":
+		return false
+	case "doctor":
+		return len(args) < 2 || args[1] != "explain"
+	case "local":
+		if len(args) == 1 {
+			return false
+		}
+		switch args[1] {
+		case "pause", "resume", "stop", "status":
+			return false
+		default:
+			return true
+		}
+	case "auth", "web":
+		return len(args) > 1
+	case "queue":
+		return len(args) > 1 && (len(args) != 2 || args[1] != "api")
+	default:
+		return true
 	}
 }
 
@@ -152,7 +201,7 @@ func probeDirectFlagHelp(args []string) (string, bool) {
 	probe := &flagHelpProbeState{}
 	activeFlagHelpProbe = probe
 	defer func() { activeFlagHelpProbe = nil }()
-	dispatch(args, config.Default())
+	dispatch(args, config.Default(), config.Load)
 	return probe.output.String(), probe.requested
 }
 

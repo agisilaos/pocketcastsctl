@@ -960,6 +960,10 @@ func TestAliasBootstrapFailureEmitsOneDiagnostic(t *testing.T) {
 }
 
 func runForTest(t *testing.T, args []string, stdin string) (int, string, string) {
+	return runForTestWithRunner(t, args, stdin, run)
+}
+
+func runForTestWithRunner(t *testing.T, args []string, stdin string, runner func([]string) int) (int, string, string) {
 	t.Helper()
 	if os.Getenv(config.EnvConfigPath) == "" {
 		t.Setenv(config.EnvConfigPath, filepath.Join(t.TempDir(), "config.json"))
@@ -998,7 +1002,7 @@ func runForTest(t *testing.T, args []string, stdin string) (int, string, string)
 	os.Stderr = errW
 	os.Stdin = inR
 
-	code := run(args)
+	code := runner(args)
 
 	_ = outW.Close()
 	_ = errW.Close()
