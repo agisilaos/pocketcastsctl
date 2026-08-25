@@ -18,6 +18,9 @@ import (
 
 type commandMemoryStore struct {
 	sessions map[string]authn.Session
+	loads    int
+	saves    int
+	deletes  int
 }
 
 func newCommandMemoryStore() *commandMemoryStore {
@@ -25,6 +28,7 @@ func newCommandMemoryStore() *commandMemoryStore {
 }
 
 func (s *commandMemoryStore) Load(_ context.Context, key string) (authn.Session, error) {
+	s.loads++
 	session, ok := s.sessions[key]
 	if !ok {
 		return authn.Session{}, authn.ErrSessionNotFound
@@ -33,11 +37,13 @@ func (s *commandMemoryStore) Load(_ context.Context, key string) (authn.Session,
 }
 
 func (s *commandMemoryStore) Save(_ context.Context, key string, session authn.Session) error {
+	s.saves++
 	s.sessions[key] = session
 	return nil
 }
 
 func (s *commandMemoryStore) Delete(_ context.Context, key string) error {
+	s.deletes++
 	delete(s.sessions, key)
 	return nil
 }

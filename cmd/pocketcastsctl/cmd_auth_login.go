@@ -19,7 +19,7 @@ func runAuthLogin(args []string, cfg config.Config) int {
 	fs.SetOutput(os.Stderr)
 	email := fs.String("email", "", "Pocket Casts account email")
 	passwordStdin := fs.Bool("password-stdin", false, "read the password from stdin")
-	force := fs.Bool("force", false, "replace a different or unknown active account")
+	force := fs.Bool("force", false, sessionReplacementForceHelp)
 	noInput := fs.Bool("no-input", false, "disable prompts")
 	jsonOut := fs.Bool("json", false, "output JSON")
 	plain := fs.Bool("plain", false, "plain line-oriented output")
@@ -34,7 +34,19 @@ func runAuthLogin(args []string, cfg config.Config) int {
 	}
 	interactive := !*noInput && !*jsonOut && !*plain && stdinIsTerminal()
 	loginEmail := strings.ToLower(strings.TrimSpace(*email))
-	if loginEmail == "" && interactive {
+	if loginEmail == "" && !interactive {
+		return renderAuthCommandError("auth login", "auth.input.email_missing", errors.New("email is required; pass --email in non-interactive mode"), *jsonOut, *plain, 2)
+	}
+	if !*passwordStdin && !interactive {
+		return renderAuthCommandError("auth login", "auth.input.password_missing", errors.New("password is required; pipe it with --password-stdin in non-interactive mode"), *jsonOut, *plain, 2)
+	}
+
+	current, preflightErr := sessionReplacementPreflight(cfg)
+	if preflightErr != nil {
+		return renderSessionReplacementPreflightError("auth login", preflightErr, *jsonOut, *plain)
+	}
+
+	if loginEmail == "" {
 		fmt.Fprint(os.Stderr, "Pocket Casts email: ")
 		_, _ = fmt.Fscanln(os.Stdin, &loginEmail)
 		loginEmail = strings.ToLower(strings.TrimSpace(loginEmail))
@@ -51,8 +63,6 @@ func runAuthLogin(args []string, cfg config.Config) int {
 		password = strings.TrimRight(string(raw), "\r\n")
 	} else if interactive {
 		password, err = promptSecret("Pocket Casts password: ")
-	} else {
-		return renderAuthCommandError("auth login", "auth.input.password_missing", errors.New("password is required; pipe it with --password-stdin in non-interactive mode"), *jsonOut, *plain, 2)
 	}
 	if err != nil {
 		return renderAuthCommandError("auth login", "auth.input.password_read", err, *jsonOut, *plain, 1)
@@ -69,7 +79,7 @@ func runAuthLogin(args []string, cfg config.Config) int {
 	if err != nil {
 		return renderAuthCommandError("auth login", "auth.login.failed", err, *jsonOut, *plain, 1)
 	}
-	if err := confirmSessionReplacement(cfg, candidate, *force, interactive); err != nil {
+	if err := confirmSessionReplacement(current, candidate, *force, interactive); err != nil {
 		return renderAuthCommandError("auth login", "auth.account.replace_required", err, *jsonOut, *plain, 2)
 	}
 	if _, err := installSession(ctx, cfg, api, candidate); err != nil {

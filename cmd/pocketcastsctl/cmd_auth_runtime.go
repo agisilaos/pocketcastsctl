@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"golang.org/x/term"
 
@@ -18,6 +19,10 @@ import (
 
 var credentialStoreFactory = authn.NewKeyringStore
 var browserReaderFactory = func() authn.BrowserReader { return authn.NewSweetCookieReader() }
+
+const sessionReplacementForceHelp = "skip account confirmation for a saved API session or legacy credential; cannot override " + config.EnvAccessToken
+
+var errEnvironmentOverrideActive = errors.New(config.EnvAccessToken + " is the active credential source; unset it before replacing the API session (--force cannot override an environment credential)")
 
 func newAuthenticatedClient(cfg config.Config) (*pocketcasts.Client, *authn.Manager) {
 	warnLegacyCredential(cfg)
@@ -54,9 +59,32 @@ func promptSecret(prompt string) (string, error) {
 	return string(raw), nil
 }
 
-func confirmSessionReplacement(cfg config.Config, candidate authn.Session, force, interactive bool) error {
-	configured := strings.TrimSpace(cfg.Auth.SessionKey) != "" || authutil.HasAuthorizationHeader(cfg.APIHeaders)
-	if !configured || !authn.NeedsAccountConfirmation(cfg.Auth.AccountID, cfg.Auth.Email, candidate) {
+func sessionReplacementPreflight(cfg config.Config) (authn.Session, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	session, source, err := newAuthManager(cfg).Snapshot(ctx)
+	if errors.Is(err, authn.ErrNotConfigured) {
+		return authn.Session{}, nil
+	}
+	if err != nil {
+		return authn.Session{}, fmt.Errorf("resolve active API session: %w; restore Keychain access or run `pocketcastsctl auth logout` before retrying", err)
+	}
+	if source == authn.SourceEnvironment {
+		return authn.Session{}, errEnvironmentOverrideActive
+	}
+	return session, nil
+}
+
+func renderSessionReplacementPreflightError(command string, err error, jsonOut, plain bool) int {
+	if errors.Is(err, errEnvironmentOverrideActive) {
+		return renderAuthCommandError(command, "auth.source.environment_override", err, jsonOut, plain, 2)
+	}
+	return renderAuthCommandError(command, "auth.session.resolve_failed", err, jsonOut, plain, 1)
+}
+
+func confirmSessionReplacement(current, candidate authn.Session, force, interactive bool) error {
+	if strings.TrimSpace(current.AccessToken) == "" || !authn.NeedsAccountConfirmation(current.AccountID, current.Email, candidate) {
 		return nil
 	}
 	if force {

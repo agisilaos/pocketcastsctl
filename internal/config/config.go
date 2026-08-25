@@ -17,7 +17,7 @@ const (
 	EnvAccessToken = "POCKETCASTS_ACCESS_TOKEN"
 )
 
-// AuthConfig contains non-secret metadata for the active API session. Token
+// AuthConfig contains non-secret metadata for the saved API session. Token
 // material is stored in the operating system credential store under SessionKey.
 type AuthConfig struct {
 	SessionKey string `json:"session_key,omitempty"`
