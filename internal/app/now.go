@@ -11,9 +11,8 @@ import (
 	"pocketcastsctl/internal/authutil"
 	"pocketcastsctl/internal/browsercontrol"
 	"pocketcastsctl/internal/config"
-	"pocketcastsctl/internal/player"
+	"pocketcastsctl/internal/localplayback"
 	"pocketcastsctl/internal/pocketcasts"
-	"pocketcastsctl/internal/state"
 )
 
 type NowOptions struct {
@@ -22,7 +21,7 @@ type NowOptions struct {
 
 type nowCollectorFuncs struct {
 	web   func(context.Context) NowWebPlaybackSnapshot
-	local func() NowLocalStatus
+	local func(context.Context) (NowLocalStatus, []string)
 	auth  func(context.Context) NowAuthStatus
 	queue func(context.Context) NowQueueStatus
 }
@@ -73,8 +72,8 @@ func CollectNowSnapshot(ctx context.Context, cfg config.Config, opts NowOptions)
 		web: func(ctx context.Context) NowWebPlaybackSnapshot {
 			return collectWebPlaybackSnapshot(ctx, cfg)
 		},
-		local: func() NowLocalStatus {
-			return collectLocalStatus(cfg)
+		local: func(ctx context.Context) (NowLocalStatus, []string) {
+			return collectLocalStatus(ctx)
 		},
 		auth: func(ctx context.Context) NowAuthStatus {
 			return collectAuthStatus(ctx, cfg, opts)
@@ -89,6 +88,7 @@ func collectNowSnapshot(ctx context.Context, configPath string, collectors nowCo
 	generatedAt := time.Now()
 	var web NowWebPlaybackSnapshot
 	var local NowLocalStatus
+	var localWarnings []string
 	var auth NowAuthStatus
 	var queue NowQueueStatus
 	var wg sync.WaitGroup
@@ -99,7 +99,7 @@ func collectNowSnapshot(ctx context.Context, configPath string, collectors nowCo
 	}()
 	go func() {
 		defer wg.Done()
-		local = collectors.local()
+		local, localWarnings = collectors.local(ctx)
 	}()
 	go func() {
 		defer wg.Done()
@@ -117,6 +117,7 @@ func collectNowSnapshot(ctx context.Context, configPath string, collectors nowCo
 		Local:       local,
 		Queue:       queue,
 		Auth:        auth,
+		Warnings:    append([]string(nil), localWarnings...),
 		Meta: map[string]string{
 			"config_path": configPath,
 		},
@@ -149,22 +150,32 @@ func collectWebPlaybackSnapshot(ctx context.Context, cfg config.Config) NowWebPl
 	}
 }
 
-func collectLocalStatus(cfg config.Config) NowLocalStatus {
-	st, ok, err := state.Load(config.StatePath())
+func collectLocalStatus(ctx context.Context) (NowLocalStatus, []string) {
+	controller, err := localplayback.New(localplayback.Options{
+		StatePath: config.StatePath(),
+		UserAgent: "pocketcastsctl",
+	})
 	if err != nil {
-		return NowLocalStatus{Status: "error", Error: err.Error()}
+		return NowLocalStatus{Status: "error", Error: err.Error()}, nil
 	}
-	if !ok {
+	localCtx, cancel := context.WithTimeout(ctx, 250*time.Millisecond)
+	defer cancel()
+	snapshot, err := controller.Snapshot(localCtx)
+	if err != nil {
+		return NowLocalStatus{Status: "error", Error: err.Error()}, snapshot.Warnings
+	}
+	return localStatusFromSnapshot(snapshot), snapshot.Warnings
+}
+
+func localStatusFromSnapshot(snapshot localplayback.Snapshot) NowLocalStatus {
+	switch snapshot.Status {
+	case localplayback.StatusPlaying:
+		return NowLocalStatus{Status: "playing", Title: strings.TrimSpace(snapshot.Title)}
+	case localplayback.StatusPaused:
+		return NowLocalStatus{Status: "paused", Title: strings.TrimSpace(snapshot.Title)}
+	default:
 		return NowLocalStatus{Status: "stopped"}
 	}
-	if !player.Alive(st.PID) {
-		_ = state.Clear(config.StatePath())
-		return NowLocalStatus{Status: "stopped"}
-	}
-	if st.Paused {
-		return NowLocalStatus{Status: "paused", Title: strings.TrimSpace(st.Title)}
-	}
-	return NowLocalStatus{Status: "playing", Title: strings.TrimSpace(st.Title)}
 }
 
 func collectQueueStatus(ctx context.Context, cfg config.Config) NowQueueStatus {

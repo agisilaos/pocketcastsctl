@@ -1,4 +1,4 @@
-.PHONY: build test test-scripts test-scripts-cover vet fmt fmt-check check-help check-help-docs docs-check release-preflight release-check release-check-ci release release-dry-run
+.PHONY: build test test-race-local bench-local bench-local-ci test-scripts test-scripts-cover vet fmt fmt-check check-help check-help-docs docs-check release-preflight release-check release-check-ci release release-dry-run
 
 build:
 	go build -o pocketcastsctl ./cmd/pocketcastsctl
@@ -6,6 +6,15 @@ build:
 
 test:
 	go test ./...
+
+test-race-local:
+	go test -race ./internal/localplayback ./internal/app ./cmd/pocketcastsctl
+
+bench-local:
+	go test ./internal/localplayback -run '^$$' -bench 'BenchmarkSnapshot' -benchmem
+
+bench-local-ci:
+	go test ./internal/localplayback -run '^$$' -bench 'BenchmarkSnapshot' -benchmem -benchtime=100x
 
 test-scripts:
 	go test ./scripts -run 'TestReleasePreflightFailurePaths|TestReleaseCheckModes|TestCheckHelpDocsDriftScript'

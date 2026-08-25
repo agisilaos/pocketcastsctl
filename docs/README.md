@@ -5,6 +5,8 @@
 - Primary command usage and examples: `../README.md`
 - Roadmap: `../ROADMAP.md`
 - Release history: `../CHANGELOG.md`
+- Domain vocabulary: `../CONTEXT.md`
+- Architecture decisions: `adr/`
 
 ## Help Snapshots
 
@@ -27,6 +29,7 @@
 - Queue handlers: `../cmd/pocketcastsctl/cmd_queue_dispatch.go`, `../cmd/pocketcastsctl/cmd_queue_api_ls.go`, `../cmd/pocketcastsctl/cmd_queue_api_mutations.go`, `../cmd/pocketcastsctl/cmd_queue_api_play_pick.go`, `../cmd/pocketcastsctl/cmd_queue_helpers.go`, `../cmd/pocketcastsctl/cmd_queue_fetch.go`
 - Shared retry/auth-recovery helpers: `../cmd/pocketcastsctl/cmd_retry.go`
 - Shared flag parsing/usage helpers: `../cmd/pocketcastsctl/flag_helpers.go`
+- Managed local-playback lifecycle, process identity, persistence, and locking: `../internal/localplayback/`
 - Other command handlers: `../cmd/pocketcastsctl/cmd_local.go`, `../cmd/pocketcastsctl/cmd_doctor.go`, `../cmd/pocketcastsctl/help.go`
 
 ## Release
@@ -36,7 +39,11 @@
 ## Testing Notes
 
 - Targeted coverage command for lower-level packages:
-  - `go test -cover ./internal/pocketcasts ./internal/browsercontrol ./internal/authn ./internal/app`
+  - `go test -cover ./internal/pocketcasts ./internal/browsercontrol ./internal/authn ./internal/localplayback ./internal/app`
+- Local-playback race and performance checks:
+  - `make test-race-local`
+  - `make bench-local`
+  - Snapshot benchmarks cover stopped and active lifecycle reads with allocation reporting; compare results on the same machine rather than treating one machine's timings as universal.
 - Command-contract coverage examples:
   - `go test ./cmd/pocketcastsctl -run 'TestRunQueueAPI(Add|Play|Pick)|TestRunAuth(Login|Tabs|Sync)'`
 - HTTP/API behavior tests for Pocket Casts client live in: `../internal/pocketcasts/client_http_test.go`
