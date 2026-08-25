@@ -33,12 +33,15 @@ func run(args []string) int {
 	}
 
 	args, aliasWarning := rewriteAliases(args)
-	if aliasWarning != "" {
-		fmt.Fprintln(os.Stderr, aliasWarning)
-	}
 
 	if args[0] == "config" {
 		return runConfig(args[1:])
+	}
+	if hasDirectHelpArg(args) {
+		if aliasWarning != "" {
+			fmt.Fprintln(os.Stderr, aliasWarning)
+		}
+		return dispatch(args, config.Default())
 	}
 
 	cfg, err := config.Load()
@@ -46,7 +49,13 @@ func run(args []string) int {
 		fmt.Fprintf(os.Stderr, "failed to load config: %v\n", err)
 		return 1
 	}
+	if aliasWarning != "" {
+		fmt.Fprintln(os.Stderr, aliasWarning)
+	}
+	return dispatch(args, cfg)
+}
 
+func dispatch(args []string, cfg config.Config) int {
 	switch args[0] {
 	case "setup":
 		return runSetup(args[1:], cfg)
@@ -73,6 +82,21 @@ func run(args []string) int {
 		printRootHelp()
 		return 2
 	}
+}
+
+func hasDirectHelpArg(args []string) bool {
+	if len(args) > 1 && args[1] == "help" {
+		switch args[0] {
+		case "auth", "local", "queue", "setup", "web":
+			return true
+		}
+	}
+	for _, arg := range args[1:] {
+		if arg == "-h" || arg == "--help" {
+			return true
+		}
+	}
+	return false
 }
 
 func formatVersion() string {

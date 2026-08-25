@@ -896,6 +896,45 @@ func TestGoldenHelpStart(t *testing.T) {
 	assertGolden(t, "help_start.golden", stdout)
 }
 
+func TestNestedHelpBypassesMalformedConfig(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	t.Setenv(config.EnvConfigPath, path)
+	if err := os.WriteFile(path, []byte("{broken\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, args := range [][]string{
+		{"auth", "--help"},
+		{"auth", "help"},
+		{"web", "login", "--help"},
+		{"queue", "api", "ls", "--help"},
+	} {
+		t.Run(strings.Join(args, "_"), func(t *testing.T) {
+			code, stdout, stderr := runForTest(t, args, "")
+			if code != 0 || strings.Contains(stdout+stderr, "failed to load config") {
+				t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout, stderr)
+			}
+		})
+	}
+	code, _, stderr := runForTest(t, []string{"now", "help"}, "")
+	if code != 1 || !strings.Contains(stderr, "failed to load config") {
+		t.Fatalf("positional value bypassed config load: code=%d stderr=%q", code, stderr)
+	}
+}
+
+func TestAliasBootstrapFailureEmitsOneDiagnostic(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	t.Setenv(config.EnvConfigPath, path)
+	if err := os.WriteFile(path, []byte("{broken\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	code, stdout, stderr := runForTest(t, []string{"login", "--email", "person@example.com"}, "")
+	if code != 1 || stdout != "" || !strings.HasPrefix(stderr, "failed to load config:") || strings.Contains(stderr, "shortcut is deprecated") || strings.Count(stderr, "\n") != 1 {
+		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout, stderr)
+	}
+}
+
 func runForTest(t *testing.T, args []string, stdin string) (int, string, string) {
 	t.Helper()
 	if os.Getenv(config.EnvConfigPath) == "" {
