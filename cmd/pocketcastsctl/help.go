@@ -16,8 +16,8 @@ var usageText = map[string]string{
 	"auth refresh":        "pocketcastsctl auth refresh [--json|--plain]",
 	"auth sync":           "pocketcastsctl auth sync --browser <chrome|dia|safari> [--profile name] [--force] [--no-input] [--json|--plain]",
 	"auth tabs":           "pocketcastsctl auth tabs [--browser <name>] [--browser-app <app>] [--json] [--plain]",
-	"auth status":         "pocketcastsctl auth status [--json] [--plain]",
-	"auth verify":         "pocketcastsctl auth verify [--json] [--plain]",
+	"auth status":         "pocketcastsctl auth status [--json|--plain]",
+	"auth verify":         "pocketcastsctl auth verify [--json|--plain]",
 	"auth clear":          "pocketcastsctl auth clear",
 	"auth logout":         "pocketcastsctl auth logout [--json|--plain]",
 	"web login":           "pocketcastsctl web login [--browser <name>] [--browser-app <app>] [--url url]",
@@ -359,8 +359,8 @@ Command reference:
   pocketcastsctl auth login [--email address] [--password-stdin] [--force] [--no-input] [--json|--plain]
   pocketcastsctl auth import-browser --browser <chrome|dia|safari> [--profile name] [--force] [--no-input] [--json|--plain]
   pocketcastsctl auth refresh [--json|--plain]
-  pocketcastsctl auth status [--json] [--plain]
-  pocketcastsctl auth verify [--json] [--plain]
+  pocketcastsctl auth status [--json|--plain]
+  pocketcastsctl auth verify [--json|--plain]
   pocketcastsctl auth logout [--json|--plain]
   pocketcastsctl web login [--browser <name>] [--browser-app <app>] [--url url]
   pocketcastsctl web tabs [--browser <name>] [--browser-app <app>] [--json|--plain]

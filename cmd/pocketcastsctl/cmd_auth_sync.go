@@ -20,8 +20,8 @@ func runAuthSync(args []string, cfg config.Config) int {
 	profile := fs.String("profile", "", "browser profile directory name (for example, Profile 1)")
 	force := fs.Bool("force", false, sessionReplacementForceHelp)
 	noInput := fs.Bool("no-input", false, "disable prompts")
-	jsonOut := fs.Bool("json", false, "output JSON")
-	plain := fs.Bool("plain", false, "plain line-oriented output")
+	var outputFlags authOutputFlags
+	outputFlags.register(fs)
 
 	// Accepted only so old invocations fail safely with a useful migration
 	// path instead of persisting a credential in config.json.
@@ -34,28 +34,22 @@ func runAuthSync(args []string, cfg config.Config) int {
 	if ok, code := parseFlagsOrExit(fs, args); !ok {
 		return code
 	}
+	mode, code := outputFlags.resolveOrReport("auth sync")
+	if code != 0 {
+		return code
+	}
 	if fs.NArg() != 0 {
-		return renderAuthCommandError("auth sync", "auth.usage", errors.New("usage: pocketcastsctl auth sync --browser <chrome|dia|safari> [--profile name]"), *jsonOut, *plain, 2)
+		return renderAuthCommandError("auth sync", "auth.usage", errors.New("usage: pocketcastsctl auth sync --browser <chrome|dia|safari> [--profile name]"), mode, 2)
 	}
 	if *dryRun {
-		return renderAuthCommandError("auth sync", "auth.sync.dry_run_removed", errors.New("--dry-run cannot import a session; use `pocketcastsctl auth import-browser --browser <name>` when ready"), *jsonOut, *plain, 2)
+		return renderAuthCommandError("auth sync", "auth.sync.dry_run_removed", errors.New("--dry-run cannot import a session; use `pocketcastsctl auth import-browser --browser <name>` when ready"), mode, 2)
 	}
 
-	translated := []string{"--browser", *browser}
-	if *profile != "" {
-		translated = append(translated, "--profile", *profile)
-	}
-	if *force {
-		translated = append(translated, "--force")
-	}
-	if *noInput {
-		translated = append(translated, "--no-input")
-	}
-	if *jsonOut {
-		translated = append(translated, "--json")
-	}
-	if *plain {
-		translated = append(translated, "--plain")
-	}
-	return runAuthImportBrowser(translated, cfg)
+	return runAuthImportBrowserWithOptions(cfg, authImportBrowserOptions{
+		browser:    *browser,
+		profile:    *profile,
+		force:      *force,
+		noInput:    *noInput,
+		outputMode: mode,
+	})
 }

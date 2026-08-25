@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"errors"
+	"flag"
 	"fmt"
 	"os"
 	"strings"
@@ -23,6 +24,37 @@ var browserReaderFactory = func() authn.BrowserReader { return authn.NewSweetCoo
 const sessionReplacementForceHelp = "skip account confirmation for a saved API session or legacy credential; cannot override " + config.EnvAccessToken
 
 var errEnvironmentOverrideActive = errors.New(config.EnvAccessToken + " is the active credential source; unset it before replacing the API session (--force cannot override an environment credential)")
+
+type authOutputMode uint8
+
+const (
+	authOutputHuman authOutputMode = iota
+	authOutputPlain
+	authOutputJSON
+)
+
+type authOutputFlags struct {
+	json  bool
+	plain bool
+}
+
+func (output *authOutputFlags) register(fs *flag.FlagSet) {
+	fs.BoolVar(&output.json, "json", false, "output JSON")
+	fs.BoolVar(&output.plain, "plain", false, "plain line-oriented output")
+}
+
+func (output authOutputFlags) resolveOrReport(command string) (authOutputMode, int) {
+	if output.json && output.plain {
+		return authOutputHuman, renderAuthCommandError(command, "auth.usage.output", errors.New("use only one of --json or --plain"), authOutputHuman, 2)
+	}
+	if output.json {
+		return authOutputJSON, 0
+	}
+	if output.plain {
+		return authOutputPlain, 0
+	}
+	return authOutputHuman, 0
+}
 
 func newAuthenticatedClient(cfg config.Config) (*pocketcasts.Client, *authn.Manager) {
 	warnLegacyCredential(cfg)
@@ -76,11 +108,11 @@ func sessionReplacementPreflight(cfg config.Config) (authn.Session, error) {
 	return session, nil
 }
 
-func renderSessionReplacementPreflightError(command string, err error, jsonOut, plain bool) int {
+func renderSessionReplacementPreflightError(command string, err error, mode authOutputMode) int {
 	if errors.Is(err, errEnvironmentOverrideActive) {
-		return renderAuthCommandError(command, "auth.source.environment_override", err, jsonOut, plain, 2)
+		return renderAuthCommandError(command, "auth.source.environment_override", err, mode, 2)
 	}
-	return renderAuthCommandError(command, "auth.session.resolve_failed", err, jsonOut, plain, 1)
+	return renderAuthCommandError(command, "auth.session.resolve_failed", err, mode, 1)
 }
 
 func confirmSessionReplacement(current, candidate authn.Session, force, interactive bool) error {
@@ -105,49 +137,50 @@ func confirmSessionReplacement(current, candidate authn.Session, force, interact
 	return nil
 }
 
-func renderAuthCommandError(command, code string, err error, jsonOut, plain bool, exitCode int) int {
+func renderAuthCommandError(command, code string, err error, mode authOutputMode, exitCode int) int {
 	message := strings.TrimSpace(err.Error())
-	if jsonOut {
+	switch mode {
+	case authOutputJSON:
 		_ = printJSON(map[string]any{"status": "error", "command": command, "code": code, "error": message})
 		return exitCode
-	}
-	if plain {
+	case authOutputPlain:
 		fmt.Println("status\terror")
 		fmt.Printf("command\t%s\n", command)
 		fmt.Printf("code\t%s\n", code)
 		fmt.Printf("error\t%s\n", message)
 		return exitCode
+	default:
+		fmt.Fprintf(os.Stderr, "%s: %s\n", command, message)
+		return exitCode
 	}
-	fmt.Fprintf(os.Stderr, "%s: %s\n", command, message)
-	return exitCode
 }
 
-func renderAuthSuccess(command string, session authn.Session, source, profile string, jsonOut, plain bool) int {
-	result := map[string]any{
-		"status":  "ok",
-		"command": command,
-		"method":  session.Method,
-		"scope":   session.Scope,
-	}
-	if session.Email != "" {
-		result["email"] = session.Email
-	}
-	if session.ExpiresAt > 0 {
-		result["expires_at"] = session.ExpiresAt
-	}
-	if source != "" {
-		result["browser"] = source
-	}
-	if profile != "" {
-		result["profile"] = profile
-	}
-	if jsonOut {
+func renderAuthSuccess(command string, session authn.Session, source, profile string, mode authOutputMode) int {
+	switch mode {
+	case authOutputJSON:
+		result := map[string]any{
+			"status":  "ok",
+			"command": command,
+			"method":  session.Method,
+			"scope":   session.Scope,
+		}
+		if session.Email != "" {
+			result["email"] = session.Email
+		}
+		if session.ExpiresAt > 0 {
+			result["expires_at"] = session.ExpiresAt
+		}
+		if source != "" {
+			result["browser"] = source
+		}
+		if profile != "" {
+			result["profile"] = profile
+		}
 		if err := printJSON(result); err != nil {
-			return renderAuthCommandError(command, "auth.output", err, false, false, 1)
+			return renderAuthCommandError(command, "auth.output", err, authOutputHuman, 1)
 		}
 		return 0
-	}
-	if plain {
+	case authOutputPlain:
 		fmt.Println("status\tok")
 		fmt.Printf("command\t%s\n", command)
 		fmt.Printf("method\t%s\n", session.Method)
@@ -159,10 +192,11 @@ func renderAuthSuccess(command string, session authn.Session, source, profile st
 			fmt.Printf("profile\t%s\n", profile)
 		}
 		return 0
+	default:
+		fmt.Printf("%s: OK\n", command)
+		fmt.Printf("session: %s (%s)\n", session.Method, session.Scope)
+		return 0
 	}
-	fmt.Printf("%s: OK\n", command)
-	fmt.Printf("session: %s (%s)\n", session.Method, session.Scope)
-	return 0
 }
 
 func installSession(ctx context.Context, cfg config.Config, api *authn.API, candidate authn.Session) (config.Config, error) {

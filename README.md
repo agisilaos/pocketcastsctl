@@ -89,6 +89,8 @@ Doctor modes:
 - For scripting:
   - Prefer `--json` where available for structured output.
   - Prefer `--plain` for stable tab/line-oriented output.
+- `--json` and `--plain` are mutually exclusive for API-authentication commands;
+  the deprecated `auth tabs` alias follows `web tabs`.
 - Read/status commands now support machine-friendly output modes consistently:
   - See the contract table below.
 - Destructive safety checks (for example `queue api rm` without `--force` in non-interactive mode) fail with a non-zero exit code and error text on `stderr`.
@@ -103,8 +105,10 @@ Output contract table:
 | `web tabs` | URL list | URL list | JSON array of URLs |
 | `auth login` | guided terminal login | status fields | structured result/error |
 | `auth import-browser` | explicit session import | status fields | structured result/error |
+| `auth refresh` | refresh result | status fields | structured result/error |
 | `auth status` | checklist | key/value lines | status object |
 | `auth verify` | checklist | key/value lines | verification object |
+| `auth logout` | logout result/warning | status fields | structured result/warning |
 | `web status` | single state line; `--details` adds snapshot rows | single state line; `--details` adds key/value rows | playback snapshot object |
 | `local status` | human status line | key/value lines | `{ \"status\": ... }` |
 
