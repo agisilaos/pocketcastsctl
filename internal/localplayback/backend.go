@@ -64,6 +64,7 @@ type runtimeOptions struct {
 }
 
 type controllerDurations struct {
+	lockWait           time.Duration
 	pollInterval       time.Duration
 	startStabilization time.Duration
 	pauseResume        time.Duration
@@ -73,6 +74,7 @@ type controllerDurations struct {
 
 func defaultDurations() controllerDurations {
 	return controllerDurations{
+		lockWait:           5 * time.Second,
 		pollInterval:       10 * time.Millisecond,
 		startStabilization: 100 * time.Millisecond,
 		pauseResume:        250 * time.Millisecond,

@@ -76,8 +76,10 @@ type fakeProcessBackend struct {
 	inspectErr   error
 	signalErrs   map[processSignal]error
 	launchHook   func()
+	signalHook   func(processSignal)
 	cacheFile    string
 	inspectCalls int
+	launchCalls  int
 	signals      []processSignal
 }
 
@@ -103,6 +105,7 @@ func (backend *fakeProcessBackend) Prepare(context.Context, StartRequest, runtim
 func (backend *fakeProcessBackend) Launch(preparedPlayback) (launchedPlayback, error) {
 	backend.mu.Lock()
 	defer backend.mu.Unlock()
+	backend.launchCalls++
 	if backend.launchErr != nil {
 		return launchedPlayback{}, backend.launchErr
 	}
@@ -149,6 +152,9 @@ func (backend *fakeProcessBackend) Signal(identity processIdentity, signal proce
 		observation.Matches = false
 	}
 	backend.observations[identity] = observation
+	if backend.signalHook != nil {
+		backend.signalHook(signal)
+	}
 	return nil
 }
 
@@ -248,6 +254,68 @@ func TestStartCommitsAfterCallerCancellationAndRollsBackSaveFailure(t *testing.T
 			t.Fatalf("Start() error = %v, want save and rollback failures", err)
 		}
 	})
+}
+
+func TestStartDoesNotLaunchAfterCancellationDuringReplacement(t *testing.T) {
+	identity := processIdentity{PID: 42, BirthUnixMicros: 1000}
+	store := &fakeStateStore{result: loadResult{kind: loadCurrent, record: testStateRecord(identity)}}
+	processes := newFakeProcessBackend()
+	processes.observations[identity] = processObservation{Exists: true, Matches: true}
+	ctx, cancel := context.WithCancel(context.Background())
+	processes.signalHook = func(signal processSignal) {
+		if signal == signalTerminate {
+			cancel()
+		}
+	}
+	controller := newTestController(t, store, processes, &fakeLock{})
+
+	_, err := controller.Start(ctx, StartRequest{URL: "https://example.test/replacement"})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Start() error = %v, want canceled", err)
+	}
+	if processes.launchCalls != 0 {
+		t.Fatalf("Launch calls = %d, want 0", processes.launchCalls)
+	}
+	if store.saves != 0 {
+		t.Fatalf("Save calls = %d, want 0", store.saves)
+	}
+}
+
+type waitingLock struct{}
+
+func (waitingLock) Acquire(ctx context.Context) (func() error, error) {
+	<-ctx.Done()
+	return nil, errors.Join(ErrLockTimeout, ctx.Err())
+}
+
+func TestStartUsesSeparateLockBudgetAfterPreparation(t *testing.T) {
+	store := &fakeStateStore{result: loadResult{kind: loadMissing}}
+	processes := newFakeProcessBackend()
+	controller := newController(Options{}, controllerDependencies{
+		store:     store,
+		lock:      waitingLock{},
+		processes: processes,
+		now:       time.Now,
+		durations: controllerDurations{
+			lockWait:           10 * time.Millisecond,
+			pollInterval:       time.Millisecond,
+			startStabilization: time.Millisecond,
+			pauseResume:        time.Millisecond,
+			terminateGrace:     time.Millisecond,
+			killConfirmation:   time.Millisecond,
+		},
+	}, t.TempDir())
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	started := time.Now()
+	_, err := controller.Start(ctx, StartRequest{URL: "https://example.test/audio"})
+	if !errors.Is(err, ErrLockTimeout) || !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Start() error = %v, want lock deadline", err)
+	}
+	if elapsed := time.Since(started); elapsed > 250*time.Millisecond {
+		t.Fatalf("Start() lock wait = %v, want independently bounded wait", elapsed)
+	}
 }
 
 func TestSnapshotReconcilesStaleAndReusedPIDWithoutSignaling(t *testing.T) {

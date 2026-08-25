@@ -178,6 +178,8 @@ By default, `local play` starts from Pocket Casts progress (`playedUpTo`) when a
 
 The player runs independently of the command that starts it. Local lifecycle commands are serialized across concurrent CLI processes, verify that a PID still refers to the player originally launched by pocketcastsctl, and observe the live process rather than trusting a saved paused flag. `local stop` is idempotent and confirms termination before returning.
 
+Audio preparation may take up to two minutes when the `afplay` fallback must download media. Once preparation finishes, `local play` limits pre-launch lock acquisition and replacement work to five seconds; cancellation before launch prevents a new player from starting, while a player that has launched is either persisted or rolled back before the command returns.
+
 Older state files do not contain a verifiable process identity. The first local command after upgrading discards that state without signaling its PID and prints a warning; a player started by an older version may continue until it exits. Downloaded `afplay` media is removed after stop or when a later lifecycle command reconciles naturally completed playback.
 
 ```bash

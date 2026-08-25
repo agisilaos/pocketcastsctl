@@ -6,6 +6,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 	"strings"
@@ -56,8 +57,10 @@ func runNow(args []string, cfg config.Config) int {
 			_ = printJSON(s)
 		case *plain:
 			printNowPlain(s)
+			printNowWarnings(os.Stderr, s.Warnings)
 		default:
 			printNowHuman(s, cfg)
+			printNowWarnings(os.Stderr, s.Warnings)
 		}
 	}
 
@@ -158,13 +161,6 @@ func printNowHuman(s app.NowSnapshot, cfg config.Config) {
 			break
 		}
 	}
-	if len(s.Warnings) > 0 {
-		fmt.Println(strings.Repeat("-", 72))
-		fmt.Println("Warnings:")
-		for _, warning := range s.Warnings {
-			fmt.Printf("  - %s\n", warning)
-		}
-	}
 }
 
 func displaySuggestedAction(action string) string {
@@ -200,8 +196,11 @@ func printNowPlain(s app.NowSnapshot) {
 	for i, a := range s.Actions {
 		fmt.Printf("action_%d\t%s\n", i+1, a)
 	}
-	for i, warning := range s.Warnings {
-		fmt.Printf("warning_%d\t%s\n", i+1, warning)
+}
+
+func printNowWarnings(writer io.Writer, warnings []string) {
+	for _, warning := range warnings {
+		fmt.Fprintf(writer, "now: warning: %s\n", warning)
 	}
 }
 

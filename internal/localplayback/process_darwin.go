@@ -172,6 +172,13 @@ func downloadAudio(ctx context.Context, urlString, cacheDir, userAgent string) (
 	if err := os.MkdirAll(cacheDir, 0o700); err != nil {
 		return "", err
 	}
+	cacheInfo, err := os.Lstat(cacheDir)
+	if err != nil {
+		return "", err
+	}
+	if !cacheInfo.IsDir() || cacheInfo.Mode()&os.ModeSymlink != 0 {
+		return "", errors.New("local playback cache directory is not a real directory")
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, urlString, nil)
 	if err != nil {
 		return "", err

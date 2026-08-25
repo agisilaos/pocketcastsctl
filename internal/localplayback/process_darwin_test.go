@@ -205,6 +205,32 @@ func TestDownloadAudioRejectsHTTPFailureWithoutLeavingCacheFile(t *testing.T) {
 	}
 }
 
+func TestDownloadAudioRejectsSymlinkedCacheDirectory(t *testing.T) {
+	realCacheDir := t.TempDir()
+	cacheDir := filepath.Join(t.TempDir(), "cache")
+	if err := os.Symlink(realCacheDir, cacheDir); err != nil {
+		t.Fatal(err)
+	}
+	requested := false
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		requested = true
+		_, _ = writer.Write([]byte("audio"))
+	}))
+	defer server.Close()
+
+	_, err := downloadAudio(context.Background(), server.URL, cacheDir, "")
+	if err == nil || !strings.Contains(err.Error(), "not a real directory") {
+		t.Fatalf("downloadAudio() error = %v, want symlink rejection", err)
+	}
+	if requested {
+		t.Fatal("downloadAudio() made an HTTP request before validating its cache directory")
+	}
+	entries, readErr := os.ReadDir(realCacheDir)
+	if readErr != nil || len(entries) != 0 {
+		t.Fatalf("real cache entries = %v, %v; want empty", entries, readErr)
+	}
+}
+
 func BenchmarkSnapshotDarwinStopped(benchmark *testing.B) {
 	statePath := filepath.Join(benchmark.TempDir(), "state.json")
 	controller, err := New(Options{StatePath: statePath, CacheDir: benchmark.TempDir()})

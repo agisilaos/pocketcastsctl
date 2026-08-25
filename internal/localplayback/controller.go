@@ -61,6 +61,9 @@ func newController(options Options, dependencies controllerDependencies, cacheDi
 	if durations.pollInterval <= 0 {
 		durations = defaultDurations()
 	}
+	if durations.lockWait <= 0 {
+		durations.lockWait = defaultDurations().lockWait
+	}
 	return &Controller{
 		store:     dependencies.store,
 		lock:      dependencies.lock,
@@ -83,6 +86,9 @@ func (controller *Controller) Snapshot(ctx context.Context) (Snapshot, error) {
 }
 
 // Start prepares audio, replaces existing playback, and commits the new player.
+// The caller context applies until launch, with pre-launch lifecycle work capped
+// at five seconds after preparation. Once launched, the child is committed or
+// rolled back independently of caller cancellation.
 func (controller *Controller) Start(ctx context.Context, request StartRequest) (snapshot Snapshot, err error) {
 	prepared, err := controller.processes.Prepare(ctx, request, controller.runtime)
 	if err != nil {
@@ -100,17 +106,19 @@ func (controller *Controller) Start(ctx context.Context, request StartRequest) (
 		return Snapshot{Status: StatusStopped}, err
 	}
 
-	snapshot, err = controller.withLock(ctx, func() (Snapshot, error) {
+	lifecycleCtx, cancelLifecycle := context.WithTimeout(ctx, controller.durations.lockWait)
+	defer cancelLifecycle()
+	snapshot, err = controller.withLock(lifecycleCtx, func() (Snapshot, error) {
 		current, err := controller.observeLocked()
 		if err != nil {
 			return current.snapshot, err
 		}
-		if current.blocked {
+		if current.reconciliationPending {
 			return current.snapshot, fmt.Errorf("prepare existing local playback: %w", ErrPostcondition)
 		}
 		warnings := append([]string(nil), current.snapshot.Warnings...)
 		if current.active {
-			stopped, cleared, err := controller.stopActiveLocked(ctx, *current.record)
+			stopped, cleared, err := controller.stopActiveLocked(lifecycleCtx, *current.record)
 			warnings = append(warnings, stopped.Warnings...)
 			if err != nil {
 				stopped.Warnings = warnings
@@ -120,6 +128,9 @@ func (controller *Controller) Start(ctx context.Context, request StartRequest) (
 				stopped.Warnings = warnings
 				return stopped, fmt.Errorf("replace existing local playback: %w", ErrPostcondition)
 			}
+		}
+		if err := lifecycleCtx.Err(); err != nil {
+			return Snapshot{Status: StatusStopped, Warnings: warnings}, err
 		}
 
 		launched, err := controller.processes.Launch(prepared)
@@ -219,10 +230,10 @@ func (controller *Controller) Stop(ctx context.Context) (Snapshot, error) {
 }
 
 type observedPlayback struct {
-	snapshot Snapshot
-	record   *stateRecord
-	active   bool
-	blocked  bool
+	snapshot              Snapshot
+	record                *stateRecord
+	active                bool
+	reconciliationPending bool
 }
 
 func (controller *Controller) observeLocked() (observedPlayback, error) {
@@ -263,9 +274,9 @@ func (controller *Controller) observeLocked() (observedPlayback, error) {
 
 	warnings, cleared := controller.cleanupRecord(record)
 	return observedPlayback{
-		snapshot: Snapshot{Status: StatusStopped, Warnings: warnings},
-		record:   &record,
-		blocked:  !cleared,
+		snapshot:              Snapshot{Status: StatusStopped, Warnings: warnings},
+		record:                &record,
+		reconciliationPending: !cleared,
 	}, nil
 }
 
@@ -329,50 +340,44 @@ func (controller *Controller) stabilize(identity processIdentity) error {
 	if duration <= 0 {
 		return nil
 	}
-	deadline := time.NewTimer(duration)
-	defer deadline.Stop()
-	ticker := time.NewTicker(controller.durations.pollInterval)
-	defer ticker.Stop()
-	for {
-		observation, err := controller.processes.Inspect(identity)
-		if err != nil {
-			return fmt.Errorf("inspect launched local playback: %w", err)
-		}
+	_, _, err := controller.pollProcess(context.Background(), identity, duration, func(observation processObservation) (bool, error) {
 		if !observation.Exists || !observation.Matches {
-			return fmt.Errorf("launched local playback exited during stabilization: %w", ErrPostcondition)
+			return false, fmt.Errorf("launched local playback exited during stabilization: %w", ErrPostcondition)
 		}
-		select {
-		case <-deadline.C:
-			return nil
-		case <-ticker.C:
+		return false, nil
+	})
+	if err != nil {
+		if errors.Is(err, ErrPostcondition) {
+			return err
 		}
+		return fmt.Errorf("inspect launched local playback: %w", err)
 	}
+	return nil
 }
 
 func (controller *Controller) waitForPaused(ctx context.Context, identity processIdentity, paused bool, duration time.Duration) (processObservation, error) {
-	deadline := time.NewTimer(duration)
-	defer deadline.Stop()
-	ticker := time.NewTicker(controller.durations.pollInterval)
-	defer ticker.Stop()
-	for {
-		observation, err := controller.processes.Inspect(identity)
-		if err != nil {
-			return processObservation{}, err
-		}
-		if !observation.Exists || !observation.Matches || observation.Paused == paused {
-			return observation, nil
-		}
-		select {
-		case <-ctx.Done():
-			return observation, ctx.Err()
-		case <-deadline.C:
-			return observation, ErrPostcondition
-		case <-ticker.C:
-		}
+	observation, completed, err := controller.pollProcess(ctx, identity, duration, func(observation processObservation) (bool, error) {
+		return !observation.Exists || !observation.Matches || observation.Paused == paused, nil
+	})
+	if err != nil {
+		return observation, err
 	}
+	if !completed {
+		return observation, ErrPostcondition
+	}
+	return observation, nil
 }
 
 func (controller *Controller) waitUntilGone(ctx context.Context, identity processIdentity, duration time.Duration) (bool, error) {
+	_, completed, err := controller.pollProcess(ctx, identity, duration, func(observation processObservation) (bool, error) {
+		return !observation.Exists || !observation.Matches, nil
+	})
+	return completed, err
+}
+
+type processPollPredicate func(processObservation) (bool, error)
+
+func (controller *Controller) pollProcess(ctx context.Context, identity processIdentity, duration time.Duration, predicate processPollPredicate) (processObservation, bool, error) {
 	deadline := time.NewTimer(duration)
 	defer deadline.Stop()
 	ticker := time.NewTicker(controller.durations.pollInterval)
@@ -380,16 +385,20 @@ func (controller *Controller) waitUntilGone(ctx context.Context, identity proces
 	for {
 		observation, err := controller.processes.Inspect(identity)
 		if err != nil {
-			return false, err
+			return processObservation{}, false, err
 		}
-		if !observation.Exists || !observation.Matches {
-			return true, nil
+		complete, err := predicate(observation)
+		if err != nil {
+			return observation, false, err
+		}
+		if complete {
+			return observation, true, nil
 		}
 		select {
 		case <-ctx.Done():
-			return false, ctx.Err()
+			return observation, false, ctx.Err()
 		case <-deadline.C:
-			return false, nil
+			return observation, false, nil
 		case <-ticker.C:
 		}
 	}
