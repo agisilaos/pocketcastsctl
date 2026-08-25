@@ -165,6 +165,9 @@ func (m *Manager) shouldRefreshLocked() bool {
 }
 
 func (m *Manager) refreshLocked(ctx context.Context) error {
+	if err := config.ValidateAuthUpdate(m.api.BaseURL); err != nil {
+		return err
+	}
 	refreshed, err := m.api.Refresh(ctx, m.session)
 	if err != nil {
 		return fmt.Errorf("refresh API session: %w", err)
@@ -177,10 +180,14 @@ func (m *Manager) refreshLocked(ctx context.Context) error {
 		return err
 	}
 	m.session = refreshed
-	m.cfg.Auth = metadataFor(key, refreshed)
-	if err := config.Save(m.cfg); err != nil {
+	updated, err := config.UpdateAuth(m.api.BaseURL, metadataFor(key, refreshed))
+	if err != nil {
+		if errors.Is(err, config.ErrDurabilityUncertain) {
+			m.cfg = updated
+		}
 		return fmt.Errorf("refreshed tokens were saved, but session metadata could not be updated: %w", err)
 	}
+	m.cfg = updated
 	return nil
 }
 

@@ -31,6 +31,28 @@ func newMemoryStore() *memoryStore {
 	return &memoryStore{sessions: map[string]Session{}}
 }
 
+func writeSavedAuthConfig(t *testing.T, path, apiBaseURL string, auth config.AuthConfig, headers map[string]string) {
+	t.Helper()
+	doc := map[string]any{
+		"browser":      "chrome",
+		"browser_app":  "",
+		"url_contains": "pocketcasts.com",
+		"api_base_url": apiBaseURL,
+		"api_headers":  headers,
+		"auth":         auth,
+	}
+	b, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, append(b, '\n'), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func (s *memoryStore) Load(_ context.Context, key string) (Session, error) {
 	if s.loadErr != nil {
 		return Session{}, s.loadErr
@@ -177,6 +199,7 @@ func TestManagerProactivelyRefreshesAndPersistsRotation(t *testing.T) {
 	cfg := config.Default()
 	cfg.APIBaseURL = server.URL
 	cfg.Auth.SessionKey = "active"
+	writeSavedAuthConfig(t, configPath, server.URL, cfg.Auth, map[string]string{})
 	manager := NewManager(cfg, ManagerOptions{Store: store, HTTP: server.Client()})
 
 	token, err := manager.AccessToken(context.Background())
@@ -191,6 +214,37 @@ func TestManagerProactivelyRefreshesAndPersistsRotation(t *testing.T) {
 	}
 	if _, err := os.Stat(configPath); err != nil {
 		t.Fatalf("refreshed metadata was not saved: %v", err)
+	}
+}
+
+func TestManagerRefusesRefreshAgainstTemporaryAPIBase(t *testing.T) {
+	var refreshCalls int
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		refreshCalls++
+	}))
+	defer server.Close()
+
+	configPath := filepath.Join(t.TempDir(), "config.json")
+	t.Setenv(config.EnvConfigPath, configPath)
+	writeSavedAuthConfig(t, configPath, config.Default().APIBaseURL, config.AuthConfig{SessionKey: "active"}, map[string]string{})
+	t.Setenv(config.EnvAPIBaseURL, server.URL)
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := newMemoryStore()
+	store.sessions["active"] = Session{
+		AccessToken:  "old-access",
+		RefreshToken: "old-refresh",
+		ExpiresAt:    time.Now().Add(-time.Minute).Unix(),
+	}
+	manager := NewManager(cfg, ManagerOptions{Store: store, HTTP: server.Client()})
+
+	if _, err := manager.AccessToken(context.Background()); !errors.Is(err, config.ErrAPIBaseURLOverride) {
+		t.Fatalf("AccessToken error = %v, want ErrAPIBaseURLOverride", err)
+	}
+	if refreshCalls != 0 || store.saves != 0 {
+		t.Fatalf("refreshCalls=%d saves=%d", refreshCalls, store.saves)
 	}
 }
 
@@ -265,7 +319,8 @@ func TestInstallValidatesBeforeReplacingActiveSession(t *testing.T) {
 	cfg := config.Default()
 	cfg.Auth.SessionKey = "old"
 	cfg.APIHeaders["Authorization"] = "Bearer legacy"
-	t.Setenv(config.EnvConfigPath, filepath.Join(t.TempDir(), "config.json"))
+	configPath := filepath.Join(t.TempDir(), "config.json")
+	t.Setenv(config.EnvConfigPath, configPath)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer candidate" {
@@ -275,6 +330,8 @@ func TestInstallValidatesBeforeReplacingActiveSession(t *testing.T) {
 		_, _ = w.Write([]byte(`{"episodes":[]}`))
 	}))
 	defer server.Close()
+	cfg.APIBaseURL = server.URL
+	writeSavedAuthConfig(t, configPath, server.URL, cfg.Auth, cfg.APIHeaders)
 
 	updated, err := Install(context.Background(), cfg, store, NewAPI(server.URL, server.Client()), Session{
 		AccessToken:  "candidate",
@@ -323,7 +380,14 @@ func TestInstallMetadataFailureKeepsSameAccountCredentialUsable(t *testing.T) {
 	cfg := config.Default()
 	cfg.APIBaseURL = server.URL
 	cfg.Auth = config.AuthConfig{SessionKey: key, AccountID: "account-1", Scope: ScopeWebPlayer}
-	t.Setenv(config.EnvConfigPath, t.TempDir())
+	configDir := t.TempDir()
+	configPath := filepath.Join(configDir, "config.json")
+	t.Setenv(config.EnvConfigPath, configPath)
+	writeSavedAuthConfig(t, configPath, server.URL, cfg.Auth, map[string]string{})
+	if err := os.Chmod(configDir, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(configDir, 0o700) })
 
 	updated, err := Install(context.Background(), cfg, store, NewAPI(server.URL, server.Client()), candidate)
 	if err == nil || !strings.Contains(err.Error(), "session installed") {
@@ -347,6 +411,10 @@ func TestInstallFailurePreservesActiveSession(t *testing.T) {
 		_, _ = w.Write([]byte(`{"error":"unauthorized"}`))
 	}))
 	defer server.Close()
+	cfg.APIBaseURL = server.URL
+	configPath := filepath.Join(t.TempDir(), "config.json")
+	t.Setenv(config.EnvConfigPath, configPath)
+	writeSavedAuthConfig(t, configPath, server.URL, cfg.Auth, map[string]string{})
 
 	_, err := Install(context.Background(), cfg, store, NewAPI(server.URL, server.Client()), Session{AccessToken: "rejected"})
 	if err == nil {
@@ -377,6 +445,33 @@ func TestLogoutDisablesConfigBeforeDeletingKeychainSession(t *testing.T) {
 	}
 	if len(store.deletes) != 0 {
 		t.Fatalf("delete calls=%v, want none", store.deletes)
+	}
+}
+
+func TestLogoutClearsSavedSessionUnderTemporaryAPIBase(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.json")
+	t.Setenv(config.EnvConfigPath, configPath)
+	writeSavedAuthConfig(t, configPath, config.Default().APIBaseURL, config.AuthConfig{SessionKey: "old"}, map[string]string{"Authorization": "Bearer legacy"})
+	t.Setenv(config.EnvAPIBaseURL, "https://temporary.example")
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := newMemoryStore()
+	store.sessions["old"] = Session{AccessToken: "old-access"}
+
+	if _, err := Logout(context.Background(), cfg, store); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := store.sessions["old"]; ok {
+		t.Fatal("logout retained the saved Keychain session")
+	}
+	b, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(b), "auth") || strings.Contains(strings.ToLower(string(b)), "authorization") {
+		t.Fatalf("logout retained saved auth data: %s", b)
 	}
 }
 

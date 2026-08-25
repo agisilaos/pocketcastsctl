@@ -343,12 +343,18 @@ Show the config path and non-secret settings. `api_headers.Authorization` is rea
 ```bash
 ./bin/pocketcastsctl config path
 ./bin/pocketcastsctl config show
+./bin/pocketcastsctl config show --saved
 ./bin/pocketcastsctl config show --json
 ./bin/pocketcastsctl config show --json --reveal-secrets
 ./bin/pocketcastsctl config set browser safari
 ```
 
-`config set browser` persists the Web Player browser and clears a stale application-name override.
+`config show` displays the effective runtime configuration after defaults and
+environment settings are resolved. `config show --saved` displays only known
+values actually present in the file. `config set browser` persists the Web
+Player browser and clears a stale application-name override. `config init`
+creates a missing config and refuses to replace an existing file; use
+`config init --force` for an explicit reset or recovery from malformed JSON.
 
 Environment overrides:
 
@@ -358,6 +364,15 @@ Environment overrides:
 - `POCKETCASTS_URL_CONTAINS`
 - `POCKETCASTS_API_BASE_URL`
 - `POCKETCASTS_ACCESS_TOKEN` (process-only override; never persisted or refreshed)
+
+Browser, browser-application, URL-match, and API-base environment settings are
+runtime-only and are never copied into the config file by another update. An
+API session cannot be installed, imported, or refreshed while
+`POCKETCASTS_API_BASE_URL` differs from the saved or default API base; persist
+the intended endpoint in the config file before changing a saved session.
+
+`web login` saves only browser flags supplied explicitly. With no browser flags,
+it launches using the effective runtime settings without changing the file.
 
 ## Release
 

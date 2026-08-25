@@ -949,6 +949,47 @@ func runForTest(t *testing.T, args []string, stdin string) (int, string, string)
 	return code, string(outBytes), string(errBytes)
 }
 
+func configureAPIBaseURLForTest(t *testing.T, apiBaseURL string) {
+	t.Helper()
+	writeSavedConfigForTest(t, map[string]any{
+		"browser":      "chrome",
+		"browser_app":  "",
+		"url_contains": "pocketcasts.com",
+		"api_base_url": apiBaseURL,
+		"api_headers":  map[string]string{},
+	})
+}
+
+func writeEffectiveConfigForTest(t *testing.T, cfg config.Config) {
+	t.Helper()
+	writeSavedConfigForTest(t, map[string]any{
+		"browser":      cfg.Browser,
+		"browser_app":  cfg.BrowserApp,
+		"url_contains": cfg.URLContains,
+		"api_base_url": cfg.APIBaseURL,
+		"api_headers":  cfg.APIHeaders,
+		"auth":         cfg.Auth,
+	})
+}
+
+func writeSavedConfigForTest(t *testing.T, doc map[string]any) {
+	t.Helper()
+	if os.Getenv(config.EnvConfigPath) == "" {
+		t.Setenv(config.EnvConfigPath, filepath.Join(t.TempDir(), "config.json"))
+	}
+	b, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b = append(b, '\n')
+	if err := os.MkdirAll(filepath.Dir(config.Path()), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(config.Path(), b, 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func assertGolden(t *testing.T, fileName, got string) {
 	t.Helper()
 	path := filepath.Join("testdata", fileName)

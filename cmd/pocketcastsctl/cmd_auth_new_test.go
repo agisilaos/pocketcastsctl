@@ -86,7 +86,7 @@ func TestAuthLoginUsesTerminalExchangeAndDoesNotLeakSecrets(t *testing.T) {
 	}))
 	defer server.Close()
 
-	t.Setenv(config.EnvAPIBaseURL, server.URL)
+	configureAPIBaseURLForTest(t, server.URL)
 	code, stdout, stderr := runForTest(t, []string{"auth", "login", "--email", "person@example.com", "--password-stdin", "--json"}, "very-secret\n")
 	if code != 0 {
 		t.Fatalf("exit code = %d; stdout=%q stderr=%q", code, stdout, stderr)
@@ -153,7 +153,7 @@ func TestAuthImportBrowserIsExplicitAndDoesNotLeakCookie(t *testing.T) {
 		_, _ = w.Write([]byte(`{"episodes":[]}`))
 	}))
 	defer server.Close()
-	t.Setenv(config.EnvAPIBaseURL, server.URL)
+	configureAPIBaseURLForTest(t, server.URL)
 
 	code, stdout, stderr := runForTest(t, []string{"auth", "import-browser", "--browser", "dia", "--json"}, "")
 	if code != 0 {
@@ -184,7 +184,7 @@ func TestAuthImportBrowserRequiresProfileWhenSeveralAreValidNonInteractive(t *te
 		_, _ = w.Write([]byte(`{"episodes":[]}`))
 	}))
 	defer server.Close()
-	t.Setenv(config.EnvAPIBaseURL, server.URL)
+	configureAPIBaseURLForTest(t, server.URL)
 
 	code, stdout, stderr := runForTest(t, []string{"auth", "import-browser", "--browser", "dia", "--json"}, "")
 	if code != 2 {
@@ -202,9 +202,7 @@ func TestAuthLogoutRemovesKeychainAndLegacyCredential(t *testing.T) {
 	cfg := config.Default()
 	cfg.Auth = config.AuthConfig{SessionKey: "active", Method: "password"}
 	cfg.APIHeaders["Authorization"] = "Bearer legacy-secret"
-	if err := config.Save(cfg); err != nil {
-		t.Fatal(err)
-	}
+	writeEffectiveConfigForTest(t, cfg)
 
 	code, stdout, stderr := runForTest(t, []string{"auth", "logout", "--json"}, "")
 	if code != 0 {
@@ -245,9 +243,7 @@ func TestAuthStatusReportsAccountMethodScopeAndExpiry(t *testing.T) {
 		Scope:      authn.ScopeWebPlayer,
 		ExpiresAt:  4102444800,
 	}
-	if err := config.Save(cfg); err != nil {
-		t.Fatal(err)
-	}
+	writeEffectiveConfigForTest(t, cfg)
 
 	code, stdout, stderr := runForTest(t, []string{"auth", "status", "--json"}, "")
 	if code != 0 || stderr != "" {

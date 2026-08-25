@@ -7,9 +7,9 @@ import (
 )
 
 var usageText = map[string]string{
-	"config init":         "pocketcastsctl config init",
+	"config init":         "pocketcastsctl config init [--force]",
 	"config path":         "pocketcastsctl config path",
-	"config show":         "pocketcastsctl config show [--json] [--reveal-secrets]",
+	"config show":         "pocketcastsctl config show [--saved] [--json] [--reveal-secrets]",
 	"config set":          "pocketcastsctl config set browser <name>",
 	"auth login":          "pocketcastsctl auth login [--email address] [--password-stdin] [--force] [--no-input] [--json|--plain]",
 	"auth import-browser": "pocketcastsctl auth import-browser --browser <chrome|dia|safari> [--profile name] [--force] [--no-input] [--json|--plain]",

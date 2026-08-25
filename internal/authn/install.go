@@ -23,6 +23,9 @@ func Install(ctx context.Context, cfg config.Config, store Store, api *API, cand
 	if api == nil {
 		return cfg, errors.New("authentication API is unavailable")
 	}
+	if err := config.ValidateAuthUpdate(api.BaseURL); err != nil {
+		return cfg, err
+	}
 	validated, err := api.Validate(ctx, candidate)
 	if err != nil {
 		return cfg, fmt.Errorf("validate candidate API session: %w", err)
@@ -31,6 +34,9 @@ func Install(ctx context.Context, cfg config.Config, store Store, api *API, cand
 
 	key := sessionKey(api.BaseURL, candidate)
 	previousKey := strings.TrimSpace(cfg.Auth.SessionKey)
+	pending := cfg
+	pending.Auth = metadataFor(key, candidate)
+	pending.APIHeaders = withoutAuthorization(cfg.APIHeaders)
 	if err := store.Save(ctx, key, candidate); err != nil {
 		if previousKey != key {
 			_ = store.Delete(ctx, key)
@@ -38,14 +44,15 @@ func Install(ctx context.Context, cfg config.Config, store Store, api *API, cand
 		return cfg, err
 	}
 
-	updated := cfg
-	updated.Auth = metadataFor(key, candidate)
-	updated.APIHeaders = withoutAuthorization(cfg.APIHeaders)
-	if err := config.Save(updated); err != nil {
+	updated, err := config.UpdateAuth(api.BaseURL, metadataFor(key, candidate))
+	if err != nil {
+		if errors.Is(err, config.ErrDurabilityUncertain) {
+			return updated, fmt.Errorf("API session installed, but config durability could not be confirmed: %w", err)
+		}
 		if previousKey != key {
 			_ = store.Delete(ctx, key)
 		} else {
-			return updated, fmt.Errorf("API session installed, but active session metadata could not be updated: %w", err)
+			return pending, fmt.Errorf("API session installed, but active session metadata could not be updated: %w", err)
 		}
 		return cfg, fmt.Errorf("save active API session metadata: %w", err)
 	}
@@ -61,10 +68,11 @@ func Logout(ctx context.Context, cfg config.Config, store Store) (config.Config,
 	if store == nil {
 		store = NewKeyringStore()
 	}
-	updated := cfg
-	updated.Auth = config.AuthConfig{}
-	updated.APIHeaders = withoutAuthorization(cfg.APIHeaders)
-	if err := config.Save(updated); err != nil {
+	updated, err := config.ClearAuth()
+	if err != nil {
+		if errors.Is(err, config.ErrDurabilityUncertain) {
+			return updated, fmt.Errorf("logged out, but config durability could not be confirmed: %w", err)
+		}
 		return cfg, fmt.Errorf("save logged-out config: %w", err)
 	}
 	if err := store.Delete(ctx, cfg.Auth.SessionKey); err != nil {

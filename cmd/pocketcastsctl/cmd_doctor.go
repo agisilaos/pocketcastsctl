@@ -199,7 +199,7 @@ func applyDoctorFixes(checks []doctorCheck) []doctorFixResult {
 			} else if !errors.Is(err, os.ErrNotExist) {
 				res.Status = "fail"
 				res.Message = fmt.Sprintf("stat config: %v", err)
-			} else if err := config.Save(config.Default()); err != nil {
+			} else if err := config.Init(false); err != nil {
 				res.Status = "fail"
 				res.Message = fmt.Sprintf("write config: %v", err)
 			} else {

@@ -32,16 +32,22 @@ func run(args []string) int {
 		return 0
 	}
 
-	cfg, _ := config.Load()
-
 	args, aliasWarning := rewriteAliases(args)
 	if aliasWarning != "" {
 		fmt.Fprintln(os.Stderr, aliasWarning)
 	}
 
+	if args[0] == "config" {
+		return runConfig(args[1:])
+	}
+
+	cfg, err := config.Load()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to load config: %v\n", err)
+		return 1
+	}
+
 	switch args[0] {
-	case "config":
-		return runConfig(args[1:], cfg)
 	case "setup":
 		return runSetup(args[1:], cfg)
 	case "start", "getting-started":
