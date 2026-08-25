@@ -1,6 +1,7 @@
 package localplayback
 
 import (
+	"bytes"
 	"errors"
 	"os"
 	"path/filepath"
@@ -98,5 +99,45 @@ func TestFileStateStoreRejectsInvalidSaveAndClearsIdempotently(t *testing.T) {
 	}
 	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("state still exists: %v", err)
+	}
+}
+
+func TestFileStateStoreFailedRenamePreservesPreviousStateAndRemovesTemporaryFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "state.json")
+	store := fileStateStore{path: path}
+	original := testStateRecord(processIdentity{PID: 1234, BirthUnixMicros: 1000})
+	if err := store.Save(original); err != nil {
+		t.Fatalf("Save(original) error = %v", err)
+	}
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	renameErr := errors.New("injected rename failure")
+	failingStore := fileStateStore{
+		path: path,
+		renameFile: func(string, string) error {
+			return renameErr
+		},
+	}
+	replacement := testStateRecord(processIdentity{PID: 5678, BirthUnixMicros: 2000})
+	if err := failingStore.Save(replacement); !errors.Is(err, renameErr) {
+		t.Fatalf("Save(replacement) error = %v, want rename failure", err)
+	}
+	after, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(after, before) {
+		t.Fatalf("state changed after failed rename:\n%s", after)
+	}
+	temporaryFiles, err := filepath.Glob(filepath.Join(dir, ".local-playback-state-*"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(temporaryFiles) != 0 {
+		t.Fatalf("temporary state files remain: %v", temporaryFiles)
 	}
 }

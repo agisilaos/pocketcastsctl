@@ -51,7 +51,8 @@ type stateStore interface {
 }
 
 type fileStateStore struct {
-	path string
+	path       string
+	renameFile func(string, string) error
 }
 
 func (store fileStateStore) Load() (loadResult, error) {
@@ -138,7 +139,11 @@ func (store fileStateStore) Save(record stateRecord) error {
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	if err := os.Rename(tmpPath, store.path); err != nil {
+	renameFile := store.renameFile
+	if renameFile == nil {
+		renameFile = os.Rename
+	}
+	if err := renameFile(tmpPath, store.path); err != nil {
 		return err
 	}
 	removeTemp = false
