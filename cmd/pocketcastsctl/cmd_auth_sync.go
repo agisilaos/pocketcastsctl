@@ -34,9 +34,9 @@ func runAuthSync(args []string, cfg config.Config) int {
 	if ok, code := parseFlagsOrExit(fs, args); !ok {
 		return code
 	}
-	mode, ok := outputFlags.resolveOrReport("auth sync")
-	if !ok {
-		return 2
+	mode, code := outputFlags.resolveOrReport("auth sync")
+	if code != 0 {
+		return code
 	}
 	if fs.NArg() != 0 {
 		return renderAuthCommandError("auth sync", "auth.usage", errors.New("usage: pocketcastsctl auth sync --browser <chrome|dia|safari> [--profile name]"), mode, 2)

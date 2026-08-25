@@ -43,18 +43,17 @@ func (output *authOutputFlags) register(fs *flag.FlagSet) {
 	fs.BoolVar(&output.plain, "plain", false, "plain line-oriented output")
 }
 
-func (output authOutputFlags) resolveOrReport(command string) (authOutputMode, bool) {
+func (output authOutputFlags) resolveOrReport(command string) (authOutputMode, int) {
 	if output.json && output.plain {
-		renderAuthCommandError(command, "auth.usage.output", errors.New("use only one of --json or --plain"), authOutputHuman, 2)
-		return authOutputHuman, false
+		return authOutputHuman, renderAuthCommandError(command, "auth.usage.output", errors.New("use only one of --json or --plain"), authOutputHuman, 2)
 	}
 	if output.json {
-		return authOutputJSON, true
+		return authOutputJSON, 0
 	}
 	if output.plain {
-		return authOutputPlain, true
+		return authOutputPlain, 0
 	}
-	return authOutputHuman, true
+	return authOutputHuman, 0
 }
 
 func newAuthenticatedClient(cfg config.Config) (*pocketcasts.Client, *authn.Manager) {
@@ -157,26 +156,26 @@ func renderAuthCommandError(command, code string, err error, mode authOutputMode
 }
 
 func renderAuthSuccess(command string, session authn.Session, source, profile string, mode authOutputMode) int {
-	result := map[string]any{
-		"status":  "ok",
-		"command": command,
-		"method":  session.Method,
-		"scope":   session.Scope,
-	}
-	if session.Email != "" {
-		result["email"] = session.Email
-	}
-	if session.ExpiresAt > 0 {
-		result["expires_at"] = session.ExpiresAt
-	}
-	if source != "" {
-		result["browser"] = source
-	}
-	if profile != "" {
-		result["profile"] = profile
-	}
 	switch mode {
 	case authOutputJSON:
+		result := map[string]any{
+			"status":  "ok",
+			"command": command,
+			"method":  session.Method,
+			"scope":   session.Scope,
+		}
+		if session.Email != "" {
+			result["email"] = session.Email
+		}
+		if session.ExpiresAt > 0 {
+			result["expires_at"] = session.ExpiresAt
+		}
+		if source != "" {
+			result["browser"] = source
+		}
+		if profile != "" {
+			result["profile"] = profile
+		}
 		if err := printJSON(result); err != nil {
 			return renderAuthCommandError(command, "auth.output", err, authOutputHuman, 1)
 		}

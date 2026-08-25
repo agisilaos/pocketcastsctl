@@ -35,9 +35,9 @@ func runAuthImportBrowser(args []string, cfg config.Config) int {
 	if ok, code := parseFlagsOrExit(fs, args); !ok {
 		return code
 	}
-	mode, ok := outputFlags.resolveOrReport("auth import-browser")
-	if !ok {
-		return 2
+	mode, code := outputFlags.resolveOrReport("auth import-browser")
+	if code != 0 {
+		return code
 	}
 	if fs.NArg() != 0 {
 		return renderAuthCommandError("auth import-browser", "auth.usage", errors.New("usage: pocketcastsctl auth import-browser --browser <chrome|dia|safari> [--profile name] [--force] [--no-input] [--json|--plain]"), mode, 2)

@@ -18,9 +18,9 @@ func runAuthRefresh(args []string, cfg config.Config) int {
 	if ok, code := parseFlagsOrExit(fs, args); !ok {
 		return code
 	}
-	mode, ok := outputFlags.resolveOrReport("auth refresh")
-	if !ok {
-		return 2
+	mode, code := outputFlags.resolveOrReport("auth refresh")
+	if code != 0 {
+		return code
 	}
 	if fs.NArg() != 0 {
 		return renderAuthCommandError("auth refresh", "auth.usage", errors.New("usage: pocketcastsctl auth refresh [--json|--plain]"), mode, 2)

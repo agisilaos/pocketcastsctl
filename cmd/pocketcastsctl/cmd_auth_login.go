@@ -26,9 +26,9 @@ func runAuthLogin(args []string, cfg config.Config) int {
 	if ok, code := parseFlagsOrExit(fs, args); !ok {
 		return code
 	}
-	mode, ok := outputFlags.resolveOrReport("auth login")
-	if !ok {
-		return 2
+	mode, code := outputFlags.resolveOrReport("auth login")
+	if code != 0 {
+		return code
 	}
 	if fs.NArg() != 0 {
 		return renderAuthCommandError("auth login", "auth.usage", errors.New("usage: pocketcastsctl auth login [--email address] [--password-stdin] [--force] [--no-input] [--json|--plain]"), mode, 2)

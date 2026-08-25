@@ -22,9 +22,9 @@ func runAuthStatus(args []string, cfg config.Config) int {
 	if ok, code := parseFlagsOrExit(fs, args); !ok {
 		return code
 	}
-	mode, ok := outputFlags.resolveOrReport("auth status")
-	if !ok {
-		return 2
+	mode, code := outputFlags.resolveOrReport("auth status")
+	if code != 0 {
+		return code
 	}
 	if ok, code := requireNoPositionalArgsOrExit(fs, "usage: pocketcastsctl auth status [--json|--plain]"); !ok {
 		return code
@@ -170,9 +170,9 @@ func runAuthVerify(args []string, cfg config.Config) int {
 	if ok, code := parseFlagsOrExit(fs, args); !ok {
 		return code
 	}
-	mode, ok := outputFlags.resolveOrReport("auth verify")
-	if !ok {
-		return 2
+	mode, code := outputFlags.resolveOrReport("auth verify")
+	if code != 0 {
+		return code
 	}
 	if ok, code := requireNoPositionalArgsOrExit(fs, "usage: pocketcastsctl auth verify [--json|--plain]"); !ok {
 		return code

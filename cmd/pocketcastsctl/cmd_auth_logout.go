@@ -21,9 +21,9 @@ func runAuthLogout(args []string, cfg config.Config) int {
 	if ok, code := parseFlagsOrExit(fs, args); !ok {
 		return code
 	}
-	mode, ok := outputFlags.resolveOrReport("auth logout")
-	if !ok {
-		return 2
+	mode, code := outputFlags.resolveOrReport("auth logout")
+	if code != 0 {
+		return code
 	}
 	if fs.NArg() != 0 {
 		return renderAuthCommandError("auth logout", "auth.usage", errors.New("usage: pocketcastsctl auth logout [--json|--plain]"), mode, 2)
