@@ -17,12 +17,16 @@ import (
 func runAuthStatus(args []string, cfg config.Config) int {
 	fs := flag.NewFlagSet("auth status", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	jsonOut := fs.Bool("json", false, "output JSON")
-	plain := fs.Bool("plain", false, "plain line-oriented output")
+	var outputFlags authOutputFlags
+	outputFlags.register(fs)
 	if ok, code := parseFlagsOrExit(fs, args); !ok {
 		return code
 	}
-	if ok, code := requireNoPositionalArgsOrExit(fs, "usage: pocketcastsctl auth status [--json] [--plain]"); !ok {
+	mode, ok := outputFlags.resolveOrReport("auth status")
+	if !ok {
+		return 2
+	}
+	if ok, code := requireNoPositionalArgsOrExit(fs, "usage: pocketcastsctl auth status [--json|--plain]"); !ok {
 		return code
 	}
 
@@ -84,14 +88,14 @@ func runAuthStatus(args []string, cfg config.Config) int {
 		}
 	}
 
-	if *jsonOut {
+	switch mode {
+	case authOutputJSON:
 		if err := printJSON(status); err != nil {
 			errf("failed to render auth status JSON: %v\n", err)
 			return 1
 		}
 		return 0
-	}
-	if *plain {
+	case authOutputPlain:
 		keys := []string{
 			"config_path",
 			"api_headers_count",
@@ -161,12 +165,16 @@ func runAuthStatus(args []string, cfg config.Config) int {
 func runAuthVerify(args []string, cfg config.Config) int {
 	fs := flag.NewFlagSet("auth verify", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	jsonOut := fs.Bool("json", false, "output JSON")
-	plain := fs.Bool("plain", false, "plain line-oriented output")
+	var outputFlags authOutputFlags
+	outputFlags.register(fs)
 	if ok, code := parseFlagsOrExit(fs, args); !ok {
 		return code
 	}
-	if ok, code := requireNoPositionalArgsOrExit(fs, "usage: pocketcastsctl auth verify [--json] [--plain]"); !ok {
+	mode, ok := outputFlags.resolveOrReport("auth verify")
+	if !ok {
+		return 2
+	}
+	if ok, code := requireNoPositionalArgsOrExit(fs, "usage: pocketcastsctl auth verify [--json|--plain]"); !ok {
 		return code
 	}
 	warnLegacyCredential(cfg)
@@ -195,7 +203,8 @@ func runAuthVerify(args []string, cfg config.Config) int {
 		}
 	}
 
-	if *jsonOut {
+	switch mode {
+	case authOutputJSON:
 		if err := printJSON(status); err != nil {
 			errf("failed to render auth verify JSON: %v\n", err)
 			return 1
@@ -204,8 +213,7 @@ func runAuthVerify(args []string, cfg config.Config) int {
 			return 1
 		}
 		return 0
-	}
-	if *plain {
+	case authOutputPlain:
 		fmt.Printf("verified\t%v\n", status["verified"])
 		fmt.Printf("status\t%v\n", status["status"])
 		if e, ok := status["error"]; ok {

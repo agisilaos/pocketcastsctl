@@ -15,6 +15,14 @@ import (
 	"pocketcastsctl/internal/config"
 )
 
+type authImportBrowserOptions struct {
+	browser    string
+	profile    string
+	force      bool
+	noInput    bool
+	outputMode authOutputMode
+}
+
 func runAuthImportBrowser(args []string, cfg config.Config) int {
 	fs := flag.NewFlagSet("auth import-browser", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
@@ -22,39 +30,50 @@ func runAuthImportBrowser(args []string, cfg config.Config) int {
 	profile := fs.String("profile", "", "browser profile directory name (for example, Profile 1)")
 	force := fs.Bool("force", false, sessionReplacementForceHelp)
 	noInput := fs.Bool("no-input", false, "disable prompts")
-	jsonOut := fs.Bool("json", false, "output JSON")
-	plain := fs.Bool("plain", false, "plain line-oriented output")
+	var outputFlags authOutputFlags
+	outputFlags.register(fs)
 	if ok, code := parseFlagsOrExit(fs, args); !ok {
 		return code
 	}
+	mode, ok := outputFlags.resolveOrReport("auth import-browser")
+	if !ok {
+		return 2
+	}
 	if fs.NArg() != 0 {
-		return renderAuthCommandError("auth import-browser", "auth.usage", errors.New("usage: pocketcastsctl auth import-browser --browser <chrome|dia|safari> [--profile name] [--force] [--no-input] [--json|--plain]"), *jsonOut, *plain, 2)
+		return renderAuthCommandError("auth import-browser", "auth.usage", errors.New("usage: pocketcastsctl auth import-browser --browser <chrome|dia|safari> [--profile name] [--force] [--no-input] [--json|--plain]"), mode, 2)
 	}
-	if *jsonOut && *plain {
-		return renderAuthCommandError("auth import-browser", "auth.usage.output", errors.New("use only one of --json or --plain"), false, false, 2)
-	}
-	browserName := strings.ToLower(strings.TrimSpace(*browser))
+	return runAuthImportBrowserWithOptions(cfg, authImportBrowserOptions{
+		browser:    *browser,
+		profile:    *profile,
+		force:      *force,
+		noInput:    *noInput,
+		outputMode: mode,
+	})
+}
+
+func runAuthImportBrowserWithOptions(cfg config.Config, options authImportBrowserOptions) int {
+	browserName := strings.ToLower(strings.TrimSpace(options.browser))
 	if browserName == "" {
-		return renderAuthCommandError("auth import-browser", "auth.input.browser_missing", errors.New("--browser is required (choose chrome, dia, or safari)"), *jsonOut, *plain, 2)
+		return renderAuthCommandError("auth import-browser", "auth.input.browser_missing", errors.New("--browser is required (choose chrome, dia, or safari)"), options.outputMode, 2)
 	}
 	if !authn.SupportedBrowser(browserName) {
-		return renderAuthCommandError("auth import-browser", "auth.input.browser_unsupported", fmt.Errorf("unsupported browser %q (choose chrome, dia, or safari)", browserName), *jsonOut, *plain, 2)
+		return renderAuthCommandError("auth import-browser", "auth.input.browser_unsupported", fmt.Errorf("unsupported browser %q (choose chrome, dia, or safari)", browserName), options.outputMode, 2)
 	}
-	if browserName == "safari" && strings.TrimSpace(*profile) != "" {
-		return renderAuthCommandError("auth import-browser", "auth.input.profile_unsupported", errors.New("Safari does not support --profile; omit the flag"), *jsonOut, *plain, 2)
+	if browserName == "safari" && strings.TrimSpace(options.profile) != "" {
+		return renderAuthCommandError("auth import-browser", "auth.input.profile_unsupported", errors.New("Safari does not support --profile; omit the flag"), options.outputMode, 2)
 	}
-	interactive := !*noInput && !*jsonOut && !*plain && stdinIsTerminal()
+	interactive := !options.noInput && options.outputMode == authOutputHuman && stdinIsTerminal()
 	current, preflightErr := sessionReplacementPreflight(cfg)
 	if preflightErr != nil {
-		return renderSessionReplacementPreflightError("auth import-browser", preflightErr, *jsonOut, *plain)
+		return renderSessionReplacementPreflightError("auth import-browser", preflightErr, options.outputMode)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	api := authn.NewAPI(cfg.APIBaseURL, nil)
-	candidates, warnings, err := authn.BrowserCandidates(ctx, browserReaderFactory(), browserName, *profile, time.Now())
+	candidates, warnings, err := authn.BrowserCandidates(ctx, browserReaderFactory(), browserName, options.profile, time.Now())
 	if err != nil {
-		return renderAuthCommandError("auth import-browser", "auth.browser.read_failed", err, *jsonOut, *plain, 1)
+		return renderAuthCommandError("auth import-browser", "auth.browser.read_failed", err, options.outputMode, 1)
 	}
 	valid, rejected := authn.ValidBrowserCandidates(ctx, api, candidates)
 	if len(valid) == 0 {
@@ -64,20 +83,20 @@ func runAuthImportBrowser(args []string, cfg config.Config) int {
 		} else {
 			message += "; " + authn.BrowserRecoveryHint(browserName, warnings)
 		}
-		return renderAuthCommandError("auth import-browser", "auth.browser.session_missing", errors.New(message), *jsonOut, *plain, 1)
+		return renderAuthCommandError("auth import-browser", "auth.browser.session_missing", errors.New(message), options.outputMode, 1)
 	}
 
 	selected, err := selectBrowserCandidate(valid, interactive)
 	if err != nil {
-		return renderAuthCommandError("auth import-browser", "auth.browser.profile_required", err, *jsonOut, *plain, 2)
+		return renderAuthCommandError("auth import-browser", "auth.browser.profile_required", err, options.outputMode, 2)
 	}
-	if err := confirmSessionReplacement(current, selected.Session, *force, interactive); err != nil {
-		return renderAuthCommandError("auth import-browser", "auth.account.replace_required", err, *jsonOut, *plain, 2)
+	if err := confirmSessionReplacement(current, selected.Session, options.force, interactive); err != nil {
+		return renderAuthCommandError("auth import-browser", "auth.account.replace_required", err, options.outputMode, 2)
 	}
 	if _, err := installSession(ctx, cfg, api, selected.Session); err != nil {
-		return renderAuthCommandError("auth import-browser", "auth.session.install_failed", err, *jsonOut, *plain, 1)
+		return renderAuthCommandError("auth import-browser", "auth.session.install_failed", err, options.outputMode, 1)
 	}
-	return renderAuthSuccess("auth import-browser", selected.Session, selected.Browser, authn.BrowserProfileName(selected.Profile), *jsonOut, *plain)
+	return renderAuthSuccess("auth import-browser", selected.Session, selected.Browser, authn.BrowserProfileName(selected.Profile), options.outputMode)
 }
 
 func selectBrowserCandidate(candidates []authn.BrowserCandidate, interactive bool) (authn.BrowserCandidate, error) {

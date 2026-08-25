@@ -89,6 +89,8 @@ Doctor modes:
 - For scripting:
   - Prefer `--json` where available for structured output.
   - Prefer `--plain` for stable tab/line-oriented output.
+- `--json` and `--plain` are mutually exclusive for API-authentication commands;
+  the deprecated `auth tabs` alias follows `web tabs`.
 - Read/status commands now support machine-friendly output modes consistently:
   - See the contract table below.
 - Destructive safety checks (for example `queue api rm` without `--force` in non-interactive mode) fail with a non-zero exit code and error text on `stderr`.
