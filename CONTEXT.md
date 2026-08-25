@@ -20,6 +20,10 @@ _Avoid_: Browser playback
 Episode playback performed directly on the user's Mac, independently of Web Player playback.
 _Avoid_: Native playback, offline playback
 
+**Managed local playback**:
+Local playback that pocketcastsctl started and can still identify as the same playback across commands.
+_Avoid_: Owned process, local session
+
 ## Authentication
 
 **API session**:

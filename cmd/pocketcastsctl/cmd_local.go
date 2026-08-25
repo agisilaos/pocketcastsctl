@@ -7,15 +7,15 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
 	"pocketcastsctl/internal/config"
-	"pocketcastsctl/internal/player"
+	"pocketcastsctl/internal/localplayback"
 	"pocketcastsctl/internal/pocketcasts"
-	"pocketcastsctl/internal/state"
 )
+
+const localPlaybackOperationTimeout = 5 * time.Second
 
 func runLocal(args []string, cfg config.Config) int {
 	if len(args) == 0 || isHelpArg(args[0]) {
@@ -28,13 +28,13 @@ func runLocal(args []string, cfg config.Config) int {
 	case "play":
 		return runLocalPlay(args[1:], cfg)
 	case "pause":
-		return runLocalPause(cfg)
+		return runLocalPause()
 	case "resume":
-		return runLocalResume(cfg)
+		return runLocalResume()
 	case "stop":
-		return runLocalStop(cfg)
+		return runLocalStop()
 	case "status":
-		return runLocalStatus(args[1:], cfg)
+		return runLocalStatus(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown local subcommand: %s\n", args[0])
 		return 2
@@ -100,7 +100,7 @@ func runLocalPick(args []string, cfg config.Config) int {
 	if !*fromStart {
 		startAt = progress[chosen.UUID]
 	}
-	return startLocalPlayback(cfg, chosen, startAt)
+	return startLocalPlayback(chosen, startAt)
 }
 
 func runLocalPlay(args []string, cfg config.Config) int {
@@ -161,10 +161,10 @@ func runLocalPlay(args []string, cfg config.Config) int {
 		}
 		return 0
 	}
-	return startLocalPlayback(cfg, target, startAt)
+	return startLocalPlayback(target, startAt)
 }
 
-func startLocalPlayback(cfg config.Config, ep pocketcasts.UpNextEpisode, startAt int) int {
+func startLocalPlayback(ep pocketcasts.UpNextEpisode, startAt int) int {
 	audioURL := strings.TrimSpace(ep.URL)
 	if audioURL == "" {
 		fmt.Fprintln(os.Stderr, "local playback needs an audio URL but none was found in the Up Next response")
@@ -172,45 +172,36 @@ func startLocalPlayback(cfg config.Config, ep pocketcasts.UpNextEpisode, startAt
 		return 1
 	}
 
-	// Stop existing playback if any.
-	_ = runLocalStop(cfg)
-
-	cacheDir, _ := os.UserCacheDir()
-	cacheDir = filepath.Join(cacheDir, "pocketcastsctl")
-
-	// mpv starts immediately, but the afplay fallback may need to download first.
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	defer cancel()
-	started, err := player.Start(ctx, player.StartOptions{
-		URL:       audioURL,
-		Title:     ep.Title,
-		CacheDir:  cacheDir,
-		UserAgent: "pocketcastsctl",
-		StartAt:   startAt,
-	})
+	controller, err := newLocalPlaybackController()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "local play failed: %v\n", err)
 		return 1
 	}
 
-	_ = state.Save(config.StatePath(), state.PlaybackState{
-		PID:         started.PID,
-		Command:     started.Command,
+	// mpv prepares immediately, but the afplay fallback may need to download first.
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	snapshot, err := controller.Start(ctx, localplayback.StartRequest{
+		URL:         audioURL,
 		EpisodeUUID: ep.UUID,
 		Title:       ep.Title,
-		StartedAt:   time.Now(),
-		Paused:      false,
+		StartAt:     startAt,
 	})
+	printLocalPlaybackWarnings("local play", snapshot.Warnings)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "local play failed: %v\n", err)
+		return 1
+	}
 	title := strings.TrimSpace(ep.Title)
 	if title == "" {
 		title = "(untitled)"
 	}
 	if startAt > 0 {
-		if started.StartOffsetApplied {
+		if snapshot.StartOffsetApplied {
 			fmt.Printf("playing (local): %s [from %s]\n", title, formatHMS(startAt))
 		} else {
 			fmt.Printf("playing (local): %s [requested from %s]\n", title, formatHMS(startAt))
-			fmt.Fprintf(os.Stderr, "tip: player %q cannot seek on start; install mpv to start from saved progress\n", started.Player)
+			fmt.Fprintf(os.Stderr, "tip: player %q cannot seek on start; install mpv to start from saved progress\n", snapshot.Player)
 		}
 		return 0
 	}
@@ -218,62 +209,55 @@ func startLocalPlayback(cfg config.Config, ep pocketcasts.UpNextEpisode, startAt
 	return 0
 }
 
-func runLocalPause(cfg config.Config) int {
-	st, ok, err := state.Load(config.StatePath())
+func runLocalPause() int {
+	return runLocalPauseResume("pause", "paused", (*localplayback.Controller).Pause)
+}
+
+func runLocalResume() int {
+	return runLocalPauseResume("resume", "resumed", (*localplayback.Controller).Resume)
+}
+
+func runLocalPauseResume(operation, success string, transition func(*localplayback.Controller, context.Context) (localplayback.Snapshot, error)) int {
+	controller, err := newLocalPlaybackController()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "local pause: %v\n", err)
+		fmt.Fprintf(os.Stderr, "local %s: %v\n", operation, err)
 		return 1
 	}
-	if !ok || !player.Alive(st.PID) {
-		_ = state.Clear(config.StatePath())
-		fmt.Fprintln(os.Stderr, "local pause: nothing playing")
+	ctx, cancel := context.WithTimeout(context.Background(), localPlaybackOperationTimeout)
+	defer cancel()
+	snapshot, err := transition(controller, ctx)
+	prefix := "local " + operation
+	printLocalPlaybackWarnings(prefix, snapshot.Warnings)
+	if errors.Is(err, localplayback.ErrNoPlayback) {
+		fmt.Fprintf(os.Stderr, "%s: nothing playing\n", prefix)
 		return 1
 	}
-	if err := player.Pause(st.PID); err != nil {
-		fmt.Fprintf(os.Stderr, "local pause: %v\n", err)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%s: %v\n", prefix, err)
 		return 1
 	}
-	st.Paused = true
-	_ = state.Save(config.StatePath(), st)
-	fmt.Println("paused (local)")
+	fmt.Printf("%s (local)\n", success)
 	return 0
 }
 
-func runLocalResume(cfg config.Config) int {
-	st, ok, err := state.Load(config.StatePath())
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "local resume: %v\n", err)
-		return 1
-	}
-	if !ok || !player.Alive(st.PID) {
-		_ = state.Clear(config.StatePath())
-		fmt.Fprintln(os.Stderr, "local resume: nothing playing")
-		return 1
-	}
-	if err := player.Resume(st.PID); err != nil {
-		fmt.Fprintf(os.Stderr, "local resume: %v\n", err)
-		return 1
-	}
-	st.Paused = false
-	_ = state.Save(config.StatePath(), st)
-	fmt.Println("resumed (local)")
-	return 0
-}
-
-func runLocalStop(cfg config.Config) int {
-	st, ok, err := state.Load(config.StatePath())
+func runLocalStop() int {
+	controller, err := newLocalPlaybackController()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "local stop: %v\n", err)
 		return 1
 	}
-	if ok && player.Alive(st.PID) {
-		_ = player.Stop(st.PID)
+	ctx, cancel := context.WithTimeout(context.Background(), localPlaybackOperationTimeout)
+	defer cancel()
+	snapshot, err := controller.Stop(ctx)
+	printLocalPlaybackWarnings("local stop", snapshot.Warnings)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "local stop: %v\n", err)
+		return 1
 	}
-	_ = state.Clear(config.StatePath())
 	return 0
 }
 
-func runLocalStatus(args []string, cfg config.Config) int {
+func runLocalStatus(args []string) int {
 	fs := flag.NewFlagSet("local status", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	jsonOut := fs.Bool("json", false, "output JSON")
@@ -290,15 +274,23 @@ func runLocalStatus(args []string, cfg config.Config) int {
 		return 2
 	}
 
-	st, ok, err := state.Load(config.StatePath())
+	controller, err := newLocalPlaybackController()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "local status: %v\n", err)
+		return 1
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), localPlaybackOperationTimeout)
+	defer cancel()
+	snapshot, err := controller.Snapshot(ctx)
+	printLocalPlaybackWarnings("local status", snapshot.Warnings)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "local status: %v\n", err)
 		return 1
 	}
 	status := map[string]any{
-		"status": "stopped",
+		"status": string(snapshot.Status),
 	}
-	if !ok {
+	if snapshot.Status == localplayback.StatusStopped {
 		if *jsonOut {
 			b, _ := json.MarshalIndent(status, "", "  ")
 			fmt.Println(string(b))
@@ -311,23 +303,8 @@ func runLocalStatus(args []string, cfg config.Config) int {
 		fmt.Println("stopped")
 		return 0
 	}
-	if !player.Alive(st.PID) {
-		_ = state.Clear(config.StatePath())
-		if *jsonOut {
-			b, _ := json.MarshalIndent(status, "", "  ")
-			fmt.Println(string(b))
-			return 0
-		}
-		if *plain {
-			fmt.Println("status\tstopped")
-			return 0
-		}
-		fmt.Println("stopped")
-		return 0
-	}
-	if st.Paused {
-		status["status"] = "paused"
-		status["title"] = strings.TrimSpace(st.Title)
+	if snapshot.Status == localplayback.StatusPaused {
+		status["title"] = strings.TrimSpace(snapshot.Title)
 		if *jsonOut {
 			b, _ := json.MarshalIndent(status, "", "  ")
 			fmt.Println(string(b))
@@ -335,14 +312,13 @@ func runLocalStatus(args []string, cfg config.Config) int {
 		}
 		if *plain {
 			fmt.Printf("status\tpaused\n")
-			fmt.Printf("title\t%s\n", strings.TrimSpace(st.Title))
+			fmt.Printf("title\t%s\n", strings.TrimSpace(snapshot.Title))
 			return 0
 		}
-		fmt.Printf("paused: %s\n", strings.TrimSpace(st.Title))
+		fmt.Printf("paused: %s\n", strings.TrimSpace(snapshot.Title))
 		return 0
 	}
-	status["status"] = "playing"
-	status["title"] = strings.TrimSpace(st.Title)
+	status["title"] = strings.TrimSpace(snapshot.Title)
 	if *jsonOut {
 		b, _ := json.MarshalIndent(status, "", "  ")
 		fmt.Println(string(b))
@@ -350,9 +326,22 @@ func runLocalStatus(args []string, cfg config.Config) int {
 	}
 	if *plain {
 		fmt.Printf("status\tplaying\n")
-		fmt.Printf("title\t%s\n", strings.TrimSpace(st.Title))
+		fmt.Printf("title\t%s\n", strings.TrimSpace(snapshot.Title))
 		return 0
 	}
-	fmt.Printf("playing: %s\n", strings.TrimSpace(st.Title))
+	fmt.Printf("playing: %s\n", strings.TrimSpace(snapshot.Title))
 	return 0
+}
+
+func newLocalPlaybackController() (*localplayback.Controller, error) {
+	return localplayback.New(localplayback.Options{
+		StatePath: config.StatePath(),
+		UserAgent: "pocketcastsctl",
+	})
+}
+
+func printLocalPlaybackWarnings(operation string, warnings []string) {
+	for _, warning := range warnings {
+		fmt.Fprintf(os.Stderr, "%s: warning: %s\n", operation, warning)
+	}
 }

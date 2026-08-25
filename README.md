@@ -30,6 +30,8 @@ For local iteration:
 ```bash
 make build   # builds ./pocketcastsctl
 make test    # runs unit tests
+make test-race-local  # runs focused lifecycle race tests
+make bench-local  # benchmarks local snapshot hot paths
 make test-scripts  # runs script failure-path tests
 make test-scripts-cover  # runs scripts package coverage
 make check-help-docs
@@ -173,6 +175,10 @@ Deprecated short aliases (still work for now, but print warnings):
 
 This plays the episode audio directly on your machine (uses `mpv` if installed; otherwise downloads and uses macOS `afplay`).
 By default, `local play` starts from Pocket Casts progress (`playedUpTo`) when available.
+
+The player runs independently of the command that starts it. Local lifecycle commands are serialized across concurrent CLI processes, verify that a PID still refers to the player originally launched by pocketcastsctl, and observe the live process rather than trusting a saved paused flag. `local stop` is idempotent and confirms termination before returning.
+
+Older state files do not contain a verifiable process identity. The first local command after upgrading discards that state without signaling its PID and prints a warning; a player started by an older version may continue until it exits. Downloaded `afplay` media is removed after stop or when a later lifecycle command reconciles naturally completed playback.
 
 ```bash
 ./bin/pocketcastsctl local pick

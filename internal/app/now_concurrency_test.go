@@ -20,9 +20,9 @@ func TestNowSnapshotStartsIndependentCollectorsConcurrently(t *testing.T) {
 			wait("web")
 			return NowWebPlaybackSnapshot{State: "playing"}
 		},
-		local: func() NowLocalStatus {
+		local: func(context.Context) (NowLocalStatus, []string) {
 			wait("local")
-			return NowLocalStatus{Status: "stopped"}
+			return NowLocalStatus{Status: "stopped"}, []string{"local warning"}
 		},
 		auth: func(context.Context) NowAuthStatus {
 			wait("auth")
@@ -55,7 +55,7 @@ func TestNowSnapshotStartsIndependentCollectorsConcurrently(t *testing.T) {
 	defer finishDeadline.Stop()
 	select {
 	case snapshot := <-done:
-		if snapshot.Web.State != "playing" || snapshot.Queue.Total != 1 {
+		if snapshot.Web.State != "playing" || snapshot.Queue.Total != 1 || len(snapshot.Warnings) != 1 {
 			t.Fatalf("unexpected snapshot: %+v", snapshot)
 		}
 	case <-finishDeadline.C:

@@ -158,6 +158,13 @@ func printNowHuman(s app.NowSnapshot, cfg config.Config) {
 			break
 		}
 	}
+	if len(s.Warnings) > 0 {
+		fmt.Println(strings.Repeat("-", 72))
+		fmt.Println("Warnings:")
+		for _, warning := range s.Warnings {
+			fmt.Printf("  - %s\n", warning)
+		}
+	}
 }
 
 func displaySuggestedAction(action string) string {
@@ -192,6 +199,9 @@ func printNowPlain(s app.NowSnapshot) {
 	}
 	for i, a := range s.Actions {
 		fmt.Printf("action_%d\t%s\n", i+1, a)
+	}
+	for i, warning := range s.Warnings {
+		fmt.Printf("warning_%d\t%s\n", i+1, warning)
 	}
 }
 

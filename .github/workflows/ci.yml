@@ -20,7 +20,11 @@ jobs:
         run: make fmt-check
       - name: Test
         run: go test ./...
+      - name: Local Playback Race Tests
+        run: make test-race-local
+      - name: Local Playback Benchmarks
+        run: make bench-local-ci
       - name: Script Tests
         run: make test-scripts
-      - name: Help/Docs Drift Check
-        run: make check-help-docs
+      - name: Documentation Check
+        run: make docs-check

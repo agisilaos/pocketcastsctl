@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"pocketcastsctl/internal/config"
+	"pocketcastsctl/internal/localplayback"
 )
 
 func TestWrapAndKindOf(t *testing.T) {
@@ -20,6 +21,24 @@ func TestWrapAndKindOf(t *testing.T) {
 	}
 	if KindOf(base) != KindInternal {
 		t.Fatalf("KindOf(non-app err) = %q, want %q", KindOf(base), KindInternal)
+	}
+}
+
+func TestLocalStatusFromLifecycleSnapshot(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		snapshot localplayback.Snapshot
+		want     NowLocalStatus
+	}{
+		{name: "playing", snapshot: localplayback.Snapshot{Status: localplayback.StatusPlaying, Title: " Episode "}, want: NowLocalStatus{Status: "playing", Title: "Episode"}},
+		{name: "paused", snapshot: localplayback.Snapshot{Status: localplayback.StatusPaused, Title: " Episode "}, want: NowLocalStatus{Status: "paused", Title: "Episode"}},
+		{name: "stopped", snapshot: localplayback.Snapshot{Status: localplayback.StatusStopped, Title: "ignored"}, want: NowLocalStatus{Status: "stopped"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := localStatusFromSnapshot(test.snapshot); !reflect.DeepEqual(got, test.want) {
+				t.Fatalf("localStatusFromSnapshot() = %+v, want %+v", got, test.want)
+			}
+		})
 	}
 }
 
