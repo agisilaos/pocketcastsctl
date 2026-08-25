@@ -215,12 +215,12 @@ func TestNowPlainIncludesWebPlaybackSnapshot(t *testing.T) {
 	}
 }
 
-func TestWebDetailsRejectsPlaybackActions(t *testing.T) {
+func TestWebDetailsIsNotAPlaybackActionFlag(t *testing.T) {
 	code, stdout, stderr := runForTest(t, []string{"web", "play", "--details"}, "")
 	if code != 2 {
 		t.Fatalf("exit code = %d, want 2; stdout=%q stderr=%q", code, stdout, stderr)
 	}
-	if !strings.Contains(stderr, "--details is only supported by web status") {
+	if !strings.Contains(stderr, "flag provided but not defined") {
 		t.Fatalf("unexpected stderr: %q", stderr)
 	}
 }

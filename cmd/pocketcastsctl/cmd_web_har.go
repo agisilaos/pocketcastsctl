@@ -20,61 +20,119 @@ func runWeb(args []string, cfg config.Config) int {
 		printWebHelp()
 		return 0
 	}
-	if args[0] == "login" {
+
+	switch args[0] {
+	case "login":
 		return runWebLogin(args[1:], cfg)
-	}
-	if args[0] == "tabs" {
+	case "tabs":
 		return runWebTabs(args[1:], cfg)
-	}
-
-	fs := flag.NewFlagSet("web", flag.ContinueOnError)
-	fs.SetOutput(os.Stderr)
-	jsonOut := fs.Bool("json", false, "output JSON (status only)")
-	plain := fs.Bool("plain", false, "plain output (status only)")
-	details := fs.Bool("details", false, "show rich playback details (status only)")
-	browser := fs.String("browser", cfg.Browser, `browser name`)
-	browserApp := fs.String("browser-app", cfg.BrowserApp, `macOS application name (optional)`)
-	urlContains := fs.String("url-contains", cfg.URLContains, `substring to match the Pocket Casts tab URL`)
-	if err := fs.Parse(args[1:]); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			return 0
-		}
-		fmt.Fprintf(os.Stderr, "failed to parse flags: %v\n", err)
-		return 2
-	}
-	subcommand := args[0]
-	switch subcommand {
-	case "play", "pause", "toggle", "next", "prev", "status":
+	case "play", "pause", "toggle", "next", "prev":
+		return runWebPlaybackAction(browsercontrol.Action(args[0]), args[1:], cfg)
+	case "status":
+		return runWebStatus(args[1:], cfg)
 	default:
-		fmt.Fprintf(os.Stderr, "unknown web subcommand: %s\n", subcommand)
+		fmt.Fprintf(os.Stderr, "unknown web subcommand: %s\n", args[0])
 		return 2
 	}
-	if subcommand != "status" && *details {
-		fmt.Fprintf(os.Stderr, "web %s: --details is only supported by web status\n", subcommand)
-		return 2
+}
+
+var webControllerFactory = browsercontrol.New
+
+type webControlFlags struct {
+	browser     string
+	browserApp  string
+	urlContains string
+}
+
+func newWebControlFlags(cfg config.Config) webControlFlags {
+	return webControlFlags{
+		browser:     cfg.Browser,
+		browserApp:  cfg.BrowserApp,
+		urlContains: cfg.URLContains,
+	}
+}
+
+func (f *webControlFlags) register(fs *flag.FlagSet) {
+	fs.StringVar(&f.browser, "browser", f.browser, `browser name`)
+	fs.StringVar(&f.browserApp, "browser-app", f.browserApp, `macOS application name (optional)`)
+	fs.StringVar(&f.urlContains, "url-contains", f.urlContains, `substring to match the Pocket Casts tab URL`)
+}
+
+func (f webControlFlags) controllerOptions() browsercontrol.Options {
+	return browsercontrol.Options{
+		Browser:     f.browser,
+		BrowserApp:  f.browserApp,
+		URLContains: f.urlContains,
+	}
+}
+
+func (f webControlFlags) target() browserTarget {
+	return newBrowserTarget(f.browser, f.browserApp, f.urlContains)
+}
+
+func runWebPlaybackAction(action browsercontrol.Action, args []string, cfg config.Config) int {
+	command := "web " + string(action)
+	fs := flag.NewFlagSet(command, flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	controlFlags := newWebControlFlags(cfg)
+	controlFlags.register(fs)
+	if ok, code := parseFlagsOrExit(fs, args); !ok {
+		return code
+	}
+	if ok, code := requireNoPositionalArgsOrExit(fs, "usage: "+usageText[command]); !ok {
+		return code
 	}
 
-	controller, err := browsercontrol.New(browsercontrol.Options{
-		Browser:     *browser,
-		BrowserApp:  *browserApp,
-		URLContains: *urlContains,
-	})
+	controller, err := webControllerFactory(controlFlags.controllerOptions())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "invalid browser options: %v\n", err)
 		return 2
 	}
-	target := newBrowserTarget(*browser, *browserApp, *urlContains)
+	target := controlFlags.target()
 	if err := target.applicationError(); err != nil {
-		target.printFailure(subcommand, err)
+		target.printFailure(string(action), err)
 		return 1
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	if subcommand != "status" {
-		return runWebAction(ctx, controller, browsercontrol.Action(subcommand), target)
+	return runWebAction(ctx, controller, action, target)
+}
+
+func runWebStatus(args []string, cfg config.Config) int {
+	const command = "web status"
+	fs := flag.NewFlagSet(command, flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	controlFlags := newWebControlFlags(cfg)
+	controlFlags.register(fs)
+	jsonOut := fs.Bool("json", false, "output JSON")
+	plain := fs.Bool("plain", false, "plain output")
+	details := fs.Bool("details", false, "show rich playback details")
+	if ok, code := parseFlagsOrExit(fs, args); !ok {
+		return code
 	}
+	if ok, code := requireNoPositionalArgsOrExit(fs, "usage: "+usageText[command]); !ok {
+		return code
+	}
+	if *jsonOut && *plain {
+		fmt.Fprintln(os.Stderr, "web status: use only one of --json or --plain")
+		return 2
+	}
+
+	controller, err := webControllerFactory(controlFlags.controllerOptions())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "invalid browser options: %v\n", err)
+		return 2
+	}
+	target := controlFlags.target()
+	if err := target.applicationError(); err != nil {
+		target.printFailure("status", err)
+		return 1
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
 	var st browsercontrol.PlaybackSnapshot
 	err = retryTransient(ctx, 3, 150*time.Millisecond, func() error {

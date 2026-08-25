@@ -41,4 +41,7 @@ func TestWebStatusHelpIncludesDetails(t *testing.T) {
 	if !strings.Contains(stdout, "--details") {
 		t.Fatalf("stdout missing --details: %q", stdout)
 	}
+	if !strings.Contains(stdout, "--json|--plain") {
+		t.Fatalf("stdout does not mark output modes as exclusive: %q", stdout)
+	}
 }

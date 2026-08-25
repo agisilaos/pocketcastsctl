@@ -38,17 +38,32 @@ func TestCompletionScriptsIncludeNewFlags(t *testing.T) {
 	}
 }
 
-func TestCompletionScriptsIncludeWebDetailsFlag(t *testing.T) {
+func TestCompletionScriptsUseExactWebLeafFlags(t *testing.T) {
 	scripts := completionScripts()
-	for shell, want := range map[string]string{
-		"bash": `elif [[ "$sub" == "status" ]]; then
-        COMPREPLY=( $(compgen -W "--browser --browser-app --url-contains --details --json --plain"`,
-		"zsh": `elif [[ "$sub" == "status" ]]; then
-        _values "flags" "--browser" "--browser-app" "--url-contains" "--details" "--json" "--plain"`,
-		"fish": "__fish_seen_subcommand_from web; and __fish_seen_subcommand_from status' -l details",
+	for shell, wants := range map[string][]string{
+		"bash": {
+			`login) COMPREPLY=( $(compgen -W "--browser --browser-app --url"`,
+			`tabs) COMPREPLY=( $(compgen -W "--browser --browser-app --json --plain"`,
+			`play|pause|toggle|next|prev) COMPREPLY=( $(compgen -W "--browser --browser-app --url-contains"`,
+			`status) COMPREPLY=( $(compgen -W "--browser --browser-app --url-contains --details --json --plain"`,
+		},
+		"zsh": {
+			`login) _values "flags" "--browser" "--browser-app" "--url"`,
+			`tabs) _values "flags" "--browser" "--browser-app" "--json" "--plain"`,
+			`play|pause|toggle|next|prev) _values "flags" "--browser" "--browser-app" "--url-contains"`,
+			`status) _values "flags" "--browser" "--browser-app" "--url-contains" "--details" "--json" "--plain"`,
+		},
+		"fish": {
+			"__fish_seen_subcommand_from web; and __fish_seen_subcommand_from login' -l browser -l browser-app -l url",
+			"__fish_seen_subcommand_from web; and __fish_seen_subcommand_from tabs' -l browser -l browser-app -l json -l plain",
+			"__fish_seen_subcommand_from web; and __fish_seen_subcommand_from play pause toggle next prev' -l browser -l browser-app -l url-contains",
+			"__fish_seen_subcommand_from web; and __fish_seen_subcommand_from status' -l details -l json -l plain -l browser -l browser-app -l url-contains",
+		},
 	} {
-		if !strings.Contains(scripts[shell], want) {
-			t.Fatalf("%s completion does not scope --details to web status", shell)
+		for _, want := range wants {
+			if !strings.Contains(scripts[shell], want) {
+				t.Fatalf("%s completion missing exact Web leaf rule %q", shell, want)
+			}
 		}
 	}
 }
