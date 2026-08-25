@@ -26,6 +26,18 @@ _Avoid_: Native playback, offline playback
 An authenticated relationship with the Pocket Casts API used by CLI commands, independent of the browser configured for Web Player playback. Only one API session is active at a time.
 _Avoid_: Browser authentication, stored header
 
+**Credential source**:
+The origin from which a command resolves its active API session. Source precedence determines which available credential governs the command.
+_Avoid_: Authentication method
+
+**Environment override**:
+A process-scoped credential source with precedence over any persisted credential.
+_Avoid_: Environment login, environment session
+
+**Saved API session**:
+An API session persisted for reuse by later CLI processes. It may be dormant when a higher-precedence credential source is active.
+_Avoid_: Active Keychain session, fallback session
+
 **Active account**:
 The Pocket Casts account associated with the active API session.
 _Avoid_: Browser profile, current profile

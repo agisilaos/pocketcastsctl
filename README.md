@@ -225,7 +225,7 @@ op read 'op://Private/Pocket Casts/password' | \
 ./bin/pocketcastsctl auth import-browser --browser safari
 ```
 
-Terminal login and browser import validate the candidate against the API before replacing the active session. Access and refresh tokens are stored as separate, account/scope-aware macOS Keychain items; the JSON config contains only non-secret session metadata. The password and raw browser cookie are never stored or printed.
+Terminal login and browser import resolve the active credential source before collecting or validating a replacement, then validate the candidate against the API before saving it. Access and refresh tokens are stored as separate, account/scope-aware macOS Keychain items; the JSON config contains only non-secret session metadata. The password and raw browser cookie are never stored or printed.
 
 ```bash
 ./bin/pocketcastsctl auth status   # local and fast; no API call
@@ -234,7 +234,7 @@ Terminal login and browser import validate the candidate against the API before 
 ./bin/pocketcastsctl auth logout
 ```
 
-Access tokens refresh proactively near expiry and once after a `401`. A process-only `POCKETCASTS_ACCESS_TOKEN` overrides Keychain and legacy credentials; it is never stored or refreshed. If the configured Keychain session is unavailable, the command fails explicitly instead of silently falling back to a plaintext legacy token.
+Access tokens refresh proactively near expiry and once after a `401`. A process-only `POCKETCASTS_ACCESS_TOKEN` overrides Keychain and legacy credentials; it is never stored or refreshed. While that override is present, terminal login and browser import refuse to save a replacement—even with `--force`—because the replacement could not become active; unset the variable first. The dormant saved session and legacy credential remain unchanged on refusal. If the configured Keychain session is unavailable, the command fails explicitly instead of silently falling back to a plaintext legacy token.
 
 `auth sync`, `auth tabs`, and `auth clear` remain as deprecated compatibility commands for one release. Use `auth import-browser`, `web tabs`, and `auth logout` respectively.
 
