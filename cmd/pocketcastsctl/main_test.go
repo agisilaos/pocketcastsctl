@@ -905,8 +905,8 @@ func TestNestedHelpBypassesMalformedConfig(t *testing.T) {
 
 	for _, args := range [][]string{
 		{"auth", "--help"},
-		{"auth", "help"},
 		{"web", "login", "--help"},
+		{"web", "login", "--url=https://example.com", "--help"},
 		{"queue", "api", "ls", "--help"},
 	} {
 		t.Run(strings.Join(args, "_"), func(t *testing.T) {
@@ -916,9 +916,16 @@ func TestNestedHelpBypassesMalformedConfig(t *testing.T) {
 			}
 		})
 	}
-	code, _, stderr := runForTest(t, []string{"now", "help"}, "")
-	if code != 1 || !strings.Contains(stderr, "failed to load config") {
-		t.Fatalf("positional value bypassed config load: code=%d stderr=%q", code, stderr)
+	for _, args := range [][]string{
+		{"now", "help"},
+		{"web", "login", "--url", "--help"},
+		{"web", "login", "--", "--help"},
+		{"queue", "api", "play", "1", "--help"},
+	} {
+		code, _, stderr := runForTest(t, args, "")
+		if code != 1 || !strings.Contains(stderr, "failed to load config") {
+			t.Fatalf("non-help token bypassed config load for %v: code=%d stderr=%q", args, code, stderr)
+		}
 	}
 }
 

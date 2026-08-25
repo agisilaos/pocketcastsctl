@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"pocketcastsctl/internal/config"
 )
@@ -85,15 +86,23 @@ func dispatch(args []string, cfg config.Config) int {
 }
 
 func hasDirectHelpArg(args []string) bool {
-	if len(args) > 1 && args[1] == "help" {
-		switch args[0] {
-		case "auth", "local", "queue", "setup", "web":
-			return true
+	argumentStart := 1
+	for end := len(args); end > 1; end-- {
+		if _, ok := usageText[strings.Join(args[:end], " ")]; ok {
+			argumentStart = end
+			break
 		}
 	}
-	for _, arg := range args[1:] {
-		if arg == "-h" || arg == "--help" {
+	for _, arg := range args[argumentStart:] {
+		switch {
+		case arg == "-h" || arg == "--help":
 			return true
+		case arg == "--" || !strings.HasPrefix(arg, "-"):
+			return false
+		case !strings.Contains(arg, "="):
+			// Without the leaf FlagSet, the following token might be this
+			// flag's value. Fall back to normal config-first dispatch.
+			return false
 		}
 	}
 	return false
