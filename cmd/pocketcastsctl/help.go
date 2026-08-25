@@ -7,9 +7,9 @@ import (
 )
 
 var usageText = map[string]string{
-	"config init":         "pocketcastsctl config init",
+	"config init":         "pocketcastsctl config init [--force]",
 	"config path":         "pocketcastsctl config path",
-	"config show":         "pocketcastsctl config show [--json] [--reveal-secrets]",
+	"config show":         "pocketcastsctl config show [--saved] [--json] [--reveal-secrets]",
 	"config set":          "pocketcastsctl config set browser <name>",
 	"auth login":          "pocketcastsctl auth login [--email address] [--password-stdin] [--force] [--no-input] [--json|--plain]",
 	"auth import-browser": "pocketcastsctl auth import-browser --browser <chrome|dia|safari> [--profile name] [--force] [--no-input] [--json|--plain]",
@@ -287,7 +287,15 @@ func rewriteAliases(args []string) ([]string, string) {
 	if len(args) == 0 {
 		return args, ""
 	}
+	if len(args) >= 2 && args[0] == "auth" && args[1] == "clear" {
+		return append([]string{"auth", "logout"}, args[2:]...), aliasWarning("auth clear", "auth logout")
+	}
+	if len(args) >= 3 && args[0] == "queue" && args[1] == "api" && args[2] == "remove" {
+		return append([]string{"queue", "api", "rm"}, args[3:]...), ""
+	}
 	switch args[0] {
+	case "getting-started":
+		return append([]string{"start"}, args[1:]...), ""
 	case "ls":
 		return append([]string{"queue", "api", "ls"}, args[1:]...), aliasWarning("ls", "queue api ls")
 	case "play":

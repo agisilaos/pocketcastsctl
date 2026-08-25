@@ -896,6 +896,69 @@ func TestGoldenHelpStart(t *testing.T) {
 	assertGolden(t, "help_start.golden", stdout)
 }
 
+func TestNestedHelpBypassesMalformedConfig(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	t.Setenv(config.EnvConfigPath, path)
+	if err := os.WriteFile(path, []byte("{broken\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, args := range [][]string{
+		{"auth", "--help"},
+		{"auth", "help"},
+		{"web", "login", "--help"},
+		{"auth", "login", "--no-input", "--help"},
+		{"auth", "login", "--no-input=TRUE", "--help"},
+		{"auth", "clear", "--help"},
+		{"auth", "sync", "--dry-run", "--help"},
+		{"doctor", "--quick", "--help"},
+		{"doctor", "explain", "CODE", "--help"},
+		{"getting-started", "--help"},
+		{"local", "pick", "--from-start", "--help"},
+		{"queue", "api", "help"},
+		{"queue", "api", "ls", "--help"},
+		{"queue", "api", "remove", "--help"},
+		{"setup", "--no-input", "--help"},
+		{"web", "login", "--url=https://example.com", "--help"},
+	} {
+		t.Run(strings.Join(args, "_"), func(t *testing.T) {
+			code, stdout, stderr := runForTest(t, args, "")
+			if code != 0 || strings.Contains(stdout+stderr, "failed to load config") {
+				t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout, stderr)
+			}
+		})
+	}
+	for _, args := range [][]string{
+		{"doctor", "help"},
+		{"now", "help"},
+		{"setup", "help"},
+		{"web", "login", "--url", "--help"},
+		{"auth", "login", "--bogus=value", "--help"},
+		{"now", "--interval=bogus", "--help"},
+		{"auth", "login", "--no-input=bogus", "--help"},
+		{"web", "login", "--", "--help"},
+		{"queue", "api", "play", "1", "--help"},
+	} {
+		code, _, stderr := runForTest(t, args, "")
+		if code != 1 || !strings.Contains(stderr, "failed to load config") {
+			t.Fatalf("non-help token bypassed config load for %v: code=%d stderr=%q", args, code, stderr)
+		}
+	}
+}
+
+func TestAliasBootstrapFailureEmitsOneDiagnostic(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	t.Setenv(config.EnvConfigPath, path)
+	if err := os.WriteFile(path, []byte("{broken\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	code, stdout, stderr := runForTest(t, []string{"login", "--email", "person@example.com"}, "")
+	if code != 1 || stdout != "" || !strings.HasPrefix(stderr, "failed to load config:") || strings.Contains(stderr, "shortcut is deprecated") || strings.Count(stderr, "\n") != 1 {
+		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout, stderr)
+	}
+}
+
 func runForTest(t *testing.T, args []string, stdin string) (int, string, string) {
 	t.Helper()
 	if os.Getenv(config.EnvConfigPath) == "" {
@@ -947,6 +1010,47 @@ func runForTest(t *testing.T, args []string, stdin string) (int, string, string)
 	_ = inR.Close()
 
 	return code, string(outBytes), string(errBytes)
+}
+
+func configureAPIBaseURLForTest(t *testing.T, apiBaseURL string) {
+	t.Helper()
+	writeSavedConfigForTest(t, map[string]any{
+		"browser":      "chrome",
+		"browser_app":  "",
+		"url_contains": "pocketcasts.com",
+		"api_base_url": apiBaseURL,
+		"api_headers":  map[string]string{},
+	})
+}
+
+func writeEffectiveConfigForTest(t *testing.T, cfg config.Config) {
+	t.Helper()
+	writeSavedConfigForTest(t, map[string]any{
+		"browser":      cfg.Browser,
+		"browser_app":  cfg.BrowserApp,
+		"url_contains": cfg.URLContains,
+		"api_base_url": cfg.APIBaseURL,
+		"api_headers":  cfg.APIHeaders,
+		"auth":         cfg.Auth,
+	})
+}
+
+func writeSavedConfigForTest(t *testing.T, doc map[string]any) {
+	t.Helper()
+	if os.Getenv(config.EnvConfigPath) == "" {
+		t.Setenv(config.EnvConfigPath, filepath.Join(t.TempDir(), "config.json"))
+	}
+	b, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b = append(b, '\n')
+	if err := os.MkdirAll(filepath.Dir(config.Path()), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(config.Path(), b, 0o600); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func assertGolden(t *testing.T, fileName, got string) {

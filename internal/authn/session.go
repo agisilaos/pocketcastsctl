@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"pocketcastsctl/internal/authutil"
+	"pocketcastsctl/internal/config"
 )
 
 const ScopeWebPlayer = "webplayer"
@@ -60,7 +61,7 @@ func sessionKey(apiBaseURL string, session Session) string {
 	if scope == "" {
 		scope = ScopeWebPlayer
 	}
-	sum := sha256.Sum256([]byte(strings.TrimRight(strings.ToLower(strings.TrimSpace(apiBaseURL)), "/") + "\x00" + identity + "\x00" + scope))
+	sum := sha256.Sum256([]byte(config.NormalizeAPIBaseURL(apiBaseURL) + "\x00" + identity + "\x00" + scope))
 	return hex.EncodeToString(sum[:])
 }
 

@@ -1,11 +1,10 @@
 package config
 
 import (
-	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 const (
@@ -28,6 +27,8 @@ type AuthConfig struct {
 	ExpiresAt  int64  `json:"expires_at,omitempty"`
 }
 
+// Config is the effective runtime configuration after defaults and environment
+// settings have been applied. Callers must never serialize it as persisted state.
 type Config struct {
 	Browser     string            `json:"browser"`
 	BrowserApp  string            `json:"browser_app"`
@@ -67,40 +68,22 @@ func StatePath() string {
 }
 
 func Load() (Config, error) {
-	p := Path()
-	b, err := os.ReadFile(p)
+	doc, exists, err := readDocument()
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			cfg := Default()
-			applyEnvironment(&cfg)
-			return cfg, nil
-		}
 		return Config{}, err
 	}
+	if !exists {
+		cfg := Default()
+		applyEnvironment(&cfg)
+		return cfg, nil
+	}
+	return resolve(doc, true)
+}
 
-	var cfg Config
-	if err := json.Unmarshal(b, &cfg); err != nil {
-		return Config{}, fmt.Errorf("parse %s: %w", p, err)
-	}
-	if cfg.Browser == "" {
-		cfg.Browser = Default().Browser
-	}
-	if cfg.BrowserApp == "" {
-		cfg.BrowserApp = Default().BrowserApp
-	}
-	if cfg.URLContains == "" {
-		cfg.URLContains = Default().URLContains
-	}
-	if cfg.APIBaseURL == "" {
-		cfg.APIBaseURL = Default().APIBaseURL
-	}
-	if cfg.APIHeaders == nil {
-		cfg.APIHeaders = map[string]string{}
-	}
-
-	applyEnvironment(&cfg)
-
-	return cfg, nil
+// NormalizeAPIBaseURL is the canonical issuer identity used by config guards
+// and credential-store keys.
+func NormalizeAPIBaseURL(value string) string {
+	return strings.TrimRight(strings.ToLower(strings.TrimSpace(value)), "/")
 }
 
 func applyEnvironment(cfg *Config) {
@@ -118,37 +101,29 @@ func applyEnvironment(cfg *Config) {
 	}
 }
 
-func Save(cfg Config) error {
-	p := Path()
-	dir := filepath.Dir(p)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return err
+func resolve(doc document, environment bool) (Config, error) {
+	var cfg Config
+	if err := decodeKnown(doc, &cfg); err != nil {
+		return Config{}, fmt.Errorf("parse %s: %w", Path(), err)
 	}
-	b, err := json.MarshalIndent(cfg, "", "  ")
-	if err != nil {
-		return err
+	defaults := Default()
+	if cfg.Browser == "" {
+		cfg.Browser = defaults.Browser
 	}
-	b = append(b, '\n')
-	tmp, err := os.CreateTemp(dir, ".config-*.tmp")
-	if err != nil {
-		return err
+	if cfg.BrowserApp == "" {
+		cfg.BrowserApp = defaults.BrowserApp
 	}
-	tmpPath := tmp.Name()
-	defer os.Remove(tmpPath)
-	if err := tmp.Chmod(0o600); err != nil {
-		_ = tmp.Close()
-		return err
+	if cfg.URLContains == "" {
+		cfg.URLContains = defaults.URLContains
 	}
-	if _, err := tmp.Write(b); err != nil {
-		_ = tmp.Close()
-		return err
+	if cfg.APIBaseURL == "" {
+		cfg.APIBaseURL = defaults.APIBaseURL
 	}
-	if err := tmp.Sync(); err != nil {
-		_ = tmp.Close()
-		return err
+	if cfg.APIHeaders == nil {
+		cfg.APIHeaders = map[string]string{}
 	}
-	if err := tmp.Close(); err != nil {
-		return err
+	if environment {
+		applyEnvironment(&cfg)
 	}
-	return os.Rename(tmpPath, p)
+	return cfg, nil
 }

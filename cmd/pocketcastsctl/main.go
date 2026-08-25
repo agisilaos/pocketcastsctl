@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"pocketcastsctl/internal/config"
 )
@@ -32,16 +33,38 @@ func run(args []string) int {
 		return 0
 	}
 
-	cfg, _ := config.Load()
-
 	args, aliasWarning := rewriteAliases(args)
+
+	if args[0] == "config" {
+		return runConfig(args[1:])
+	}
+	if hasDirectGroupHelp(args) {
+		if aliasWarning != "" {
+			fmt.Fprintln(os.Stderr, aliasWarning)
+		}
+		return dispatch(args, config.Default())
+	}
+	if help, ok := probeDirectFlagHelp(args); ok {
+		if aliasWarning != "" {
+			fmt.Fprintln(os.Stderr, aliasWarning)
+		}
+		fmt.Fprint(os.Stderr, help)
+		return 0
+	}
+
+	cfg, err := config.Load()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to load config: %v\n", err)
+		return 1
+	}
 	if aliasWarning != "" {
 		fmt.Fprintln(os.Stderr, aliasWarning)
 	}
+	return dispatch(args, cfg)
+}
 
+func dispatch(args []string, cfg config.Config) int {
 	switch args[0] {
-	case "config":
-		return runConfig(args[1:], cfg)
 	case "setup":
 		return runSetup(args[1:], cfg)
 	case "start", "getting-started":
@@ -67,6 +90,70 @@ func run(args []string) int {
 		printRootHelp()
 		return 2
 	}
+}
+
+func hasDirectGroupHelp(args []string) bool {
+	topic, argumentStart := commandTopic(args)
+	if argumentStart >= len(args) {
+		return false
+	}
+	switch topic {
+	case "auth", "completion", "har", "local", "queue", "queue api", "web":
+		return isHelpArg(args[argumentStart])
+	case "doctor", "setup":
+		return args[argumentStart] == "-h" || args[argumentStart] == "--help"
+	default:
+		return false
+	}
+}
+
+func commandTopic(args []string) (string, int) {
+	for end := len(args); end > 0; end-- {
+		topic := strings.Join(args[:end], " ")
+		if _, ok := usageText[topic]; ok {
+			return topic, end
+		}
+	}
+	return "", 1
+}
+
+func hasHelpSubtopics(topic string) bool {
+	prefix := topic + " "
+	for candidate := range usageText {
+		if strings.HasPrefix(candidate, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+func probeDirectFlagHelp(args []string) (string, bool) {
+	topic, argumentStart := commandTopic(args)
+	if topic == "" || !strings.Contains(usageText[topic], "--") {
+		return "", false
+	}
+	if hasHelpSubtopics(topic) && topic != "doctor" && topic != "setup" {
+		return "", false
+	}
+	found := false
+	for _, arg := range args[argumentStart:] {
+		if arg == "-h" || arg == "--help" {
+			found = true
+			break
+		}
+		if topic == "setup" && !strings.HasPrefix(arg, "-") {
+			return "", false
+		}
+	}
+	if !found {
+		return "", false
+	}
+
+	probe := &flagHelpProbeState{}
+	activeFlagHelpProbe = probe
+	defer func() { activeFlagHelpProbe = nil }()
+	dispatch(args, config.Default())
+	return probe.output.String(), probe.requested
 }
 
 func formatVersion() string {

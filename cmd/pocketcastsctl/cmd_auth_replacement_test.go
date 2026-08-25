@@ -165,15 +165,13 @@ func TestAuthCommandsRefuseEnvironmentOverrideBeforeCandidateWork(t *testing.T) 
 				apiCalls.Add(1)
 			}))
 			defer server.Close()
-			t.Setenv(config.EnvAPIBaseURL, server.URL)
+			configureAPIBaseURLForTest(t, server.URL)
 			t.Setenv(config.EnvAccessToken, "environment-secret")
 
 			cfg := config.Default()
 			cfg.Auth = config.AuthConfig{SessionKey: "dormant", Email: "saved@example.com"}
 			cfg.APIHeaders["Authorization"] = "Bearer dormant-legacy"
-			if err := config.Save(cfg); err != nil {
-				t.Fatal(err)
-			}
+			writeEffectiveConfigForTest(t, cfg)
 			before, err := os.ReadFile(configPath)
 			if err != nil {
 				t.Fatal(err)
@@ -249,13 +247,12 @@ func TestAuthLoginReplacementUsesResolvedKeychainAccount(t *testing.T) {
 				}
 			}))
 			defer server.Close()
-			t.Setenv(config.EnvAPIBaseURL, server.URL)
+			configureAPIBaseURLForTest(t, server.URL)
 
 			cfg := config.Default()
+			cfg.APIBaseURL = server.URL
 			cfg.Auth = config.AuthConfig{SessionKey: "active", Email: "candidate@example.com"}
-			if err := config.Save(cfg); err != nil {
-				t.Fatal(err)
-			}
+			writeEffectiveConfigForTest(t, cfg)
 
 			args := []string{"auth", "login", "--email", "candidate@example.com", "--password-stdin", "--no-input", "--json"}
 			if tt.force {
@@ -307,13 +304,12 @@ func TestAuthImportBrowserReplacementUsesResolvedKeychainAccount(t *testing.T) {
 		_, _ = w.Write([]byte(`{"episodes":[]}`))
 	}))
 	defer server.Close()
-	t.Setenv(config.EnvAPIBaseURL, server.URL)
+	configureAPIBaseURLForTest(t, server.URL)
 
 	cfg := config.Default()
+	cfg.APIBaseURL = server.URL
 	cfg.Auth = config.AuthConfig{SessionKey: "active", Email: "candidate@example.com"}
-	if err := config.Save(cfg); err != nil {
-		t.Fatal(err)
-	}
+	writeEffectiveConfigForTest(t, cfg)
 
 	code, stdout, stderr := runForTest(t, []string{"auth", "import-browser", "--browser", "dia", "--profile", "Default", "--no-input", "--json"}, "")
 	if code != 2 || stderr != "" {
@@ -337,13 +333,11 @@ func TestAuthLoginFailsClosedWhenSavedSessionCannotResolve(t *testing.T) {
 		apiCalls.Add(1)
 	}))
 	defer server.Close()
-	t.Setenv(config.EnvAPIBaseURL, server.URL)
+	configureAPIBaseURLForTest(t, server.URL)
 
 	cfg := config.Default()
 	cfg.Auth.SessionKey = "missing"
-	if err := config.Save(cfg); err != nil {
-		t.Fatal(err)
-	}
+	writeEffectiveConfigForTest(t, cfg)
 
 	code, stdout, stderr := runForTest(t, []string{"auth", "login", "--email", "candidate@example.com", "--password-stdin", "--json"}, "secret\n")
 	if code != 1 || stderr != "" {

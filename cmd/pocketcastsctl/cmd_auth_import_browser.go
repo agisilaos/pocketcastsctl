@@ -62,6 +62,9 @@ func runAuthImportBrowserWithOptions(cfg config.Config, options authImportBrowse
 	if browserName == "safari" && strings.TrimSpace(options.profile) != "" {
 		return renderAuthCommandError("auth import-browser", "auth.input.profile_unsupported", errors.New("Safari does not support --profile; omit the flag"), options.outputMode, 2)
 	}
+	if err := config.ValidateAuthUpdate(cfg.APIBaseURL); err != nil {
+		return renderAuthCommandError("auth import-browser", "auth.session.persist_blocked", err, options.outputMode, 1)
+	}
 	interactive := !options.noInput && options.outputMode == authOutputHuman && stdinIsTerminal()
 	current, preflightErr := sessionReplacementPreflight(cfg)
 	if preflightErr != nil {

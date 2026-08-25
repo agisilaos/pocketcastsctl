@@ -41,6 +41,9 @@ func runAuthLogin(args []string, cfg config.Config) int {
 	if !*passwordStdin && !interactive {
 		return renderAuthCommandError("auth login", "auth.input.password_missing", errors.New("password is required; pipe it with --password-stdin in non-interactive mode"), mode, 2)
 	}
+	if err := config.ValidateAuthUpdate(cfg.APIBaseURL); err != nil {
+		return renderAuthCommandError("auth login", "auth.session.persist_blocked", err, mode, 1)
+	}
 
 	current, preflightErr := sessionReplacementPreflight(cfg)
 	if preflightErr != nil {

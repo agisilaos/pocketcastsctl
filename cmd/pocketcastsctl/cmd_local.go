@@ -50,7 +50,7 @@ func runLocalPick(args []string, cfg config.Config) int {
 	unplayed := fs.Bool("unplayed", false, "show only episodes with no saved progress")
 	inProgress := fs.Bool("in-progress", false, "show only episodes with saved progress")
 	fromStart := fs.Bool("from-start", false, "start from beginning instead of Pocket Casts progress")
-	if err := fs.Parse(args); err != nil {
+	if err := parseCommandFlags(fs, args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0
 		}
@@ -108,7 +108,7 @@ func runLocalPlay(args []string, cfg config.Config) int {
 	fs.SetOutput(os.Stderr)
 	fromStart := fs.Bool("from-start", false, "start from beginning instead of Pocket Casts progress")
 	dryRun := fs.Bool("dry-run", false, "resolve target episode and print planned action without starting playback")
-	if err := fs.Parse(args); err != nil {
+	if err := parseCommandFlags(fs, args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0
 		}
@@ -262,7 +262,7 @@ func runLocalStatus(args []string) int {
 	fs.SetOutput(os.Stderr)
 	jsonOut := fs.Bool("json", false, "output JSON")
 	plain := fs.Bool("plain", false, "plain line-oriented output")
-	if err := fs.Parse(args); err != nil {
+	if err := parseCommandFlags(fs, args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0
 		}

@@ -30,10 +30,10 @@ func runAuth(args []string, cfg config.Config) int {
 	case "logout":
 		return runAuthLogout(args[1:], cfg)
 	case "clear":
-		fmt.Fprintln(os.Stderr, "warning: `auth clear` is deprecated; use `pocketcastsctl auth logout` (planned removal: v0.3.0)")
+		fmt.Fprintln(commandErrorWriter(), "warning: `auth clear` is deprecated; use `pocketcastsctl auth logout` (planned removal: v0.3.0)")
 		return runAuthLogout(args[1:], cfg)
 	case "tabs":
-		fmt.Fprintln(os.Stderr, "warning: `auth tabs` moved to `pocketcastsctl web tabs` (planned removal: v0.3.0)")
+		fmt.Fprintln(commandErrorWriter(), "warning: `auth tabs` moved to `pocketcastsctl web tabs` (planned removal: v0.3.0)")
 		return runWebTabs(args[1:], cfg)
 
 	default:

@@ -13,7 +13,7 @@ import (
 // it through the Keychain-backed browser importer. It must never recreate the
 // old plaintext Authorization-header behavior.
 func runAuthSync(args []string, cfg config.Config) int {
-	fmt.Fprintln(os.Stderr, "warning: `auth sync` is deprecated; use `pocketcastsctl auth import-browser --browser <chrome|dia|safari>` (planned removal: v0.3.0)")
+	fmt.Fprintln(commandErrorWriter(), "warning: `auth sync` is deprecated; use `pocketcastsctl auth import-browser --browser <chrome|dia|safari>` (planned removal: v0.3.0)")
 	fs := flag.NewFlagSet("auth sync", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	browser := fs.String("browser", cfg.Browser, "browser source: chrome, dia, or safari")
