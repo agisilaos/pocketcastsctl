@@ -1,0 +1,3 @@
+# Keep runtime setting overrides out of persisted configuration
+
+The CLI resolves browser, browser-application, URL-match, and API-base environment settings into an effective runtime configuration but never persists them implicitly. Persisted updates patch only explicitly targeted fields and preserve unrelated JSON, so authentication changes cannot capture temporary settings. Login, browser-session import, and refresh refuse to operate when the effective API base differs from the saved or default base, while logout remains allowed because it performs no issuer-bound network operation; this gives up environment-only authentication against custom issuers in exchange for issuer-safe saved sessions.
