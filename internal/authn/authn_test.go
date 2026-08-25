@@ -106,6 +106,10 @@ func TestManagerCredentialPrecedence(t *testing.T) {
 	if token != "keychain-token" {
 		t.Fatalf("token = %q, want keychain token", token)
 	}
+	_, source, _ = manager.Snapshot(context.Background())
+	if source != SourceKeychain {
+		t.Fatalf("source = %q, want keychain", source)
+	}
 
 	cfg.Auth = config.AuthConfig{}
 	manager = NewManager(cfg, ManagerOptions{Store: store})
@@ -115,6 +119,10 @@ func TestManagerCredentialPrecedence(t *testing.T) {
 	}
 	if token != "legacy-token" || manager.Warning() == "" {
 		t.Fatalf("legacy fallback = %q, warning = %q", token, manager.Warning())
+	}
+	_, source, _ = manager.Snapshot(context.Background())
+	if source != SourceLegacy {
+		t.Fatalf("source = %q, want legacy", source)
 	}
 }
 

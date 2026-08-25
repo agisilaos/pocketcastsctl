@@ -20,7 +20,7 @@ func runAuthImportBrowser(args []string, cfg config.Config) int {
 	fs.SetOutput(os.Stderr)
 	browser := fs.String("browser", "", "browser source: chrome, dia, or safari")
 	profile := fs.String("profile", "", "browser profile directory name (for example, Profile 1)")
-	force := fs.Bool("force", false, "replace a different or unknown active account")
+	force := fs.Bool("force", false, "skip account confirmation for a saved or legacy session; cannot override "+config.EnvAccessToken)
 	noInput := fs.Bool("no-input", false, "disable prompts")
 	jsonOut := fs.Bool("json", false, "output JSON")
 	plain := fs.Bool("plain", false, "plain line-oriented output")
@@ -44,6 +44,10 @@ func runAuthImportBrowser(args []string, cfg config.Config) int {
 		return renderAuthCommandError("auth import-browser", "auth.input.profile_unsupported", errors.New("Safari does not support --profile; omit the flag"), *jsonOut, *plain, 2)
 	}
 	interactive := !*noInput && !*jsonOut && !*plain && stdinIsTerminal()
+	current, preflightErr := sessionReplacementPreflight(cfg)
+	if preflightErr != nil {
+		return renderSessionReplacementPreflightError("auth import-browser", preflightErr, *jsonOut, *plain)
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -67,7 +71,7 @@ func runAuthImportBrowser(args []string, cfg config.Config) int {
 	if err != nil {
 		return renderAuthCommandError("auth import-browser", "auth.browser.profile_required", err, *jsonOut, *plain, 2)
 	}
-	if err := confirmSessionReplacement(cfg, selected.Session, *force, interactive); err != nil {
+	if err := confirmSessionReplacement(current, selected.Session, *force, interactive); err != nil {
 		return renderAuthCommandError("auth import-browser", "auth.account.replace_required", err, *jsonOut, *plain, 2)
 	}
 	if _, err := installSession(ctx, cfg, api, selected.Session); err != nil {
