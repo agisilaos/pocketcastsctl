@@ -57,3 +57,9 @@ _Avoid_: Browser login, browser sync
 **Device pairing**:
 Authorizing the CLI by entering a device code on the Pocket Casts website, which may be opened on another device.
 _Avoid_: Browserless login
+
+## Queue
+
+**Queue occurrence**:
+One position occupied by an episode in the ordered Up Next queue. The same episode may have multiple queue occurrences, each identified by its own position.
+_Avoid_: Duplicate episode

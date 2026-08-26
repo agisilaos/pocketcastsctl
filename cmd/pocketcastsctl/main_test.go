@@ -547,7 +547,7 @@ func TestRunDoctorExplainUnknownCode(t *testing.T) {
 	}
 }
 
-func TestApplyEpisodeSelectionFilters(t *testing.T) {
+func TestApplyQueueOccurrenceFilters(t *testing.T) {
 	eps := []struct {
 		uuid      string
 		title     string
@@ -565,16 +565,17 @@ func TestApplyEpisodeSelectionFilters(t *testing.T) {
 		"b2222222-2222-2222-2222-222222222222": 120,
 	}
 
-	unplayed := applyEpisodeSelection(input, progress, "", false, true, false)
+	occurrences := queueOccurrences(input)
+	unplayed := applyQueueOccurrenceFilters(occurrences, progress, "", false, true, false)
 	if len(unplayed) != 2 {
 		t.Fatalf("unplayed len = %d, want 2", len(unplayed))
 	}
-	inProgress := applyEpisodeSelection(input, progress, "", false, false, true)
-	if len(inProgress) != 1 || inProgress[0].UUID != "b2222222-2222-2222-2222-222222222222" {
+	inProgress := applyQueueOccurrenceFilters(occurrences, progress, "", false, false, true)
+	if len(inProgress) != 1 || inProgress[0].Episode.UUID != "b2222222-2222-2222-2222-222222222222" {
 		t.Fatalf("inProgress unexpected: %+v", inProgress)
 	}
-	recent := applyEpisodeSelection(input, progress, "", true, false, false)
-	if len(recent) != 3 || recent[0].Title != "New" {
+	recent := applyQueueOccurrenceFilters(occurrences, progress, "", true, false, false)
+	if len(recent) != 3 || recent[0].Episode.Title != "New" {
 		t.Fatalf("recent ordering unexpected: %+v", recent)
 	}
 }

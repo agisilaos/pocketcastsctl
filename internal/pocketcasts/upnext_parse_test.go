@@ -24,6 +24,48 @@ func TestExtractUpNextEpisodes(t *testing.T) {
 	}
 }
 
+func TestExtractUpNextEpisodesPreservesQueueOccurrences(t *testing.T) {
+	const a = "94c87775-4f63-42db-9684-e3b1b5fbac08"
+	const b = "826f30b0-adce-4f3b-b200-eacb1aa711eb"
+	raw := []byte(`{
+  "episodes": [
+    {"uuid":"` + a + `","title":"First A"},
+    {"uuid":"` + b + `","title":"B"},
+    {"uuid":"` + a + `","title":"Second A"}
+  ]
+}`)
+
+	eps, err := ExtractUpNextEpisodes(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(eps) != 3 {
+		t.Fatalf("len = %d, want 3", len(eps))
+	}
+	if eps[0].Title != "First A" || eps[2].Title != "Second A" {
+		t.Fatalf("queue occurrences were not preserved: %+v", eps)
+	}
+}
+
+func TestExtractUpNextEpisodesFallbackMergesRepeatedMetadata(t *testing.T) {
+	const id = "94c87775-4f63-42db-9684-e3b1b5fbac08"
+	raw := []byte(`{
+  "episode": {"uuid":"` + id + `","title":"Episode"},
+  "metadata": {"episodeUuid":"` + id + `","episodeTitle":"Episode","audioUrl":"https://example.test/a.mp3"}
+}`)
+
+	eps, err := ExtractUpNextEpisodes(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(eps) != 1 {
+		t.Fatalf("len = %d, want 1", len(eps))
+	}
+	if eps[0].URL != "https://example.test/a.mp3" {
+		t.Fatalf("merged URL = %q", eps[0].URL)
+	}
+}
+
 func TestExtractEpisodeProgress(t *testing.T) {
 	raw := []byte(`{
   "episodes":[{"uuid":"94c87775-4f63-42db-9684-e3b1b5fbac08","title":"Ep 1"}],

@@ -8,15 +8,15 @@ import (
 	"pocketcastsctl/internal/pocketcasts"
 )
 
-func TestFilterEpisodes(t *testing.T) {
+func TestFilterQueueOccurrences(t *testing.T) {
 	eps := []pocketcasts.UpNextEpisode{
 		{Title: "Foo"},
 		{Title: "Bar Baz"},
 	}
-	got := filterEpisodes(eps, "ba")
-	want := []pocketcasts.UpNextEpisode{{Title: "Bar Baz"}}
+	got := filterQueueOccurrences(queueOccurrences(eps), "ba")
+	want := []queueOccurrence{{Episode: pocketcasts.UpNextEpisode{Title: "Bar Baz"}, QueueIndex: 1}}
 	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("filterEpisodes mismatch, got %+v want %+v", got, want)
+		t.Fatalf("filterQueueOccurrences mismatch, got %+v want %+v", got, want)
 	}
 }
 

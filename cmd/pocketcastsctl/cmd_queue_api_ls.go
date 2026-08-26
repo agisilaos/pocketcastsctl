@@ -64,18 +64,23 @@ func runQueueAPILS(args []string, client *pocketcasts.Client, ctx context.Contex
 		return 0
 	}
 
-	eps = filterEpisodes(eps, *search)
-	if *limit > 0 && *limit < len(eps) {
-		eps = eps[:*limit]
+	occurrences := filterQueueOccurrences(queueOccurrences(eps), *search)
+	if *limit > 0 && *limit < len(occurrences) {
+		occurrences = occurrences[:*limit]
 	}
 
 	if *jsonOut {
-		b, _ := json.MarshalIndent(eps, "", "  ")
+		episodes := make([]pocketcasts.UpNextEpisode, len(occurrences))
+		for i, occurrence := range occurrences {
+			episodes[i] = occurrence.Episode
+		}
+		b, _ := json.MarshalIndent(episodes, "", "  ")
 		fmt.Println(string(b))
 		return 0
 	}
 
-	for i, ep := range eps {
+	for i, occurrence := range occurrences {
+		ep := occurrence.Episode
 		short := ep.UUID
 		if len(short) > 8 {
 			short = short[:8]

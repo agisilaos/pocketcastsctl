@@ -48,21 +48,21 @@ func runQueueAPIBump(args []string, client *pocketcasts.Client, ctx context.Cont
 		return 1
 	}
 
-	target, targetIdx, err := selectEpisodeWithIndex(eps, fs.Arg(0))
+	target, err := selectEpisode(queueOccurrences(eps), fs.Arg(0))
 	if err != nil {
 		errf("queue api bump: %v\n", err)
 		return 2
 	}
-	reordered := moveEpisodeToPosition(eps, targetIdx, 0)
+	reordered := moveEpisodeToPosition(eps, target.QueueIndex, 0)
 	changed := !sameQueueOrder(eps, reordered)
 
 	if *dryRun {
 		return printQueueReorderPlan("bump", eps, reordered, queueReorderSummary{
 			Selector: fs.Arg(0),
-			From:     targetIdx + 1,
+			From:     target.QueueIndex + 1,
 			To:       1,
-			UUID:     strings.TrimSpace(target.UUID),
-			Title:    safeEpisodeTitle(target),
+			UUID:     strings.TrimSpace(target.Episode.UUID),
+			Title:    safeEpisodeTitle(target.Episode),
 			Changed:  changed,
 		}, *jsonOut)
 	}
@@ -77,10 +77,10 @@ func runQueueAPIBump(args []string, client *pocketcasts.Client, ctx context.Cont
 	}
 	return printQueueReorderResult("bump", reordered, queueReorderSummary{
 		Selector: fs.Arg(0),
-		From:     targetIdx + 1,
+		From:     target.QueueIndex + 1,
 		To:       1,
-		UUID:     strings.TrimSpace(target.UUID),
-		Title:    safeEpisodeTitle(target),
+		UUID:     strings.TrimSpace(target.Episode.UUID),
+		Title:    safeEpisodeTitle(target.Episode),
 		Changed:  true,
 	}, *jsonOut, *raw, lastBody)
 }
@@ -120,7 +120,7 @@ func runQueueAPIMove(args []string, client *pocketcasts.Client, ctx context.Cont
 		return 1
 	}
 
-	target, fromIdx, err := selectEpisodeWithIndex(eps, fs.Arg(0))
+	target, err := selectEpisode(queueOccurrences(eps), fs.Arg(0))
 	if err != nil {
 		errf("queue api move: %v\n", err)
 		return 2
@@ -130,16 +130,16 @@ func runQueueAPIMove(args []string, client *pocketcasts.Client, ctx context.Cont
 		errf("queue api move: %v\n", err)
 		return 2
 	}
-	reordered := moveEpisodeToPosition(eps, fromIdx, toIndex-1)
+	reordered := moveEpisodeToPosition(eps, target.QueueIndex, toIndex-1)
 	changed := !sameQueueOrder(eps, reordered)
 
 	if *dryRun {
 		return printQueueReorderPlan("move", eps, reordered, queueReorderSummary{
 			Selector: fs.Arg(0),
-			From:     fromIdx + 1,
+			From:     target.QueueIndex + 1,
 			To:       toIndex,
-			UUID:     strings.TrimSpace(target.UUID),
-			Title:    safeEpisodeTitle(target),
+			UUID:     strings.TrimSpace(target.Episode.UUID),
+			Title:    safeEpisodeTitle(target.Episode),
 			Changed:  changed,
 		}, *jsonOut)
 	}
@@ -154,10 +154,10 @@ func runQueueAPIMove(args []string, client *pocketcasts.Client, ctx context.Cont
 	}
 	return printQueueReorderResult("move", reordered, queueReorderSummary{
 		Selector: fs.Arg(0),
-		From:     fromIdx + 1,
+		From:     target.QueueIndex + 1,
 		To:       toIndex,
-		UUID:     strings.TrimSpace(target.UUID),
-		Title:    safeEpisodeTitle(target),
+		UUID:     strings.TrimSpace(target.Episode.UUID),
+		Title:    safeEpisodeTitle(target.Episode),
 		Changed:  true,
 	}, *jsonOut, *raw, lastBody)
 }
@@ -258,7 +258,7 @@ func printQueueReorderPlan(action string, current, target []pocketcasts.UpNextEp
 		return 0
 	}
 	if action == "dedupe" {
-		outf("would remove %d duplicate episode(s)\n", len(summary.Removed))
+		outf("would remove %d repeated queue occurrence(s)\n", len(summary.Removed))
 		for _, id := range summary.Removed {
 			outf("  - %s\n", id)
 		}
@@ -313,7 +313,7 @@ func printQueueReorderResult(action string, target []pocketcasts.UpNextEpisode, 
 	}
 	switch action {
 	case "dedupe":
-		outprintf("queue api dedupe: removed %d duplicate episode(s)\n", len(summary.Removed))
+		outprintf("queue api dedupe: removed %d repeated queue occurrence(s)\n", len(summary.Removed))
 	case "bump", "move":
 		outprintf("queue api %s: moved %q to position %d\n", action, summary.Title, summary.To)
 	default:
@@ -343,19 +343,6 @@ func applyQueueOrder(ctx context.Context, client *pocketcasts.Client, current, t
 		lastBody = body
 	}
 	return lastBody, nil
-}
-
-func selectEpisodeWithIndex(eps []pocketcasts.UpNextEpisode, sel string) (pocketcasts.UpNextEpisode, int, error) {
-	ep, err := selectEpisode(eps, sel)
-	if err != nil {
-		return pocketcasts.UpNextEpisode{}, -1, err
-	}
-	for i := range eps {
-		if strings.EqualFold(strings.TrimSpace(eps[i].UUID), strings.TrimSpace(ep.UUID)) {
-			return ep, i, nil
-		}
-	}
-	return pocketcasts.UpNextEpisode{}, -1, fmt.Errorf("episode %q not found in queue", sel)
 }
 
 func moveEpisodeToPosition(eps []pocketcasts.UpNextEpisode, from, to int) []pocketcasts.UpNextEpisode {

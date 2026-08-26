@@ -11,84 +11,97 @@ import (
 	"pocketcastsctl/internal/pocketcasts"
 )
 
-func selectEpisode(eps []pocketcasts.UpNextEpisode, sel string) (pocketcasts.UpNextEpisode, error) {
+type queueOccurrence struct {
+	Episode    pocketcasts.UpNextEpisode
+	QueueIndex int // zero-based position in the original queue
+}
+
+func queueOccurrences(eps []pocketcasts.UpNextEpisode) []queueOccurrence {
+	occurrences := make([]queueOccurrence, len(eps))
+	for i, ep := range eps {
+		occurrences[i] = queueOccurrence{Episode: ep, QueueIndex: i}
+	}
+	return occurrences
+}
+
+func selectEpisode(occurrences []queueOccurrence, sel string) (queueOccurrence, error) {
 	sel = strings.TrimSpace(sel)
 	if sel == "" {
-		return pocketcasts.UpNextEpisode{}, fmt.Errorf("empty selector")
+		return queueOccurrence{}, fmt.Errorf("empty selector")
 	}
 
 	if n, err := strconv.Atoi(sel); err == nil {
-		if n <= 0 || n > len(eps) {
-			return pocketcasts.UpNextEpisode{}, fmt.Errorf("index out of range: %d (1..%d)", n, len(eps))
+		if n <= 0 || n > len(occurrences) {
+			return queueOccurrence{}, fmt.Errorf("index out of range: %d (1..%d)", n, len(occurrences))
 		}
-		return eps[n-1], nil
+		return occurrences[n-1], nil
 	}
 
-	for _, ep := range eps {
-		if strings.EqualFold(strings.TrimSpace(ep.UUID), sel) {
-			return ep, nil
+	for _, occurrence := range occurrences {
+		if strings.EqualFold(strings.TrimSpace(occurrence.Episode.UUID), sel) {
+			return occurrence, nil
 		}
 	}
 
 	// allow short UUID prefix match
-	for _, ep := range eps {
-		if strings.HasPrefix(strings.ToLower(ep.UUID), strings.ToLower(sel)) {
-			return ep, nil
+	for _, occurrence := range occurrences {
+		if strings.HasPrefix(strings.ToLower(occurrence.Episode.UUID), strings.ToLower(sel)) {
+			return occurrence, nil
 		}
 	}
 
-	return pocketcasts.UpNextEpisode{}, fmt.Errorf("no episode matches %q", sel)
+	return queueOccurrence{}, fmt.Errorf("no episode matches %q", sel)
 }
 
-func filterEpisodes(eps []pocketcasts.UpNextEpisode, search string) []pocketcasts.UpNextEpisode {
+func filterQueueOccurrences(occurrences []queueOccurrence, search string) []queueOccurrence {
 	search = strings.ToLower(strings.TrimSpace(search))
 	if search == "" {
-		return eps
+		return occurrences
 	}
-	out := make([]pocketcasts.UpNextEpisode, 0, len(eps))
-	for _, ep := range eps {
-		if strings.Contains(strings.ToLower(ep.Title), search) {
-			out = append(out, ep)
+	out := make([]queueOccurrence, 0, len(occurrences))
+	for _, occurrence := range occurrences {
+		if strings.Contains(strings.ToLower(occurrence.Episode.Title), search) {
+			out = append(out, occurrence)
 		}
 	}
 	return out
 }
 
-func applyEpisodeSelection(
-	eps []pocketcasts.UpNextEpisode,
+func applyQueueOccurrenceFilters(
+	occurrences []queueOccurrence,
 	progress map[string]int,
 	search string,
 	recent bool,
 	unplayed bool,
 	inProgress bool,
-) []pocketcasts.UpNextEpisode {
-	eps = filterEpisodes(eps, search)
+) []queueOccurrence {
+	occurrences = filterQueueOccurrences(occurrences, search)
 	if unplayed || inProgress {
-		filtered := make([]pocketcasts.UpNextEpisode, 0, len(eps))
-		for _, ep := range eps {
-			played := progress[strings.TrimSpace(ep.UUID)]
+		filtered := make([]queueOccurrence, 0, len(occurrences))
+		for _, occurrence := range occurrences {
+			played := progress[strings.TrimSpace(occurrence.Episode.UUID)]
 			if unplayed && played > 0 {
 				continue
 			}
 			if inProgress && played <= 0 {
 				continue
 			}
-			filtered = append(filtered, ep)
+			filtered = append(filtered, occurrence)
 		}
-		eps = filtered
+		occurrences = filtered
 	}
 	if recent {
-		eps = sortEpisodesByPublishedRecent(eps)
+		occurrences = sortQueueOccurrencesByPublishedRecent(occurrences)
 	}
-	return eps
+	return occurrences
 }
 
-func sortEpisodesByPublishedRecent(eps []pocketcasts.UpNextEpisode) []pocketcasts.UpNextEpisode {
-	out := make([]pocketcasts.UpNextEpisode, len(eps))
-	copy(out, eps)
+func sortQueueOccurrencesByPublishedRecent(occurrences []queueOccurrence) []queueOccurrence {
+	out := make([]queueOccurrence, len(occurrences))
+	copy(out, occurrences)
 	sort.SliceStable(out, func(i, j int) bool {
-		ti, okI := parsePublishedTime(out[i].Published)
-		tj, okJ := parsePublishedTime(out[j].Published)
+		ti, okI := parsePublishedTime(out[i].Episode.Published)
+		tj, okJ := parsePublishedTime(out[j].Episode.Published)
 		switch {
 		case okI && okJ:
 			return ti.After(tj)
