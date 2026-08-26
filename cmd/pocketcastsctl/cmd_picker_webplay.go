@@ -55,42 +55,43 @@ func playEpisodeInWebPlayer(ctx context.Context, browser, browserApp, urlContain
 	return 1
 }
 
-func pickEpisodeInteractive(eps []pocketcasts.UpNextEpisode) (pocketcasts.UpNextEpisode, error) {
+func pickEpisodeInteractive(candidates []queueOccurrence) (queueOccurrence, error) {
 	fzfPath, err := exec.LookPath("fzf")
 	if err != nil {
-		return pickWithPrompt(eps)
+		return pickWithPrompt(candidates)
 	}
 
-	ep, err := pickWithFZF(fzfPath, eps)
+	occurrence, err := pickWithFZF(fzfPath, candidates)
 	if errors.Is(err, errPickerCanceled) {
-		return pocketcasts.UpNextEpisode{}, err
+		return queueOccurrence{}, err
 	}
 	if err != nil {
 		// If fzf fails (e.g. not running in a TTY), fall back to prompt mode.
-		return pickWithPrompt(eps)
+		return pickWithPrompt(candidates)
 	}
-	return ep, nil
+	return occurrence, nil
 }
 
-func pickWithFZF(fzfPath string, eps []pocketcasts.UpNextEpisode) (pocketcasts.UpNextEpisode, error) {
+func pickWithFZF(fzfPath string, candidates []queueOccurrence) (queueOccurrence, error) {
 	cmd := exec.Command(fzfPath, "--prompt=Play> ", "--no-multi", "--ansi")
 	in, err := cmd.StdinPipe()
 	if err != nil {
-		return pocketcasts.UpNextEpisode{}, err
+		return queueOccurrence{}, err
 	}
 	out, err := cmd.StdoutPipe()
 	if err != nil {
-		return pocketcasts.UpNextEpisode{}, err
+		return queueOccurrence{}, err
 	}
 	cmd.Stderr = os.Stderr
 
 	if err := cmd.Start(); err != nil {
-		return pocketcasts.UpNextEpisode{}, err
+		return queueOccurrence{}, err
 	}
 
 	go func() {
 		defer in.Close()
-		for i, ep := range eps {
+		for i, occurrence := range candidates {
+			ep := occurrence.Episode
 			title := strings.TrimSpace(ep.Title)
 			if title == "" {
 				title = "(untitled)"
@@ -102,34 +103,38 @@ func pickWithFZF(fzfPath string, eps []pocketcasts.UpNextEpisode) (pocketcasts.U
 			fmt.Fprintf(in, "%2d  %s  (%s)\n", i+1, title, short)
 		}
 	}()
-
 	b, readErr := io.ReadAll(out)
 	if err := cmd.Wait(); err != nil {
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) && exitErr.ExitCode() == 130 {
-			return pocketcasts.UpNextEpisode{}, errPickerCanceled
+			return queueOccurrence{}, errPickerCanceled
 		}
-		return pocketcasts.UpNextEpisode{}, fmt.Errorf("fzf failed: %w", err)
+		return queueOccurrence{}, fmt.Errorf("fzf failed: %w", err)
 	}
 	if readErr != nil {
-		return pocketcasts.UpNextEpisode{}, fmt.Errorf("read fzf selection: %w", readErr)
+		return queueOccurrence{}, fmt.Errorf("read fzf selection: %w", readErr)
 	}
 	sel := strings.TrimSpace(string(b))
 	if sel == "" {
-		return pocketcasts.UpNextEpisode{}, errors.New("fzf returned an empty selection")
+		return queueOccurrence{}, errors.New("fzf returned an empty selection")
 	}
 
 	// Parse leading index.
 	fields := strings.Fields(sel)
 	n, err := strconv.Atoi(fields[0])
-	if err != nil || n <= 0 || n > len(eps) {
-		return pocketcasts.UpNextEpisode{}, fmt.Errorf("could not parse selection: %q", sel)
+	if err != nil || n <= 0 || n > len(candidates) {
+		return queueOccurrence{}, fmt.Errorf("could not parse selection: %q", sel)
 	}
-	return eps[n-1], nil
+	return candidates[n-1], nil
 }
 
-func pickWithPrompt(eps []pocketcasts.UpNextEpisode) (pocketcasts.UpNextEpisode, error) {
-	for i, ep := range eps {
+func pickWithPrompt(candidates []queueOccurrence) (queueOccurrence, error) {
+	return pickWithPromptIO(candidates, os.Stdin, os.Stdout, os.Stderr)
+}
+
+func pickWithPromptIO(candidates []queueOccurrence, input io.Reader, output, prompt io.Writer) (queueOccurrence, error) {
+	for i, occurrence := range candidates {
+		ep := occurrence.Episode
 		title := strings.TrimSpace(ep.Title)
 		if title == "" {
 			title = "(untitled)"
@@ -138,20 +143,20 @@ func pickWithPrompt(eps []pocketcasts.UpNextEpisode) (pocketcasts.UpNextEpisode,
 		if len(short) > 8 {
 			short = short[:8]
 		}
-		fmt.Printf("%2d. %s  (%s)\n", i+1, title, short)
+		fmt.Fprintf(output, "%2d. %s  (%s)\n", i+1, title, short)
 	}
-	fmt.Fprint(os.Stderr, "Pick number (or blank to cancel): ")
-	line, err := bufio.NewReader(os.Stdin).ReadString('\n')
+	fmt.Fprint(prompt, "Pick number (or blank to cancel): ")
+	line, err := bufio.NewReader(input).ReadString('\n')
 	if err != nil && !errors.Is(err, io.EOF) {
-		return pocketcasts.UpNextEpisode{}, fmt.Errorf("read selection: %w", err)
+		return queueOccurrence{}, fmt.Errorf("read selection: %w", err)
 	}
 	line = strings.TrimSpace(line)
 	if line == "" {
-		return pocketcasts.UpNextEpisode{}, errPickerCanceled
+		return queueOccurrence{}, errPickerCanceled
 	}
 	n, err := strconv.Atoi(line)
-	if err != nil || n <= 0 || n > len(eps) {
-		return pocketcasts.UpNextEpisode{}, fmt.Errorf("invalid selection: %q", line)
+	if err != nil || n <= 0 || n > len(candidates) {
+		return queueOccurrence{}, fmt.Errorf("invalid selection: %q", line)
 	}
-	return eps[n-1], nil
+	return candidates[n-1], nil
 }

@@ -21,6 +21,9 @@ func ExtractUpNextEpisodes(raw []byte) ([]UpNextEpisode, error) {
 		return eps, nil
 	}
 
+	// Outside an ordered episode array, the same episode can appear in several
+	// metadata objects. Merge those objects rather than treating them as queue
+	// occurrences; only an array supplies occurrence order.
 	seen := map[string]UpNextEpisode{}
 	order := make([]string, 0, 32)
 
@@ -117,7 +120,6 @@ func extractFromBestArray(root any) ([]UpNextEpisode, bool) {
 	}
 
 	out := make([]UpNextEpisode, 0, bestScore)
-	seen := map[string]bool{}
 	for _, it := range best {
 		m, ok := it.(map[string]any)
 		if !ok {
@@ -125,10 +127,9 @@ func extractFromBestArray(root any) ([]UpNextEpisode, bool) {
 		}
 		uuid := firstString(m, "uuid", "episodeUuid", "episode_uuid")
 		title := firstString(m, "title", "episodeTitle", "episode_title")
-		if !isUUID(uuid) || strings.TrimSpace(title) == "" || seen[uuid] {
+		if !isUUID(uuid) || strings.TrimSpace(title) == "" {
 			continue
 		}
-		seen[uuid] = true
 		out = append(out, UpNextEpisode{
 			UUID:      uuid,
 			Title:     title,

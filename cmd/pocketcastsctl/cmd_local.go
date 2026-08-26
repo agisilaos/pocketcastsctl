@@ -82,25 +82,25 @@ func runLocalPick(args []string, cfg config.Config) int {
 		return 1
 	}
 	progress, _ := pocketcasts.ExtractEpisodeProgress(body)
-	eps = applyEpisodeSelection(eps, progress, *search, *recent, *unplayed, *inProgress)
-	if *limit > 0 && *limit < len(eps) {
-		eps = eps[:*limit]
+	candidates := applyQueueOccurrenceFilters(queueOccurrences(eps), progress, *search, *recent, *unplayed, *inProgress)
+	if *limit > 0 && *limit < len(candidates) {
+		candidates = candidates[:*limit]
 	}
-	if len(eps) == 0 {
+	if len(candidates) == 0 {
 		fmt.Fprintln(os.Stderr, "local pick: no episodes matched")
 		return 1
 	}
 
-	chosen, err := pickEpisodeInteractive(eps)
+	chosen, err := pickEpisodeInteractive(candidates)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "local pick: %v\n", err)
 		return 1
 	}
 	startAt := 0
 	if !*fromStart {
-		startAt = progress[chosen.UUID]
+		startAt = progress[chosen.Episode.UUID]
 	}
-	return startLocalPlayback(chosen, startAt)
+	return startLocalPlayback(chosen.Episode, startAt)
 }
 
 func runLocalPlay(args []string, cfg config.Config) int {
@@ -139,7 +139,7 @@ func runLocalPlay(args []string, cfg config.Config) int {
 		fmt.Fprintf(os.Stderr, "local play: failed to parse queue: %v\n", err)
 		return 1
 	}
-	target, err := selectEpisode(eps, fs.Arg(0))
+	target, err := selectEpisode(queueOccurrences(eps), fs.Arg(0))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "local play: %v\n", err)
 		return 2
@@ -147,21 +147,21 @@ func runLocalPlay(args []string, cfg config.Config) int {
 	startAt := 0
 	if !*fromStart {
 		progress, _ := pocketcasts.ExtractEpisodeProgress(body)
-		startAt = progress[target.UUID]
+		startAt = progress[target.Episode.UUID]
 	}
 	if *dryRun {
-		title := strings.TrimSpace(target.Title)
+		title := strings.TrimSpace(target.Episode.Title)
 		if title == "" {
 			title = "(untitled)"
 		}
 		if startAt > 0 {
-			fmt.Printf("dry-run: would play local audio: %s (%s) [from %s]\n", title, target.UUID, formatHMS(startAt))
+			fmt.Printf("dry-run: would play local audio: %s (%s) [from %s]\n", title, target.Episode.UUID, formatHMS(startAt))
 		} else {
-			fmt.Printf("dry-run: would play local audio: %s (%s)\n", title, target.UUID)
+			fmt.Printf("dry-run: would play local audio: %s (%s)\n", title, target.Episode.UUID)
 		}
 		return 0
 	}
-	return startLocalPlayback(target, startAt)
+	return startLocalPlayback(target.Episode, startAt)
 }
 
 func startLocalPlayback(ep pocketcasts.UpNextEpisode, startAt int) int {

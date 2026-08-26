@@ -41,27 +41,27 @@ func runQueueAPIPlay(args []string, cfg config.Config, client *pocketcasts.Clien
 		fmt.Fprintf(os.Stderr, "queue api play: failed to parse queue: %v\n", err)
 		return 1
 	}
-	eps = filterEpisodes(eps, *search)
-	if len(eps) == 0 {
+	candidates := filterQueueOccurrences(queueOccurrences(eps), *search)
+	if len(candidates) == 0 {
 		fmt.Fprintln(os.Stderr, "queue api play: no episodes matched")
 		return 1
 	}
 
-	target, err := selectEpisode(eps, fs.Arg(0))
+	target, err := selectEpisode(candidates, fs.Arg(0))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "queue api play: %v\n", err)
 		return 2
 	}
 	if *dryRun {
-		title := strings.TrimSpace(target.Title)
+		title := strings.TrimSpace(target.Episode.Title)
 		if title == "" {
 			title = "(untitled)"
 		}
-		fmt.Printf("dry-run: would play in web player: %s (%s)\n", title, target.UUID)
+		fmt.Printf("dry-run: would play in web player: %s (%s)\n", title, target.Episode.UUID)
 		return 0
 	}
 
-	return playEpisodeInWebPlayer(ctx, *browser, *browserApp, *urlContains, *webBase, target)
+	return playEpisodeInWebPlayer(ctx, *browser, *browserApp, *urlContains, *webBase, target.Episode)
 }
 
 func runQueueAPIPick(args []string, cfg config.Config, client *pocketcasts.Client, ctx context.Context) int {
@@ -102,23 +102,23 @@ func runQueueAPIPick(args []string, cfg config.Config, client *pocketcasts.Clien
 		return 1
 	}
 	progress, _ := pocketcasts.ExtractEpisodeProgress(body)
-	eps = applyEpisodeSelection(eps, progress, *search, *recent, *unplayed, *inProgress)
-	if *limit > 0 && *limit < len(eps) {
-		eps = eps[:*limit]
+	candidates := applyQueueOccurrenceFilters(queueOccurrences(eps), progress, *search, *recent, *unplayed, *inProgress)
+	if *limit > 0 && *limit < len(candidates) {
+		candidates = candidates[:*limit]
 	}
-	if len(eps) == 0 {
+	if len(candidates) == 0 {
 		fmt.Fprintln(os.Stderr, "queue api pick: no episodes matched")
 		return 1
 	}
 
-	chosen, err := pickEpisodeInteractive(eps)
+	chosen, err := pickEpisodeInteractive(candidates)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "queue api pick: %v\n", err)
 		return 1
 	}
 	if *noPlay {
-		fmt.Println(chosen.UUID)
+		fmt.Println(chosen.Episode.UUID)
 		return 0
 	}
-	return playEpisodeInWebPlayer(ctx, *browser, *browserApp, *urlContains, *webBase, chosen)
+	return playEpisodeInWebPlayer(ctx, *browser, *browserApp, *urlContains, *webBase, chosen.Episode)
 }

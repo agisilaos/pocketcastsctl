@@ -264,6 +264,8 @@ This path calls Pocket Casts’ private API (`up_next/list`, `up_next/play_next`
 ./bin/pocketcastsctl queue api dedupe --dry-run
 ```
 
+Numeric selectors address a specific queue occurrence. If the same episode UUID appears more than once, a UUID selector addresses its first occurrence; `queue api dedupe` explicitly keeps that first occurrence and removes later ones.
+
 `doctor explain <code>` explains specific doctor failure/warning codes and the fastest fix:
 
 ```bash

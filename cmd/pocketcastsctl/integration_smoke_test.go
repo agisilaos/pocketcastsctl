@@ -138,6 +138,39 @@ func TestCLISmokeQueueAPIPlayDryRun(t *testing.T) {
 	}
 }
 
+func TestCLISmokeQueueAPIMovePreservesRepeatedEpisodeOccurrence(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/up_next/list" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"episodes":[
+  {"uuid":"` + testEpisodeA + `","title":"First A"},
+  {"uuid":"` + testEpisodeB + `","title":"B"},
+  {"uuid":"` + testEpisodeA + `","title":"Second A"}
+]}`))
+	}))
+	defer srv.Close()
+	writeSmokeConfig(t, srv.URL)
+
+	code, stdout, stderr := runForTest(t, []string{"queue", "api", "move", "--dry-run", "--json", "3", "1"}, "")
+	if code != 0 {
+		t.Fatalf("numeric move exit code = %d, want 0; stderr=%q", code, stderr)
+	}
+	if !strings.Contains(stdout, `"from_index": 3`) || !strings.Contains(stdout, `"title": "Second A"`) {
+		t.Fatalf("numeric move selected wrong occurrence: %s", stdout)
+	}
+
+	code, stdout, stderr = runForTest(t, []string{"queue", "api", "move", "--dry-run", "--json", testEpisodeA, "3"}, "")
+	if code != 0 {
+		t.Fatalf("UUID move exit code = %d, want 0; stderr=%q", code, stderr)
+	}
+	if !strings.Contains(stdout, `"from_index": 1`) || !strings.Contains(stdout, `"title": "First A"`) {
+		t.Fatalf("UUID move selected wrong occurrence: %s", stdout)
+	}
+}
+
 func TestCLISmokeLocalPlayDryRun(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/up_next/list" {
