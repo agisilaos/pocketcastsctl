@@ -280,7 +280,8 @@ Deprecated short aliases (still work for now, but print warnings):
 ./bin/pocketcastsctl rm <episode-uuid>
 ```
 
-`pick` uses `fzf` if it’s installed (nice arrow-key selector). If not, it falls back to a simple numbered prompt.
+The interactive picker uses `fzf` when available (nice arrow-key selector). If `fzf` is unavailable or fails, it falls back to a simple numbered prompt. Pressing Escape or Ctrl-C in `fzf` cancels the command without opening the fallback prompt.
+
 Picker filters:
 
 - `--recent`: sort episodes by publish time (newest first)
