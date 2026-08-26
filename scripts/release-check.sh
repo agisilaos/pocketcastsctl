@@ -32,8 +32,9 @@ for tool in go git python3; do
 done
 
 git rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "not inside a git work tree"
-git diff --quiet || die "working tree has unstaged changes"
-git diff --cached --quiet || die "index has staged changes"
+if [[ -n "$(git status --porcelain --untracked-files=all)" ]]; then
+  die "working tree is not clean (tracked, staged, or untracked changes present)"
+fi
 
 if [[ "$ci_mode" -eq 0 ]] && git rev-parse "$version" >/dev/null 2>&1; then
   die "tag already exists: $version"
@@ -58,6 +59,12 @@ elif [[ "$first_release_heading" != "## [$version] - "* ]]; then
   die "CHANGELOG.md top release heading must be ## [$version] - YYYY-MM-DD before release"
 fi
 
+changelog_args=(--version "$version" --validate)
+if [[ "$ci_mode" -eq 0 ]]; then
+  changelog_args+=(--require-traceability)
+fi
+python3 ./scripts/changelog-section.py "${changelog_args[@]}"
+
 # Keep release-check CI portable on stock GitHub runners.
 # Do not require non-default tooling such as rg/jq/yq/fd in checked scripts.
 if grep -R -nE '(^|[[:space:]])(r[g]|j[q]|y[q]|f[d])([[:space:]]|$)' scripts >/dev/null; then
@@ -71,7 +78,7 @@ echo "[release-check] running vet"
 go vet ./...
 
 echo "[release-check] running script tests"
-go test ./scripts -run 'TestReleasePreflightFailurePaths|TestReleaseCheckModes|TestCheckHelpDocsDriftScript'
+go test ./scripts -run 'TestReleaseCheckModes|TestChangelogTraceability|TestCheckHelpDocsDriftScript|TestReleaseUsesConfigurableHTTPSHomebrewTapRemote'
 
 echo "[release-check] running docs check"
 ./scripts/docs-check.sh

@@ -16,8 +16,8 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          # Go 1.22 binaries lack the LC_UUID required by macOS 26 runners.
-          go-version: '1.26.x'
+          # Use the release toolchain; compatibility stays in each repo's normal CI.
+          go-version: "1.26.x"
 
       # Intentionally no extra dependency install step (brew/apt).
       # release-check scripts must rely on stock runner tooling.

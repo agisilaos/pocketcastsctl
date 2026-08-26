@@ -1,4 +1,4 @@
-.PHONY: build test test-race-local bench-local bench-local-ci test-scripts test-scripts-cover vet fmt fmt-check check-help check-help-docs docs-check release-preflight release-check release-check-ci release release-dry-run
+.PHONY: build test test-race-local bench-local bench-local-ci test-scripts test-scripts-cover vet fmt fmt-check check-help check-help-docs docs-check changelog-context release-check release-check-ci release release-dry-run
 
 build:
 	go build -o pocketcastsctl ./cmd/pocketcastsctl
@@ -17,7 +17,7 @@ bench-local-ci:
 	go test ./internal/localplayback -run '^$$' -bench 'BenchmarkSnapshot' -benchmem -benchtime=100x
 
 test-scripts:
-	go test ./scripts -run 'TestReleasePreflightFailurePaths|TestReleaseCheckModes|TestCheckHelpDocsDriftScript'
+	go test ./scripts -run 'TestReleaseCheckModes|TestChangelogTraceability|TestCheckHelpDocsDriftScript|TestReleaseUsesConfigurableHTTPSHomebrewTapRemote'
 
 test-scripts-cover:
 	go test -cover ./scripts
@@ -40,9 +40,9 @@ check-help-docs:
 docs-check:
 	./scripts/docs-check.sh
 
-release-preflight:
-	@if [ -z "$(VERSION)" ]; then echo "VERSION is required (e.g. make release-preflight VERSION=v0.1.0)"; exit 2; fi
-	./scripts/release_preflight.sh "$(VERSION)"
+changelog-context:
+	@if [ -z "$(VERSION)" ]; then echo "VERSION is required (e.g. make changelog-context VERSION=v0.1.0)"; exit 2; fi
+	./scripts/changelog-context.sh "$(VERSION)"
 
 release-check:
 	@if [ -z "$(VERSION)" ]; then echo "VERSION is required (e.g. make release-check VERSION=v0.1.0)"; exit 2; fi

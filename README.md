@@ -387,23 +387,18 @@ it launches using the effective runtime settings without changing the file.
 
 ## Release
 
-The release workflow mirrors [`homepodctl`](https://github.com/agisilaos/homepodctl):
+Ask an agent to prepare the changelog from commit and PR evidence, review and commit it, then validate and publish:
 
-- Version metadata is embedded via ldflags (`main.version`, `main.commit`, `main.date`); `pocketcastsctl --version` shows it.
-- `make release-check VERSION=vX.Y.Z` runs `scripts/release-check.sh` and validates tests/vet/docs/format + stamped version output.
-- `make release-check-ci` validates the repository using the latest changelog version, even when that release tag already exists.
-- `make release-dry-run VERSION=vX.Y.Z` builds release archives without changelog/tag/push/release/tap writes.
-- `make release VERSION=vX.Y.Z` runs `scripts/release.sh` to:
-  - Generate release notes from commit titles and descriptions since the previous tag
-  - Insert the generated notes into `CHANGELOG.md` under the new version
-  - Tag and push `main` + the tag
-  - Build macOS arm64/amd64 tarballs under `dist/` with checksums
-  - Create a GitHub Release
-  - Update the Homebrew tap (`agisilaos/homebrew-tap`)
-- Homebrew tap updates clone over HTTPS by default; set `HOMEBREW_TAP_URL` to use a different authenticated remote.
-- Release scripts: `scripts/release-check.sh` and `scripts/release.sh`
+```bash
+make changelog-context VERSION=vX.Y.Z
+make release-check VERSION=vX.Y.Z
+make release-dry-run VERSION=vX.Y.Z
+make release VERSION=vX.Y.Z
+```
 
-Run the release on macOS with a clean git tree.
+Every new changelog bullet links to its pull request or direct commit. The approved changelog section becomes the GitHub Release notes. The dry run builds both macOS archives and checksums and renders the Homebrew formula without remote writes.
+
+See `RELEASING.md` for the agent authoring policy and full runbook. Release scripts are `scripts/changelog-context.sh`, `scripts/release-check.sh`, and `scripts/release.sh`. Homebrew tap updates use configurable HTTPS through `HOMEBREW_TAP_URL`.
 
 ## Docs
 
