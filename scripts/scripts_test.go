@@ -10,72 +10,6 @@ import (
 	scriptspkg "pocketcastsctl/scripts"
 )
 
-func TestReleasePreflightFailurePaths(t *testing.T) {
-	if runtime.GOOS != "darwin" {
-		t.Skip("release_preflight.sh requires Darwin")
-	}
-
-	t.Run("invalid semver", func(t *testing.T) {
-		repo := setupPreflightRepo(t)
-		out, err := runCmd(repo, "bash", "scripts/release_preflight.sh", "v1.2")
-		if err == nil {
-			t.Fatalf("expected failure for invalid version")
-		}
-		if !strings.Contains(out, "version must be semantic") {
-			t.Fatalf("unexpected output: %s", out)
-		}
-	})
-
-	t.Run("tag exists", func(t *testing.T) {
-		repo := setupPreflightRepo(t)
-		mustRun(t, repo, "git", "tag", "v1.2.3")
-		out, err := runCmd(repo, "bash", "scripts/release_preflight.sh", "v1.2.3")
-		if err == nil {
-			t.Fatalf("expected failure when tag exists")
-		}
-		if !strings.Contains(out, "tag already exists") {
-			t.Fatalf("unexpected output: %s", out)
-		}
-	})
-
-	t.Run("missing changelog", func(t *testing.T) {
-		repo := setupPreflightRepo(t)
-		if err := os.Remove(filepath.Join(repo, "CHANGELOG.md")); err != nil {
-			t.Fatalf("remove changelog: %v", err)
-		}
-		out, err := runCmd(repo, "bash", "scripts/release_preflight.sh", "--allow-dirty", "v1.2.3")
-		if err == nil {
-			t.Fatalf("expected failure for missing changelog")
-		}
-		if !strings.Contains(out, "CHANGELOG.md not found") {
-			t.Fatalf("unexpected output: %s", out)
-		}
-	})
-
-	t.Run("version exists in changelog", func(t *testing.T) {
-		repo := setupPreflightRepo(t)
-		out, err := runCmd(repo, "bash", "scripts/release_preflight.sh", "v0.1.0")
-		if err == nil {
-			t.Fatalf("expected failure when version exists in changelog")
-		}
-		if !strings.Contains(out, "v0.1.0 already exists in CHANGELOG.md") {
-			t.Fatalf("unexpected output: %s", out)
-		}
-	})
-
-	t.Run("dirty tree without allow-dirty", func(t *testing.T) {
-		repo := setupPreflightRepo(t)
-		mustWriteFile(t, filepath.Join(repo, "README.md"), "dirty\n")
-		out, err := runCmd(repo, "bash", "scripts/release_preflight.sh", "v1.2.3")
-		if err == nil {
-			t.Fatalf("expected failure for dirty tree")
-		}
-		if !strings.Contains(out, "working tree has unstaged changes") {
-			t.Fatalf("unexpected output: %s", out)
-		}
-	})
-}
-
 func TestReleaseCheckModes(t *testing.T) {
 	if runtime.GOOS != "darwin" {
 		t.Skip("release-check.sh requires Darwin")
@@ -105,6 +39,26 @@ func TestReleaseCheckModes(t *testing.T) {
 			t.Fatalf("CI mode did not validate the changelog version: %s", out)
 		}
 	})
+}
+
+func TestChangelogTraceability(t *testing.T) {
+	repo := t.TempDir()
+	mustCopyFile(t, repoRootPath(t, "scripts/changelog-section.py"), filepath.Join(repo, "scripts/changelog-section.py"))
+	mustWriteFile(t, filepath.Join(repo, "CHANGELOG.md"), "# Changelog\n\n## [v1.2.3] - 2026-08-26\n\n- Improved queue selection.\n")
+
+	out, err := runCmd(repo, "python3", "scripts/changelog-section.py", "--version", "v1.2.3", "--validate", "--require-traceability")
+	if err == nil {
+		t.Fatal("expected missing traceability to fail")
+	}
+	if !strings.Contains(out, "every changelog bullet must link") {
+		t.Fatalf("unexpected output: %s", out)
+	}
+
+	mustWriteFile(t, filepath.Join(repo, "CHANGELOG.md"), "# Changelog\n\n## [v1.2.3] - 2026-08-26\n\n- Improved queue selection ([#14](https://github.com/agisilaos/pocketcastsctl/pull/14)).\n")
+	out, err = runCmd(repo, "python3", "scripts/changelog-section.py", "--version", "v1.2.3", "--validate", "--require-traceability")
+	if err != nil {
+		t.Fatalf("traceable changelog failed: %v\n%s", err, out)
+	}
 }
 
 func TestReleaseUsesConfigurableHTTPSHomebrewTapRemote(t *testing.T) {
@@ -150,26 +104,11 @@ func TestCheckHelpDocsDriftScript(t *testing.T) {
 	})
 }
 
-func setupPreflightRepo(t *testing.T) string {
-	t.Helper()
-	repo := t.TempDir()
-	mustCopyFile(t, repoRootPath(t, "scripts/release_preflight.sh"), filepath.Join(repo, "scripts/release_preflight.sh"))
-	mustWriteFile(t, filepath.Join(repo, "go.mod"), "module example.com/preflight\n\ngo 1.24\n")
-	mustWriteFile(t, filepath.Join(repo, "README.md"), "fixture\n")
-	mustWriteFile(t, filepath.Join(repo, "CHANGELOG.md"), "# Changelog\n\n## [v0.1.0] - 2026-01-01\n")
-	mustRun(t, repo, "git", "init")
-	mustRun(t, repo, "git", "config", "user.name", "Codex")
-	mustRun(t, repo, "git", "config", "user.email", "codex@example.com")
-	mustRun(t, repo, "git", "config", "commit.gpgsign", "false")
-	mustRun(t, repo, "git", "add", ".")
-	mustRun(t, repo, "git", "commit", "-m", "init")
-	return repo
-}
-
 func setupReleaseCheckRepo(t *testing.T) string {
 	t.Helper()
 	repo := t.TempDir()
 	mustCopyFile(t, repoRootPath(t, "scripts/release-check.sh"), filepath.Join(repo, "scripts/release-check.sh"))
+	mustCopyFile(t, repoRootPath(t, "scripts/changelog-section.py"), filepath.Join(repo, "scripts/changelog-section.py"))
 	mustWriteFile(t, filepath.Join(repo, "go.mod"), "module example.com/releasecheck\n\ngo 1.24\n")
 	mustWriteFile(t, filepath.Join(repo, "cmd/pocketcastsctl/main.go"), `package main
 
@@ -194,7 +133,7 @@ func main() {
 	mustWriteFile(t, filepath.Join(repo, "scripts/fixture.go"), "package scripts\n")
 	mustWriteFile(t, filepath.Join(repo, "scripts/docs-check.sh"), "#!/usr/bin/env bash\nset -euo pipefail\n")
 	mustWriteFile(t, filepath.Join(repo, "README.md"), "fixture\n")
-	mustWriteFile(t, filepath.Join(repo, "CHANGELOG.md"), "# Changelog\n\n## [v0.1.0] - 2026-01-01\n")
+	mustWriteFile(t, filepath.Join(repo, "CHANGELOG.md"), "# Changelog\n\n## [v0.1.0] - 2026-01-01\n\n- Initial release.\n")
 	mustRun(t, repo, "git", "init")
 	mustRun(t, repo, "git", "config", "user.name", "Codex")
 	mustRun(t, repo, "git", "config", "user.email", "codex@example.com")
