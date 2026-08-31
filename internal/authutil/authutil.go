@@ -55,13 +55,8 @@ func TokenMetadataFromToken(tok string) TokenMetadata {
 		return TokenMetadata{}
 	}
 	var metadata TokenMetadata
-	switch v := claims["exp"].(type) {
-	case float64:
-		metadata.ExpiresAt, metadata.HasExpiry = int64(v), true
-	case int64:
-		metadata.ExpiresAt, metadata.HasExpiry = v, true
-	case int:
-		metadata.ExpiresAt, metadata.HasExpiry = int64(v), true
+	if exp, ok := claims["exp"].(float64); ok {
+		metadata.ExpiresAt, metadata.HasExpiry = int64(exp), true
 	}
 	for _, key := range []string{"sub", "user_id", "userId", "account_id", "accountId", "uuid"} {
 		if value, ok := claims[key].(string); ok && strings.TrimSpace(value) != "" {
