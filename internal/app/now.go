@@ -8,11 +8,9 @@ import (
 	"time"
 
 	"pocketcastsctl/internal/authn"
-	"pocketcastsctl/internal/authutil"
 	"pocketcastsctl/internal/browsercontrol"
 	"pocketcastsctl/internal/config"
 	"pocketcastsctl/internal/localplayback"
-	"pocketcastsctl/internal/pocketcasts"
 )
 
 type NowOptions struct {
@@ -22,8 +20,7 @@ type NowOptions struct {
 type nowCollectorFuncs struct {
 	web   func(context.Context) NowWebPlaybackSnapshot
 	local func(context.Context) (NowLocalStatus, []string)
-	auth  func(context.Context) NowAuthStatus
-	queue func(context.Context) NowQueueStatus
+	api   func(context.Context) (NowAuthStatus, NowQueueStatus)
 }
 
 type NowSnapshot struct {
@@ -75,11 +72,8 @@ func CollectNowSnapshot(ctx context.Context, cfg config.Config, opts NowOptions)
 		local: func(ctx context.Context) (NowLocalStatus, []string) {
 			return collectLocalStatus(ctx)
 		},
-		auth: func(ctx context.Context) NowAuthStatus {
-			return collectAuthStatus(ctx, cfg, opts)
-		},
-		queue: func(ctx context.Context) NowQueueStatus {
-			return collectQueueStatus(ctx, cfg)
+		api: func(ctx context.Context) (NowAuthStatus, NowQueueStatus) {
+			return collectNowAPIStatus(ctx, cfg, opts, authn.ManagerOptions{})
 		},
 	})
 }
@@ -92,7 +86,7 @@ func collectNowSnapshot(ctx context.Context, configPath string, collectors nowCo
 	var auth NowAuthStatus
 	var queue NowQueueStatus
 	var wg sync.WaitGroup
-	wg.Add(4)
+	wg.Add(3)
 	go func() {
 		defer wg.Done()
 		web = collectors.web(ctx)
@@ -103,11 +97,7 @@ func collectNowSnapshot(ctx context.Context, configPath string, collectors nowCo
 	}()
 	go func() {
 		defer wg.Done()
-		auth = collectors.auth(ctx)
-	}()
-	go func() {
-		defer wg.Done()
-		queue = collectors.queue(ctx)
+		auth, queue = collectors.api(ctx)
 	}()
 	wg.Wait()
 
@@ -178,83 +168,15 @@ func localStatusFromSnapshot(snapshot localplayback.Snapshot) NowLocalStatus {
 	}
 }
 
-func collectQueueStatus(ctx context.Context, cfg config.Config) NowQueueStatus {
-	client, _ := authn.NewPocketCastsClient(cfg, authn.ManagerOptions{})
+func collectNowAPIStatus(ctx context.Context, cfg config.Config, opts NowOptions, managerOpts authn.ManagerOptions) (NowAuthStatus, NowQueueStatus) {
 	ctx, cancel := context.WithTimeout(ctx, 6*time.Second)
 	defer cancel()
-	body, err := client.UpNextList(ctx, pocketcasts.UpNextListRequest{
-		Model:          "webplayer",
-		ServerModified: "0",
-		ShowPlayStatus: true,
-		Version:        2,
-	})
-	if err != nil {
-		if isMissingAuthError(err) {
-			return NowQueueStatus{Status: "unauthorized", Error: "API authentication is not configured"}
-		}
-		if authutil.IsUnauthorizedError(err) {
-			return NowQueueStatus{Status: "unauthorized", Error: "API returned 401 Unauthorized"}
-		}
-		return NowQueueStatus{Status: "unavailable", Error: err.Error()}
+	policy := upNextRetryPolicy{attempts: 1}
+	if opts.VerifyAuth {
+		policy = upNextRetryPolicy{attempts: 2, baseDelay: 150 * time.Millisecond}
 	}
-	eps, err := pocketcasts.ExtractUpNextEpisodes(body)
-	if err != nil {
-		return NowQueueStatus{Status: "unavailable", Error: "failed to parse queue"}
-	}
-	if len(eps) == 0 {
-		return NowQueueStatus{Status: "empty", Total: 0}
-	}
-	progress, _ := pocketcasts.ExtractEpisodeProgress(body)
-	inProgress := 0
-	for _, p := range progress {
-		if p > 0 {
-			inProgress++
-		}
-	}
-	return NowQueueStatus{
-		Status:          "ready",
-		Total:           len(eps),
-		NextTitle:       strings.TrimSpace(eps[0].Title),
-		InProgressCount: inProgress,
-	}
-}
-
-func collectAuthStatus(ctx context.Context, cfg config.Config, opts NowOptions) NowAuthStatus {
-	manager := authn.NewManager(cfg, authn.ManagerOptions{})
-	session, source, loadErr := manager.Snapshot(ctx)
-	auth := NowAuthStatus{Status: "missing"}
-	if loadErr != nil || session.AccessToken == "" {
-		if loadErr != nil && !isMissingAuthError(loadErr) {
-			auth.Error = loadErr.Error()
-		}
-		return auth
-	}
-	auth.AuthorizationExists = true
-	auth.Source = string(source)
-	auth.Method = session.Method
-	auth.Status = "configured"
-	if session.ExpiresAt > 0 {
-		auth.TokenExpiryKnown = true
-		auth.TokenExpiryUnix = session.ExpiresAt
-	}
-	if !opts.VerifyAuth {
-		return auth
-	}
-	ctx, cancel := context.WithTimeout(ctx, 6*time.Second)
-	defer cancel()
-	err := VerifyAuth(ctx, cfg, VerifyOptions{Attempts: 2, BaseDelay: 150 * time.Millisecond})
-	if err == nil {
-		auth.Status = "verified"
-		return auth
-	}
-	switch KindOf(err) {
-	case KindUnauthorized:
-		auth.Status = "unauthorized"
-	default:
-		auth.Status = "unverified"
-	}
-	auth.Error = err.Error()
-	return auth
+	result := probeUpNext(ctx, cfg, managerOpts, policy)
+	return result.authStatus(opts.VerifyAuth), result.queueStatus()
 }
 
 func suggestNowActions(s NowSnapshot) []string {

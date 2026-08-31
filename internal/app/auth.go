@@ -2,94 +2,16 @@ package app
 
 import (
 	"context"
-	"errors"
-	"strings"
 	"time"
 
 	"pocketcastsctl/internal/authn"
-	"pocketcastsctl/internal/authutil"
 	"pocketcastsctl/internal/config"
-	"pocketcastsctl/internal/pocketcasts"
 )
 
-type VerifyOptions struct {
-	Attempts  int
-	BaseDelay time.Duration
-}
-
-func VerifyAuth(ctx context.Context, cfg config.Config, opts VerifyOptions) error {
-	op := "auth verify"
-	client, _ := authn.NewPocketCastsClient(cfg, authn.ManagerOptions{})
-	_, err := fetchUpNextWithRetry(ctx, client, opts)
-	if err != nil {
-		if authutil.IsUnauthorizedError(err) || isMissingAuthError(err) {
-			return Wrap(KindUnauthorized, op, err)
-		}
-		return Wrap(KindTransient, op, err)
-	}
-	return nil
-}
-
-func isMissingAuthError(err error) bool {
-	return errors.Is(err, authn.ErrNotConfigured)
-}
-
-func fetchUpNextWithRetry(ctx context.Context, client *pocketcasts.Client, opts VerifyOptions) ([]byte, error) {
-	attempts := opts.Attempts
-	if attempts < 1 {
-		attempts = 3
-	}
-	baseDelay := opts.BaseDelay
-	if baseDelay <= 0 {
-		baseDelay = 200 * time.Millisecond
-	}
-
-	var body []byte
-	var lastErr error
-	for i := 1; i <= attempts; i++ {
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
-		body, lastErr = client.UpNextList(ctx, pocketcasts.UpNextListRequest{
-			Model:          "webplayer",
-			ServerModified: "0",
-			ShowPlayStatus: true,
-			Version:        2,
-		})
-		if lastErr == nil {
-			return body, nil
-		}
-		if i == attempts || !isRetryableTransientError(lastErr) {
-			break
-		}
-		timer := time.NewTimer(baseDelay * time.Duration(1<<(i-1)))
-		select {
-		case <-ctx.Done():
-			timer.Stop()
-			return nil, ctx.Err()
-		case <-timer.C:
-		}
-	}
-	return nil, lastErr
-}
-
-func isRetryableTransientError(err error) bool {
-	if err == nil {
-		return false
-	}
-	s := strings.ToLower(err.Error())
-	retry := []string{
-		"timeout",
-		"tempor",
-		"connection reset",
-		"connection refused",
-		"broken pipe",
-		"eof",
-	}
-	for _, token := range retry {
-		if strings.Contains(s, token) {
-			return true
-		}
-	}
-	return false
+// VerifyAuth verifies the active API session without requiring a readable queue.
+func VerifyAuth(ctx context.Context, cfg config.Config) error {
+	return probeUpNext(ctx, cfg, authn.ManagerOptions{}, upNextRetryPolicy{
+		attempts:  3,
+		baseDelay: 200 * time.Millisecond,
+	}).verificationError()
 }

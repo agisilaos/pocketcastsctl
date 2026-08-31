@@ -92,12 +92,7 @@ func (a *API) Verify(ctx context.Context, session Session) error {
 		Headers: map[string]string{"Authorization": "Bearer " + session.AccessToken},
 		HTTP:    a.HTTP,
 	})
-	_, err := client.UpNextList(ctx, pocketcasts.UpNextListRequest{
-		Model:          ScopeWebPlayer,
-		ServerModified: "0",
-		ShowPlayStatus: true,
-		Version:        2,
-	})
+	_, err := client.UpNextList(ctx, "0")
 	return err
 }
 

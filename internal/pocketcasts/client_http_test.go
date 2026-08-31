@@ -88,12 +88,12 @@ func TestUpNextListSuccessAndError(t *testing.T) {
 		defer srv.Close()
 
 		c := New(Options{BaseURL: srv.URL, Headers: map[string]string{"Authorization": "Bearer token"}, HTTP: srv.Client()})
-		body, err := c.UpNextList(context.Background(), UpNextListRequest{Model: "webplayer", ServerModified: "0", ShowPlayStatus: true, Version: 2})
+		snapshot, err := c.UpNextList(context.Background(), "0")
 		if err != nil {
 			t.Fatalf("UpNextList error: %v", err)
 		}
-		if string(body) != `{"ok":true}` {
-			t.Fatalf("body = %q", string(body))
+		if string(snapshot.Raw) != `{"ok":true}` {
+			t.Fatalf("body = %q", string(snapshot.Raw))
 		}
 	})
 
@@ -105,7 +105,7 @@ func TestUpNextListSuccessAndError(t *testing.T) {
 		defer srv.Close()
 
 		c := New(Options{BaseURL: srv.URL, HTTP: srv.Client()})
-		_, err := c.UpNextList(context.Background(), UpNextListRequest{Model: "webplayer", ServerModified: "0", ShowPlayStatus: true, Version: 2})
+		_, err := c.UpNextList(context.Background(), "0")
 		if err == nil || !strings.Contains(err.Error(), "http 401") {
 			t.Fatalf("error = %v, want http 401", err)
 		}
@@ -169,7 +169,7 @@ func TestClientRefreshesOnceAfterUnauthorizedAndReplaysBody(t *testing.T) {
 
 	source := &rotatingTokenSource{accessToken: "stale-token"}
 	client := New(Options{BaseURL: server.URL, HTTP: server.Client(), TokenSource: source})
-	if _, err := client.UpNextList(context.Background(), UpNextListRequest{Model: "webplayer", Version: 2}); err != nil {
+	if _, err := client.UpNextList(context.Background(), "0"); err != nil {
 		t.Fatal(err)
 	}
 	if requests != 2 || !source.refreshed {
@@ -189,7 +189,7 @@ func TestClientSurfacesRefreshFailureAfterUnauthorized(t *testing.T) {
 		HTTP:        server.Client(),
 		TokenSource: failingRefreshTokenSource{err: refreshErr},
 	})
-	_, err := client.UpNextList(context.Background(), UpNextListRequest{Model: "webplayer", Version: 2})
+	_, err := client.UpNextList(context.Background(), "0")
 	if !errors.Is(err, refreshErr) {
 		t.Fatalf("error=%v, want refresh failure", err)
 	}

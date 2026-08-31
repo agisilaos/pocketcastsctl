@@ -28,6 +28,7 @@
 - API-session lifecycle, Keychain storage, and browser-cookie import: `../internal/authn/`
 - Queue handlers: `../cmd/pocketcastsctl/cmd_queue_dispatch.go`, `../cmd/pocketcastsctl/cmd_queue_api_ls.go`, `../cmd/pocketcastsctl/cmd_queue_api_mutations.go`, `../cmd/pocketcastsctl/cmd_queue_api_play_pick.go`, `../cmd/pocketcastsctl/cmd_queue_helpers.go`, `../cmd/pocketcastsctl/cmd_queue_fetch.go`
 - Shared retry/auth-recovery helpers: `../cmd/pocketcastsctl/cmd_retry.go`
+- App-owned Up Next probe, auth/queue classification, and private retry policy: `../internal/app/upnext_probe.go`
 - Shared flag parsing/usage helpers: `../cmd/pocketcastsctl/flag_helpers.go`
 - Managed local-playback lifecycle, process identity, persistence, and locking: `../internal/localplayback/`
 - Other command handlers: `../cmd/pocketcastsctl/cmd_local.go`, `../cmd/pocketcastsctl/cmd_doctor.go`, `../cmd/pocketcastsctl/help.go`
@@ -49,6 +50,7 @@
 - HTTP/API behavior tests for Pocket Casts client live in: `../internal/pocketcasts/client_http_test.go`
 - Browser AppleScript execution/parsing tests with a fake `osascript` binary live in: `../internal/browsercontrol/controller_exec_test.go`
 - App-layer queue/auth status tests live in: `../internal/app/now_queue_test.go`, `../internal/app/auth_verify_test.go`
+- Shared-request, credential-rotation, deadline, and retry regressions: `../internal/app/now_probe_test.go`, `../internal/app/upnext_probe_test.go`, `../internal/app/upnext_probe_context_test.go`
 - Opt-in, non-persisting browser smoke test: `POCKETCASTS_LIVE_BROWSER=dia go test ./internal/authn -run TestLiveBrowserSession -count=1`
 - Script harness coverage command: `make test-scripts-cover`
 

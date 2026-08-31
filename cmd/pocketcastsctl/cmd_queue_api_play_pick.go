@@ -28,7 +28,7 @@ func runQueueAPIPlay(args []string, cfg config.Config, client *pocketcasts.Clien
 		return code
 	}
 
-	body, err := fetchUpNextWithRetry(ctx, client, "0")
+	snapshot, err := fetchUpNextWithRetry(ctx, client, "0")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "queue api play: failed to fetch queue: %v\n", err)
 		if authutil.IsUnauthorizedError(err) {
@@ -36,11 +36,11 @@ func runQueueAPIPlay(args []string, cfg config.Config, client *pocketcasts.Clien
 		}
 		return 1
 	}
-	eps, err := pocketcasts.ExtractUpNextEpisodes(body)
-	if err != nil {
+	if err := snapshot.ParseError; err != nil {
 		fmt.Fprintf(os.Stderr, "queue api play: failed to parse queue: %v\n", err)
 		return 1
 	}
+	eps := snapshot.Episodes
 	candidates := filterQueueOccurrences(queueOccurrences(eps), *search)
 	if len(candidates) == 0 {
 		fmt.Fprintln(os.Stderr, "queue api play: no episodes matched")
@@ -88,7 +88,7 @@ func runQueueAPIPick(args []string, cfg config.Config, client *pocketcasts.Clien
 		return 2
 	}
 
-	body, err := fetchUpNextWithRetry(ctx, client, "0")
+	snapshot, err := fetchUpNextWithRetry(ctx, client, "0")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "queue api pick: failed to fetch queue: %v\n", err)
 		if authutil.IsUnauthorizedError(err) {
@@ -96,12 +96,12 @@ func runQueueAPIPick(args []string, cfg config.Config, client *pocketcasts.Clien
 		}
 		return 1
 	}
-	eps, err := pocketcasts.ExtractUpNextEpisodes(body)
-	if err != nil {
+	if err := snapshot.ParseError; err != nil {
 		fmt.Fprintf(os.Stderr, "queue api pick: failed to parse queue: %v\n", err)
 		return 1
 	}
-	progress, _ := pocketcasts.ExtractEpisodeProgress(body)
+	eps := snapshot.Episodes
+	progress := snapshot.Progress
 	candidates := applyQueueOccurrenceFilters(queueOccurrences(eps), progress, *search, *recent, *unplayed, *inProgress)
 	if *limit > 0 && *limit < len(candidates) {
 		candidates = candidates[:*limit]

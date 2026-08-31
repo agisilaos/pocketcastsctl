@@ -30,6 +30,10 @@ _Avoid_: Owned process, local session
 An authenticated relationship with the Pocket Casts API used by CLI commands, independent of the browser configured for Web Player playback. Only one API session is active at a time.
 _Avoid_: Browser authentication, stored header
 
+**API session verification**:
+An observation that the Pocket Casts API accepts the active API session. Verification does not imply that the returned queue contents can be interpreted.
+_Avoid_: Queue validation
+
 **Credential source**:
 The origin from which a command resolves its active API session. Source precedence determines which available credential governs the command.
 _Avoid_: Authentication method
@@ -59,6 +63,10 @@ Authorizing the CLI by entering a device code on the Pocket Casts website, which
 _Avoid_: Browserless login
 
 ## Queue
+
+**Up Next snapshot**:
+A point-in-time observation of the ordered Up Next queue and available saved episode progress. A known empty queue is distinct from an observation whose queue contents cannot be determined.
+_Avoid_: Queue response
 
 **Queue occurrence**:
 One position occupied by an episode in the ordered Up Next queue. The same episode may have multiple queue occurrences, each identified by its own position.

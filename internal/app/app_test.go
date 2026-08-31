@@ -3,9 +3,11 @@ package app
 import (
 	"context"
 	"errors"
+	"net/http"
 	"reflect"
 	"testing"
 
+	"pocketcastsctl/internal/authn"
 	"pocketcastsctl/internal/config"
 	"pocketcastsctl/internal/localplayback"
 )
@@ -53,18 +55,6 @@ func TestErrorStringAndUnwrap(t *testing.T) {
 	}
 }
 
-func TestIsRetryableTransientError(t *testing.T) {
-	if isRetryableTransientError(nil) {
-		t.Fatalf("nil error should not be retryable")
-	}
-	if !isRetryableTransientError(errors.New("connection refused by peer")) {
-		t.Fatalf("expected retryable connection error")
-	}
-	if isRetryableTransientError(errors.New("unauthorized")) {
-		t.Fatalf("unauthorized should not be retryable")
-	}
-}
-
 func TestSuggestNowActions(t *testing.T) {
 	actions := suggestNowActions(NowSnapshot{
 		Auth:  NowAuthStatus{Status: "missing"},
@@ -90,7 +80,10 @@ func TestCollectAuthStatusNoVerify(t *testing.T) {
 			"Authorization": "Bearer x.eyJleHAiOjE3MzU2ODk2MDB9.y",
 		},
 	}
-	status := collectAuthStatus(context.Background(), cfg, NowOptions{VerifyAuth: false})
+	client := &http.Client{Transport: probeTransport(func(*http.Request) (*http.Response, error) {
+		return probeResponse(http.StatusOK, `{"episodes":[]}`), nil
+	})}
+	status, _ := collectNowAPIStatus(context.Background(), cfg, NowOptions{}, authn.ManagerOptions{HTTP: client})
 	if status.Status != "configured" {
 		t.Fatalf("status = %q, want configured", status.Status)
 	}

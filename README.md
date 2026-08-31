@@ -141,7 +141,9 @@ Use `now` as the main dashboard command:
 ./bin/pocketcastsctl now --json
 ```
 
-`now` merges a Web Player playback snapshot, local status, queue health, auth state, and next-action suggestions in one view. Snapshot sources are collected independently so a slow auth or queue check does not starve Web Player playback details. Watch mode reports positions observed from the player at each interval; it does not estimate progress between observations.
+`now` merges a Web Player playback snapshot, local status, queue health, auth state, and next-action suggestions in one view. Web Player and local playback collection run concurrently with the API check. With `--verify-auth`, queue health and auth verification share one Up Next request and credential manager; successful authentication does not require a readable queue response. Watch mode reports positions observed from the player at each interval; it does not estimate progress between observations.
+
+The combined API check has a six-second budget, including credential lookup and retries. Ordinary `now` makes one attempt; `now --verify-auth` allows two attempts and `auth verify` allows three. Verification retries HTTP 408, 429, and 5xx responses and recognized transient network errors, stopping when its deadline expires or the caller cancels. The client's existing token refresh and request replay can add requests within an attempt.
 
 Sample output:
 
@@ -265,6 +267,8 @@ This path calls Pocket Casts’ private API (`up_next/list`, `up_next/play_next`
 ```
 
 Numeric selectors address a specific queue occurrence. If the same episode UUID appears more than once, a UUID selector addresses its first occurrence; `queue api dedupe` explicitly keeps that first occurrence and removes later ones.
+
+For a recognized empty queue, `queue api ls --json` prints `[]`, the plain listing prints no items, and `now` reports the queue as empty. An unknown response shape is not treated as empty: playback and reorder commands report a parse failure, while the listing keeps its response fallback for inspection. Use `queue api ls --raw` to print the original response, even when its shape or JSON cannot be parsed.
 
 `doctor explain <code>` explains specific doctor failure/warning codes and the fastest fix:
 

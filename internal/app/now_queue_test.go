@@ -6,11 +6,12 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"pocketcastsctl/internal/authn"
 	"pocketcastsctl/internal/config"
 )
 
 func TestCollectQueueStatusMissingAuthHeader(t *testing.T) {
-	st := collectQueueStatus(context.Background(), config.Config{})
+	_, st := collectNowAPIStatus(context.Background(), config.Config{}, NowOptions{}, authn.ManagerOptions{})
 	if st.Status != "unauthorized" {
 		t.Fatalf("status = %q, want unauthorized", st.Status)
 	}
@@ -27,7 +28,7 @@ func TestCollectQueueStatusUnauthorizedResponse(t *testing.T) {
 		APIBaseURL: srv.URL,
 		APIHeaders: map[string]string{"Authorization": "Bearer token"},
 	}
-	st := collectQueueStatus(context.Background(), cfg)
+	_, st := collectNowAPIStatus(context.Background(), cfg, NowOptions{}, authn.ManagerOptions{})
 	if st.Status != "unauthorized" {
 		t.Fatalf("status = %q, want unauthorized", st.Status)
 	}
@@ -44,7 +45,7 @@ func TestCollectQueueStatusParseFailure(t *testing.T) {
 		APIBaseURL: srv.URL,
 		APIHeaders: map[string]string{"Authorization": "Bearer token"},
 	}
-	st := collectQueueStatus(context.Background(), cfg)
+	_, st := collectNowAPIStatus(context.Background(), cfg, NowOptions{}, authn.ManagerOptions{})
 	if st.Status != "unavailable" {
 		t.Fatalf("status = %q, want unavailable", st.Status)
 	}
@@ -74,7 +75,7 @@ func TestCollectQueueStatusReady(t *testing.T) {
 		APIBaseURL: srv.URL,
 		APIHeaders: map[string]string{"Authorization": "Bearer token"},
 	}
-	st := collectQueueStatus(context.Background(), cfg)
+	_, st := collectNowAPIStatus(context.Background(), cfg, NowOptions{}, authn.ManagerOptions{})
 	if st.Status != "ready" {
 		t.Fatalf("status = %q, want ready", st.Status)
 	}
@@ -86,5 +87,24 @@ func TestCollectQueueStatusReady(t *testing.T) {
 	}
 	if st.InProgressCount != 1 {
 		t.Fatalf("inProgress = %d, want 1", st.InProgressCount)
+	}
+}
+
+func TestCollectQueueStatusEmpty(t *testing.T) {
+	for _, raw := range []string{`{"episodes":[]}`, `{"up_next":{"episodes":[]}}`} {
+		t.Run(raw, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write([]byte(raw))
+			}))
+			defer srv.Close()
+			cfg := config.Config{
+				APIBaseURL: srv.URL,
+				APIHeaders: map[string]string{"Authorization": "Bearer token"},
+			}
+			_, status := collectNowAPIStatus(context.Background(), cfg, NowOptions{}, authn.ManagerOptions{})
+			if status.Status != "empty" || status.Total != 0 || status.Error != "" {
+				t.Fatalf("expected empty queue status, got %+v", status)
+			}
+		})
 	}
 }
