@@ -39,40 +39,53 @@ func TokenExpiryUnix(headers map[string]string) (int64, bool) {
 	return 0, false
 }
 
-func TokenExpFromToken(tok string) (int64, bool) {
-	m, ok := tokenClaims(tok)
-	if !ok {
-		return 0, false
-	}
-	switch v := m["exp"].(type) {
-	case float64:
-		return int64(v), true
-	case int64:
-		return v, true
-	case int:
-		return int64(v), true
-	default:
-		return 0, false
-	}
+// TokenMetadata contains unverified JWT claims, not proof of authentication.
+type TokenMetadata struct {
+	AccountID string
+	Email     string
+	ExpiresAt int64
+	HasExpiry bool
 }
 
-// TokenIdentityFromToken extracts stable, non-secret account metadata from a
-// JWT when the issuer includes it. Missing or opaque claims are ignored.
-func TokenIdentityFromToken(tok string) (accountID, email string) {
+// TokenMetadataFromToken decodes the JWT payload once without verifying its
+// signature. Malformed and opaque tokens provide no metadata.
+func TokenMetadataFromToken(tok string) TokenMetadata {
 	claims, ok := tokenClaims(tok)
 	if !ok {
-		return "", ""
+		return TokenMetadata{}
+	}
+	var metadata TokenMetadata
+	switch v := claims["exp"].(type) {
+	case float64:
+		metadata.ExpiresAt, metadata.HasExpiry = int64(v), true
+	case int64:
+		metadata.ExpiresAt, metadata.HasExpiry = v, true
+	case int:
+		metadata.ExpiresAt, metadata.HasExpiry = int64(v), true
 	}
 	for _, key := range []string{"sub", "user_id", "userId", "account_id", "accountId", "uuid"} {
 		if value, ok := claims[key].(string); ok && strings.TrimSpace(value) != "" {
-			accountID = strings.TrimSpace(value)
+			metadata.AccountID = strings.TrimSpace(value)
 			break
 		}
 	}
 	if value, ok := claims["email"].(string); ok {
-		email = strings.ToLower(strings.TrimSpace(value))
+		metadata.Email = strings.ToLower(strings.TrimSpace(value))
 	}
-	return accountID, email
+	return metadata
+}
+
+// TokenExpFromToken extracts unverified expiry metadata from a JWT.
+func TokenExpFromToken(tok string) (int64, bool) {
+	metadata := TokenMetadataFromToken(tok)
+	return metadata.ExpiresAt, metadata.HasExpiry
+}
+
+// TokenIdentityFromToken extracts unverified, non-secret account metadata from a
+// JWT when the issuer includes it. Missing or opaque claims are ignored.
+func TokenIdentityFromToken(tok string) (accountID, email string) {
+	metadata := TokenMetadataFromToken(tok)
+	return metadata.AccountID, metadata.Email
 }
 
 func NormalizeToken(token string) string {
@@ -83,10 +96,11 @@ func NormalizeToken(token string) string {
 }
 
 func decodeJWTPart(s string) ([]byte, error) {
-	if l := len(s) % 4; l != 0 {
-		s += strings.Repeat("=", 4-l)
+	encoding := base64.RawURLEncoding
+	if strings.HasSuffix(s, "=") {
+		encoding = base64.URLEncoding
 	}
-	return base64.RawURLEncoding.DecodeString(s)
+	return encoding.DecodeString(s)
 }
 
 func tokenClaims(tok string) (map[string]any, bool) {

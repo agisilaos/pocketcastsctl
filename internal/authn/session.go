@@ -35,15 +35,15 @@ func (s Session) normalized() Session {
 	s.AccountID = strings.TrimSpace(s.AccountID)
 	s.Email = strings.ToLower(strings.TrimSpace(s.Email))
 	s.Method = strings.TrimSpace(s.Method)
-	accountID, email := authutil.TokenIdentityFromToken(s.AccessToken)
+	metadata := authutil.TokenMetadataFromToken(s.AccessToken)
 	if s.AccountID == "" {
-		s.AccountID = accountID
+		s.AccountID = metadata.AccountID
 	}
 	if s.Email == "" {
-		s.Email = email
+		s.Email = metadata.Email
 	}
-	if exp, ok := authutil.TokenExpFromToken(s.AccessToken); ok {
-		s.ExpiresAt = exp
+	if metadata.HasExpiry {
+		s.ExpiresAt = metadata.ExpiresAt
 	}
 	return s
 }
