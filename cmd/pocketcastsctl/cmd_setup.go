@@ -244,7 +244,7 @@ func setupAuthConfigured(cfg config.Config) bool {
 func setupStepVerify(cfg config.Config, report *setupReport) int {
 	fmt.Fprintln(os.Stderr, "setup step 3/4: verify auth with API")
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
-	err := app.VerifyAuth(ctx, cfg, app.VerifyOptions{Attempts: 3, BaseDelay: 200 * time.Millisecond})
+	err := app.VerifyAuth(ctx, cfg)
 	cancel()
 	if err != nil {
 		hint := "run `pocketcastsctl auth login` or import a browser session"

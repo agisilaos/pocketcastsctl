@@ -10,7 +10,7 @@ import (
 )
 
 func TestVerifyAuthMissingHeader(t *testing.T) {
-	err := VerifyAuth(context.Background(), config.Config{}, VerifyOptions{})
+	err := VerifyAuth(context.Background(), config.Config{})
 	if KindOf(err) != KindUnauthorized {
 		t.Fatalf("kind = %q, want %q", KindOf(err), KindUnauthorized)
 	}
@@ -27,7 +27,7 @@ func TestVerifyAuthSuccess(t *testing.T) {
 		APIBaseURL: srv.URL,
 		APIHeaders: map[string]string{"Authorization": "Bearer token"},
 	}
-	if err := VerifyAuth(context.Background(), cfg, VerifyOptions{Attempts: 1}); err != nil {
+	if err := VerifyAuth(context.Background(), cfg); err != nil {
 		t.Fatalf("VerifyAuth error: %v", err)
 	}
 }
@@ -43,7 +43,7 @@ func TestVerifyAuthDoesNotDependOnQueueParsing(t *testing.T) {
 				APIBaseURL: srv.URL,
 				APIHeaders: map[string]string{"Authorization": "Bearer token"},
 			}
-			if err := VerifyAuth(context.Background(), cfg, VerifyOptions{Attempts: 1}); err != nil {
+			if err := VerifyAuth(context.Background(), cfg); err != nil {
 				t.Fatalf("successful API request failed auth verification: %v", err)
 			}
 		})
@@ -61,7 +61,7 @@ func TestVerifyAuthUnauthorized(t *testing.T) {
 		APIBaseURL: srv.URL,
 		APIHeaders: map[string]string{"Authorization": "Bearer token"},
 	}
-	err := VerifyAuth(context.Background(), cfg, VerifyOptions{Attempts: 1})
+	err := VerifyAuth(context.Background(), cfg)
 	if KindOf(err) != KindUnauthorized {
 		t.Fatalf("kind = %q, want %q (err=%v)", KindOf(err), KindUnauthorized, err)
 	}
@@ -78,7 +78,7 @@ func TestVerifyAuthTransient(t *testing.T) {
 		APIBaseURL: srv.URL,
 		APIHeaders: map[string]string{"Authorization": "Bearer token"},
 	}
-	err := VerifyAuth(context.Background(), cfg, VerifyOptions{Attempts: 1})
+	err := VerifyAuth(context.Background(), cfg)
 	if KindOf(err) != KindTransient {
 		t.Fatalf("kind = %q, want %q (err=%v)", KindOf(err), KindTransient, err)
 	}

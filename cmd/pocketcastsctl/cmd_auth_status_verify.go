@@ -181,7 +181,7 @@ func runAuthVerify(args []string, cfg config.Config) int {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
-	err := app.VerifyAuth(ctx, cfg, app.VerifyOptions{Attempts: 3, BaseDelay: 200 * time.Millisecond})
+	err := app.VerifyAuth(ctx, cfg)
 
 	status := map[string]any{
 		"verified": false,
