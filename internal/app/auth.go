@@ -34,7 +34,7 @@ func isMissingAuthError(err error) bool {
 	return errors.Is(err, authn.ErrNotConfigured)
 }
 
-func fetchUpNextWithRetry(ctx context.Context, client *pocketcasts.Client, opts VerifyOptions) ([]byte, error) {
+func fetchUpNextWithRetry(ctx context.Context, client *pocketcasts.Client, opts VerifyOptions) (pocketcasts.UpNextSnapshot, error) {
 	attempts := opts.Attempts
 	if attempts < 1 {
 		attempts = 3
@@ -44,20 +44,15 @@ func fetchUpNextWithRetry(ctx context.Context, client *pocketcasts.Client, opts 
 		baseDelay = 200 * time.Millisecond
 	}
 
-	var body []byte
+	var snapshot pocketcasts.UpNextSnapshot
 	var lastErr error
 	for i := 1; i <= attempts; i++ {
 		if err := ctx.Err(); err != nil {
-			return nil, err
+			return pocketcasts.UpNextSnapshot{}, err
 		}
-		body, lastErr = client.UpNextList(ctx, pocketcasts.UpNextListRequest{
-			Model:          "webplayer",
-			ServerModified: "0",
-			ShowPlayStatus: true,
-			Version:        2,
-		})
+		snapshot, lastErr = client.UpNextList(ctx, "0")
 		if lastErr == nil {
-			return body, nil
+			return snapshot, nil
 		}
 		if i == attempts || !isRetryableTransientError(lastErr) {
 			break
@@ -66,11 +61,11 @@ func fetchUpNextWithRetry(ctx context.Context, client *pocketcasts.Client, opts 
 		select {
 		case <-ctx.Done():
 			timer.Stop()
-			return nil, ctx.Err()
+			return pocketcasts.UpNextSnapshot{}, ctx.Err()
 		case <-timer.C:
 		}
 	}
-	return nil, lastErr
+	return pocketcasts.UpNextSnapshot{}, lastErr
 }
 
 func isRetryableTransientError(err error) bool {

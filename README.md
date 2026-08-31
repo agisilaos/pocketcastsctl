@@ -266,6 +266,8 @@ This path calls Pocket Casts’ private API (`up_next/list`, `up_next/play_next`
 
 Numeric selectors address a specific queue occurrence. If the same episode UUID appears more than once, a UUID selector addresses its first occurrence; `queue api dedupe` explicitly keeps that first occurrence and removes later ones.
 
+For a recognized empty queue, `queue api ls --json` prints `[]`, the plain listing prints no items, and `now` reports the queue as empty. An unknown response shape is not treated as empty: playback and reorder commands report a parse failure, while the listing keeps its response fallback for inspection. Use `queue api ls --raw` to print the original response, even when its shape or JSON cannot be parsed.
+
 `doctor explain <code>` explains specific doctor failure/warning codes and the fastest fix:
 
 ```bash

@@ -9,12 +9,28 @@ import (
 
 var uuidLike = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
-// ExtractUpNextEpisodes finds episode-like objects in the Up Next JSON response.
-// It is intentionally tolerant of schema changes and only requires uuid+title.
-func ExtractUpNextEpisodes(raw []byte) ([]UpNextEpisode, error) {
+// ErrUnknownUpNextShape means valid JSON contained neither a recognized empty
+// queue nor recoverable episode metadata.
+var ErrUnknownUpNextShape = errors.New("unknown Up Next response shape")
+
+func parseUpNextSnapshot(raw []byte) UpNextSnapshot {
+	snapshot := UpNextSnapshot{Raw: raw}
 	var v any
 	if err := json.Unmarshal(raw, &v); err != nil {
-		return nil, err
+		snapshot.ParseError = err
+		return snapshot
+	}
+	snapshot.Episodes, snapshot.ParseError = extractUpNextEpisodes(v)
+	snapshot.Progress = extractEpisodeProgress(v)
+	return snapshot
+}
+
+// extractUpNextEpisodes tolerates schema changes and only requires uuid+title.
+func extractUpNextEpisodes(v any) ([]UpNextEpisode, error) {
+	// A known empty queue takes precedence over episode metadata elsewhere in
+	// the response, including episodeSync. Arbitrary empty arrays prove nothing.
+	if isEmptyUpNextQueue(v) {
+		return []UpNextEpisode{}, nil
 	}
 
 	if eps, ok := extractFromBestArray(v); ok {
@@ -73,9 +89,26 @@ func ExtractUpNextEpisodes(raw []byte) ([]UpNextEpisode, error) {
 		out = append(out, seen[id])
 	}
 	if len(out) == 0 {
-		return nil, errors.New("no episodes found in response")
+		return nil, ErrUnknownUpNextShape
 	}
 	return out, nil
+}
+
+func isEmptyUpNextQueue(root any) bool {
+	if entries, ok := root.([]any); ok {
+		return len(entries) == 0
+	}
+	object, ok := root.(map[string]any)
+	if !ok {
+		return false
+	}
+	if queue, ok := object["up_next"].(map[string]any); ok {
+		if entries, ok := queue["episodes"].([]any); ok {
+			return len(entries) == 0
+		}
+	}
+	entries, ok := object["episodes"].([]any)
+	return ok && len(entries) == 0
 }
 
 func extractFromBestArray(root any) ([]UpNextEpisode, bool) {
@@ -165,14 +198,9 @@ func firstString(m map[string]any, keys ...string) string {
 	return ""
 }
 
-// ExtractEpisodeProgress returns played seconds by episode UUID from
+// extractEpisodeProgress returns played seconds by episode UUID from
 // Up Next responses that include an episodeSync-like array.
-func ExtractEpisodeProgress(raw []byte) (map[string]int, error) {
-	var v any
-	if err := json.Unmarshal(raw, &v); err != nil {
-		return nil, err
-	}
-
+func extractEpisodeProgress(v any) map[string]int {
 	out := map[string]int{}
 	var walk func(any)
 	walk = func(x any) {
@@ -194,7 +222,7 @@ func ExtractEpisodeProgress(raw []byte) (map[string]int, error) {
 		}
 	}
 	walk(v)
-	return out, nil
+	return out
 }
 
 func firstInt(m map[string]any, keys ...string) (int, bool) {

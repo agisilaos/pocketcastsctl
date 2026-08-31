@@ -88,3 +88,22 @@ func TestCollectQueueStatusReady(t *testing.T) {
 		t.Fatalf("inProgress = %d, want 1", st.InProgressCount)
 	}
 }
+
+func TestCollectQueueStatusEmpty(t *testing.T) {
+	for _, raw := range []string{`{"episodes":[]}`, `{"up_next":{"episodes":[]}}`} {
+		t.Run(raw, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write([]byte(raw))
+			}))
+			defer srv.Close()
+			cfg := config.Config{
+				APIBaseURL: srv.URL,
+				APIHeaders: map[string]string{"Authorization": "Bearer token"},
+			}
+			status := collectQueueStatus(context.Background(), cfg)
+			if status.Status != "empty" || status.Total != 0 || status.Error != "" {
+				t.Fatalf("expected empty queue status, got %+v", status)
+			}
+		})
+	}
+}

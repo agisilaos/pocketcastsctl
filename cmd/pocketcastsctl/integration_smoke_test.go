@@ -190,4 +190,7 @@ func TestCLISmokeLocalPlayDryRun(t *testing.T) {
 	if !strings.Contains(stdout, "dry-run: would play local audio: Local Smoke") {
 		t.Fatalf("stdout missing local dry-run summary: %q", stdout)
 	}
+	if !strings.Contains(stdout, "[from 1:35]") {
+		t.Fatalf("stdout missing saved progress: %q", stdout)
+	}
 }

@@ -60,6 +60,10 @@ _Avoid_: Browserless login
 
 ## Queue
 
+**Up Next snapshot**:
+A point-in-time observation of the ordered Up Next queue and available saved episode progress. A known empty queue is distinct from an observation whose queue contents cannot be determined.
+_Avoid_: Queue response
+
 **Queue occurrence**:
 One position occupied by an episode in the ordered Up Next queue. The same episode may have multiple queue occurrences, each identified by its own position.
 _Avoid_: Duplicate episode

@@ -38,7 +38,7 @@ func runQueueAPILS(args []string, client *pocketcasts.Client, ctx context.Contex
 		return 2
 	}
 
-	body, err := fetchUpNextWithRetry(ctx, client, serverModified)
+	snapshot, err := fetchUpNextWithRetry(ctx, client, serverModified)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "queue api ls failed: %v\n", err)
 		if authutil.IsUnauthorizedError(err) {
@@ -48,15 +48,14 @@ func runQueueAPILS(args []string, client *pocketcasts.Client, ctx context.Contex
 	}
 
 	if *raw {
-		fmt.Println(string(body))
+		fmt.Println(string(snapshot.Raw))
 		return 0
 	}
 
-	eps, err := pocketcasts.ExtractUpNextEpisodes(body)
-	if err != nil {
+	if snapshot.ParseError != nil {
 		var v any
-		if err := json.Unmarshal(body, &v); err != nil {
-			fmt.Println(string(body))
+		if err := json.Unmarshal(snapshot.Raw, &v); err != nil {
+			fmt.Println(string(snapshot.Raw))
 			return 0
 		}
 		b, _ := json.MarshalIndent(v, "", "  ")
@@ -64,7 +63,7 @@ func runQueueAPILS(args []string, client *pocketcasts.Client, ctx context.Contex
 		return 0
 	}
 
-	occurrences := filterQueueOccurrences(queueOccurrences(eps), *search)
+	occurrences := filterQueueOccurrences(queueOccurrences(snapshot.Episodes), *search)
 	if *limit > 0 && *limit < len(occurrences) {
 		occurrences = occurrences[:*limit]
 	}

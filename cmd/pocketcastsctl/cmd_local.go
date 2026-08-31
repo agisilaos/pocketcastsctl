@@ -66,22 +66,17 @@ func runLocalPick(args []string, cfg config.Config) int {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
-	body, err := client.UpNextList(ctx, pocketcasts.UpNextListRequest{
-		Model:          "webplayer",
-		ServerModified: "0",
-		ShowPlayStatus: true,
-		Version:        2,
-	})
+	snapshot, err := client.UpNextList(ctx, "0")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "local pick: failed to fetch queue: %v\n", err)
 		return 1
 	}
-	eps, err := pocketcasts.ExtractUpNextEpisodes(body)
-	if err != nil {
+	if err := snapshot.ParseError; err != nil {
 		fmt.Fprintf(os.Stderr, "local pick: failed to parse queue: %v\n", err)
 		return 1
 	}
-	progress, _ := pocketcasts.ExtractEpisodeProgress(body)
+	eps := snapshot.Episodes
+	progress := snapshot.Progress
 	candidates := applyQueueOccurrenceFilters(queueOccurrences(eps), progress, *search, *recent, *unplayed, *inProgress)
 	if *limit > 0 && *limit < len(candidates) {
 		candidates = candidates[:*limit]
@@ -124,21 +119,16 @@ func runLocalPlay(args []string, cfg config.Config) int {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
-	body, err := client.UpNextList(ctx, pocketcasts.UpNextListRequest{
-		Model:          "webplayer",
-		ServerModified: "0",
-		ShowPlayStatus: true,
-		Version:        2,
-	})
+	snapshot, err := client.UpNextList(ctx, "0")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "local play: failed to fetch queue: %v\n", err)
 		return 1
 	}
-	eps, err := pocketcasts.ExtractUpNextEpisodes(body)
-	if err != nil {
+	if err := snapshot.ParseError; err != nil {
 		fmt.Fprintf(os.Stderr, "local play: failed to parse queue: %v\n", err)
 		return 1
 	}
+	eps := snapshot.Episodes
 	target, err := selectEpisode(queueOccurrences(eps), fs.Arg(0))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "local play: %v\n", err)
@@ -146,8 +136,7 @@ func runLocalPlay(args []string, cfg config.Config) int {
 	}
 	startAt := 0
 	if !*fromStart {
-		progress, _ := pocketcasts.ExtractEpisodeProgress(body)
-		startAt = progress[target.Episode.UUID]
+		startAt = snapshot.Progress[target.Episode.UUID]
 	}
 	if *dryRun {
 		title := strings.TrimSpace(target.Episode.Title)

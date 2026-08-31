@@ -12,7 +12,6 @@ import (
 	"pocketcastsctl/internal/browsercontrol"
 	"pocketcastsctl/internal/config"
 	"pocketcastsctl/internal/localplayback"
-	"pocketcastsctl/internal/pocketcasts"
 )
 
 type NowOptions struct {
@@ -182,12 +181,7 @@ func collectQueueStatus(ctx context.Context, cfg config.Config) NowQueueStatus {
 	client, _ := authn.NewPocketCastsClient(cfg, authn.ManagerOptions{})
 	ctx, cancel := context.WithTimeout(ctx, 6*time.Second)
 	defer cancel()
-	body, err := client.UpNextList(ctx, pocketcasts.UpNextListRequest{
-		Model:          "webplayer",
-		ServerModified: "0",
-		ShowPlayStatus: true,
-		Version:        2,
-	})
+	snapshot, err := client.UpNextList(ctx, "0")
 	if err != nil {
 		if isMissingAuthError(err) {
 			return NowQueueStatus{Status: "unauthorized", Error: "API authentication is not configured"}
@@ -197,16 +191,15 @@ func collectQueueStatus(ctx context.Context, cfg config.Config) NowQueueStatus {
 		}
 		return NowQueueStatus{Status: "unavailable", Error: err.Error()}
 	}
-	eps, err := pocketcasts.ExtractUpNextEpisodes(body)
-	if err != nil {
+	if snapshot.ParseError != nil {
 		return NowQueueStatus{Status: "unavailable", Error: "failed to parse queue"}
 	}
+	eps := snapshot.Episodes
 	if len(eps) == 0 {
 		return NowQueueStatus{Status: "empty", Total: 0}
 	}
-	progress, _ := pocketcasts.ExtractEpisodeProgress(body)
 	inProgress := 0
-	for _, p := range progress {
+	for _, p := range snapshot.Progress {
 		if p > 0 {
 			inProgress++
 		}

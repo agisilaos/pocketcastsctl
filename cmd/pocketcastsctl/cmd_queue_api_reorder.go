@@ -30,7 +30,7 @@ func runQueueAPIBump(args []string, client *pocketcasts.Client, ctx context.Cont
 		return 2
 	}
 
-	body, err := fetchUpNextWithRetry(ctx, client, "0")
+	snapshot, err := fetchUpNextWithRetry(ctx, client, "0")
 	if err != nil {
 		errf("queue api bump: failed to fetch queue: %v\n", err)
 		if authutil.IsUnauthorizedError(err) {
@@ -38,11 +38,11 @@ func runQueueAPIBump(args []string, client *pocketcasts.Client, ctx context.Cont
 		}
 		return 1
 	}
-	eps, err := pocketcasts.ExtractUpNextEpisodes(body)
-	if err != nil {
+	if err := snapshot.ParseError; err != nil {
 		errf("queue api bump: failed to parse queue: %v\n", err)
 		return 1
 	}
+	eps := snapshot.Episodes
 	if len(eps) == 0 {
 		errln("queue api bump: queue is empty")
 		return 1
@@ -102,7 +102,7 @@ func runQueueAPIMove(args []string, client *pocketcasts.Client, ctx context.Cont
 		return 2
 	}
 
-	body, err := fetchUpNextWithRetry(ctx, client, "0")
+	snapshot, err := fetchUpNextWithRetry(ctx, client, "0")
 	if err != nil {
 		errf("queue api move: failed to fetch queue: %v\n", err)
 		if authutil.IsUnauthorizedError(err) {
@@ -110,11 +110,11 @@ func runQueueAPIMove(args []string, client *pocketcasts.Client, ctx context.Cont
 		}
 		return 1
 	}
-	eps, err := pocketcasts.ExtractUpNextEpisodes(body)
-	if err != nil {
+	if err := snapshot.ParseError; err != nil {
 		errf("queue api move: failed to parse queue: %v\n", err)
 		return 1
 	}
+	eps := snapshot.Episodes
 	if len(eps) == 0 {
 		errln("queue api move: queue is empty")
 		return 1
@@ -179,7 +179,7 @@ func runQueueAPIDedupe(args []string, client *pocketcasts.Client, ctx context.Co
 		return 2
 	}
 
-	body, err := fetchUpNextWithRetry(ctx, client, "0")
+	snapshot, err := fetchUpNextWithRetry(ctx, client, "0")
 	if err != nil {
 		errf("queue api dedupe: failed to fetch queue: %v\n", err)
 		if authutil.IsUnauthorizedError(err) {
@@ -187,11 +187,11 @@ func runQueueAPIDedupe(args []string, client *pocketcasts.Client, ctx context.Co
 		}
 		return 1
 	}
-	eps, err := pocketcasts.ExtractUpNextEpisodes(body)
-	if err != nil {
+	if err := snapshot.ParseError; err != nil {
 		errf("queue api dedupe: failed to parse queue: %v\n", err)
 		return 1
 	}
+	eps := snapshot.Episodes
 	if len(eps) == 0 {
 		errln("queue api dedupe: queue is empty")
 		return 1
