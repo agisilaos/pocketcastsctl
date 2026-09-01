@@ -4,6 +4,30 @@ All notable changes to this project will be documented in this file.
 
 The format is based on *Keep a Changelog*, and this project adheres to *Semantic Versioning*.
 
+## [v0.1.7] - 2026-09-01
+
+No supported command or output schema was removed. Commands that previously ignored unsupported Web flags or attempted to replace an environment-sourced API session now fail with explicit usage or safety errors.
+
+### Added
+
+- Added richer Web Player snapshots to `web status` and `now`, including episode identity, observed progress, coherent playback states, explicit Safari and Dia support, and player-scoped actions that cannot accidentally trigger episode-card controls ([#1](https://github.com/agisilaos/pocketcastsctl/pull/1)).
+
+### Changed
+
+- Made managed local playback safer and more reliable by identifying player processes by PID and process birth, serializing lifecycle operations, validating persisted state, and reconciling CLI and `now` snapshots through one controller ([#7](https://github.com/agisilaos/pocketcastsctl/pull/7)).
+- Kept temporary browser, URL, and API environment overrides out of persisted configuration, added `config show --saved`, preserved unknown configuration fields, and kept recovery commands available when configuration cannot be loaded ([#11](https://github.com/agisilaos/pocketcastsctl/pull/11), [#12](https://github.com/agisilaos/pocketcastsctl/pull/12)).
+- Centralized Up Next requests and parsing so queue commands recognize known empty queues, retain progress and repeated occurrences, preserve raw responses, and let verified `now` output derive authentication and queue status from the same observation ([#17](https://github.com/agisilaos/pocketcastsctl/pull/17), [#18](https://github.com/agisilaos/pocketcastsctl/pull/18)).
+- Standardized release preparation around reviewed, traceable changelog notes, a single strict validation gate, reproducible dry-run artifacts, and validated Homebrew formula rendering ([#15](https://github.com/agisilaos/pocketcastsctl/pull/15)).
+
+### Fixed
+
+- Prevented login and browser import from reporting a successful replacement while an environment-sourced API session remains active, with explicit recovery guidance for dormant saved sessions ([#9](https://github.com/agisilaos/pocketcastsctl/pull/9)).
+- Made every authentication command reject conflicting `--json` and `--plain` output flags consistently before credential or browser work begins ([#10](https://github.com/agisilaos/pocketcastsctl/pull/10)).
+- Preserved account, email, and expiry metadata for valid JWT payloads that require Base64URL padding while retaining opaque-token support and existing identity precedence ([#16](https://github.com/agisilaos/pocketcastsctl/pull/16)).
+- Made each Web subcommand reject unsupported flags, conflicting output modes, and trailing arguments before browser setup ([#8](https://github.com/agisilaos/pocketcastsctl/pull/8)).
+- Made Escape and Ctrl-C cancel interactive `fzf` selection instead of unexpectedly opening the numbered fallback prompt, while retaining fallback for actual picker failures ([#13](https://github.com/agisilaos/pocketcastsctl/pull/13)).
+- Preserved the selected occurrence of repeated episodes through Up Next filtering, interactive selection, and queue reordering instead of silently moving the first matching episode ([#14](https://github.com/agisilaos/pocketcastsctl/pull/14)).
+
 ## [v0.1.6] - 2026-08-24
 
 ### Added
