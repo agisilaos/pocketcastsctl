@@ -12,7 +12,11 @@ import (
 	"pocketcastsctl/internal/app"
 )
 
-const nowTUIWideMinimum = 88
+const (
+	nowTUIWideMinimum = 88
+	nowTUIMaxWidth    = 512
+	nowTUIMaxHeight   = 200
+)
 
 type nowTUIColorMode uint8
 
@@ -163,8 +167,8 @@ func (theme nowTUITheme) tone(label nowTUILabel) string {
 }
 
 func renderNowTUIFrame(model nowTUIModel, width, height int, now time.Time, theme nowTUITheme, unicodeOutput bool) string {
-	width = max(1, width)
-	height = max(1, height)
+	width = max(1, min(width, nowTUIMaxWidth))
+	height = max(1, min(height, nowTUIMaxHeight))
 	chars := nowTUICharacters(unicodeOutput)
 	if width < 40 || height < 20 {
 		return renderNowTUICompact(model, width, height, now, theme, chars)

@@ -167,6 +167,9 @@ func TestRenderNowTUIWideAndNarrowLayouts(t *testing.T) {
 
 	userTerminal := renderNowTUIFrame(model, 244, 70, now, theme, true)
 	assertNowTUIFrameSize(t, userTerminal, 244, 70)
+
+	pathologicalTerminal := renderNowTUIFrame(model, 65535, 65535, now, theme, true)
+	assertNowTUIFrameSize(t, pathologicalTerminal, nowTUIMaxWidth, nowTUIMaxHeight)
 }
 
 func TestRenderNowTUIUsesPocketCastsTrueColorPalette(t *testing.T) {
