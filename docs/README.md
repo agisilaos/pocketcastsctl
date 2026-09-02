@@ -19,6 +19,7 @@
 - Config command handling: `../cmd/pocketcastsctl/cmd_config.go`
 - Setup/start flows: `../cmd/pocketcastsctl/cmd_setup.go`
 - Now dashboard flow: `../cmd/pocketcastsctl/cmd_now.go`
+- Framework-free TUI lifecycle and rendering with no new module dependencies: `../cmd/pocketcastsctl/now_tui.go`, `../cmd/pocketcastsctl/now_tui_render.go`
 - Web and HAR handlers: `../cmd/pocketcastsctl/cmd_web_har.go`
 - Playback snapshot output helpers: `../cmd/pocketcastsctl/playback_output.go`
 - Completion command and shell scripts: `../cmd/pocketcastsctl/cmd_completion.go`
@@ -28,7 +29,7 @@
 - API-session lifecycle, Keychain storage, and browser-cookie import: `../internal/authn/`
 - Queue handlers: `../cmd/pocketcastsctl/cmd_queue_dispatch.go`, `../cmd/pocketcastsctl/cmd_queue_api_ls.go`, `../cmd/pocketcastsctl/cmd_queue_api_mutations.go`, `../cmd/pocketcastsctl/cmd_queue_api_play_pick.go`, `../cmd/pocketcastsctl/cmd_queue_helpers.go`, `../cmd/pocketcastsctl/cmd_queue_fetch.go`
 - Shared retry/auth-recovery helpers: `../cmd/pocketcastsctl/cmd_retry.go`
-- App-owned Up Next probe, auth/queue classification, and private retry policy: `../internal/app/upnext_probe.go`
+- App-owned Up Next probe, auth/queue classification, private retry policy, and full cockpit queue projection: `../internal/app/upnext_probe.go`, `../internal/app/cockpit.go`
 - Shared flag parsing/usage helpers: `../cmd/pocketcastsctl/flag_helpers.go`
 - Managed local-playback lifecycle, process identity, persistence, and locking: `../internal/localplayback/`
 - Other command handlers: `../cmd/pocketcastsctl/cmd_local.go`, `../cmd/pocketcastsctl/cmd_doctor.go`, `../cmd/pocketcastsctl/help.go`

@@ -53,7 +53,7 @@ var usageText = map[string]string{
 	"setup auth":          "pocketcastsctl setup auth [--json|--plain] [--no-input]",
 	"setup verify":        "pocketcastsctl setup verify [--json|--plain]",
 	"start":               "pocketcastsctl start [--json|--plain] [--no-input]",
-	"now":                 "pocketcastsctl now [--watch] [--interactive] [--interval 5s] [--verify-auth] [--json|--plain]",
+	"now":                 "pocketcastsctl now [--tui|--watch] [--interactive] [--interval duration] [--verify-auth] [--json|--plain]",
 	"completion":          "pocketcastsctl completion [zsh|bash|fish]",
 	"doctor":              "pocketcastsctl doctor [--json|--plain] [--quick|--full] [--fix [--apply]]",
 	"auth":                "pocketcastsctl auth <login|import-browser|refresh|status|verify|logout>",
@@ -337,6 +337,7 @@ Start here:
 Common tasks:
   Open the now-playing cockpit:
   pocketcastsctl now
+  pocketcastsctl now --tui
   pocketcastsctl now --watch
 
   Run guided setup:
@@ -360,7 +361,7 @@ Common tasks:
 Command reference:
   pocketcastsctl --version
   pocketcastsctl version
-  pocketcastsctl now [--watch] [--interactive] [--interval 5s] [--verify-auth] [--json|--plain]
+  pocketcastsctl now [--tui|--watch] [--interactive] [--interval duration] [--verify-auth] [--json|--plain]
   pocketcastsctl doctor [--json|--plain] [--quick|--full] [--fix [--apply]]
   pocketcastsctl doctor explain <code> [--json]
   pocketcastsctl setup [run|check|auth|verify] [--json|--plain] [--no-input]
@@ -424,13 +425,24 @@ Recommended first-run flow:
 func printNowHelp() {
 	fmt.Print(strings.TrimSpace(`
 Usage:
-  pocketcastsctl now [--watch] [--interactive] [--interval 5s] [--verify-auth] [--json|--plain]
+  pocketcastsctl now [--tui|--watch] [--interactive] [--interval duration] [--verify-auth] [--json|--plain]
 
 Examples:
   pocketcastsctl now
+  pocketcastsctl now --tui
   pocketcastsctl now --watch
   pocketcastsctl now --watch --interval 3s
   pocketcastsctl now --json
+
+TUI keys:
+  j/k or down/up  Scroll Up Next
+  r               Refresh every source
+  q or Ctrl-C     Quit
+
+The TUI observes playback every second by default. --interval changes that
+cadence; values below 250ms are rejected. Up Next refreshes every 30 seconds.
+The TUI requires interactive stdin and stdout and cannot be combined with other
+now output, watch, interaction, verification, or max-update modes.
 `) + "\n")
 }
 

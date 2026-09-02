@@ -17,6 +17,9 @@ func TestCompletionScriptsIncludeNewFlags(t *testing.T) {
 	if !strings.Contains(bash, "--interactive") {
 		t.Fatalf("bash completion missing --interactive")
 	}
+	if !strings.Contains(bash, "--tui") {
+		t.Fatalf("bash completion missing --tui")
+	}
 	if !strings.Contains(bash, "--dry-run") {
 		t.Fatalf("bash completion missing --dry-run")
 	}
@@ -25,11 +28,14 @@ func TestCompletionScriptsIncludeNewFlags(t *testing.T) {
 	}
 
 	zsh := scripts["zsh"]
-	if !strings.Contains(zsh, "--interactive") || !strings.Contains(zsh, "--dry-run") {
+	if !strings.Contains(zsh, "--tui") || !strings.Contains(zsh, "--interactive") || !strings.Contains(zsh, "--dry-run") {
 		t.Fatalf("zsh completion missing new flags")
 	}
 
 	fish := scripts["fish"]
+	if !strings.Contains(fish, "-l tui") {
+		t.Fatalf("fish completion missing --tui")
+	}
 	if strings.Contains(fish, "complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from play' -l dry-run") {
 		t.Fatalf("fish completion still contains unscoped play dry-run rule")
 	}
