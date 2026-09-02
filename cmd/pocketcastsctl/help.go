@@ -439,8 +439,10 @@ TUI keys:
   r               Refresh every source
   q or Ctrl-C     Quit
 
-The TUI observes playback every second by default. --interval changes that
+The TUI observes playback every five seconds by default. --interval changes that
 cadence; values below 250ms are rejected. Up Next refreshes every 30 seconds.
+Routine background observations do not show REFRESHING or redraw an unchanged
+frame; pressing r performs a visible refresh.
 The TUI requires interactive stdin and stdout and cannot be combined with other
 now output, watch, interaction, verification, or max-update modes.
 `) + "\n")

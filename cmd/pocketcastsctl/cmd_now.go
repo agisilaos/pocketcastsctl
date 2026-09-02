@@ -35,16 +35,7 @@ func runNow(args []string, cfg config.Config) int {
 		fmt.Fprintf(os.Stderr, "failed to parse flags: %v\n", err)
 		return 2
 	}
-	intervalExplicit := false
-	fs.Visit(func(visited *flag.Flag) {
-		if visited.Name == "interval" {
-			intervalExplicit = true
-		}
-	})
 	playbackInterval := *interval
-	if *tui && !intervalExplicit {
-		playbackInterval = time.Second
-	}
 	if fs.NArg() != 0 {
 		fmt.Fprintln(os.Stderr, "usage: pocketcastsctl now [--tui|--watch] [--interactive] [--interval duration] [--verify-auth] [--json|--plain]")
 		return 2

@@ -21,8 +21,8 @@ func TestRunNowTUIDispatchAndValidation(t *testing.T) {
 	called := false
 	nowTUIRunner = func(_ config.Config, interval time.Duration) int {
 		called = true
-		if interval != time.Second {
-			t.Fatalf("interval = %s, want 1s", interval)
+		if interval != 5*time.Second {
+			t.Fatalf("interval = %s, want 5s", interval)
 		}
 		return 0
 	}
@@ -50,6 +50,24 @@ func TestRunNowTUIDispatchAndValidation(t *testing.T) {
 				t.Fatalf("args=%v code=%d stderr=%q", args, code, stderr)
 			}
 		})
+	}
+}
+
+func TestRunNowTUIHonorsExplicitPlaybackInterval(t *testing.T) {
+	original := nowTUIRunner
+	t.Cleanup(func() { nowTUIRunner = original })
+	nowTUIRunner = func(_ config.Config, interval time.Duration) int {
+		if interval != time.Second {
+			t.Fatalf("interval = %s, want explicit 1s", interval)
+		}
+		return 0
+	}
+
+	code, _, stderr := runForTestWithRunner(t, []string{"--tui", "--interval", "1s"}, "", func(args []string) int {
+		return runNow(args, config.Config{})
+	})
+	if code != 0 || stderr != "" {
+		t.Fatalf("code=%d stderr=%q", code, stderr)
 	}
 }
 
@@ -120,6 +138,16 @@ func TestNowTUIModelPreventsOverlappingSourceRefreshes(t *testing.T) {
 	model.apply(nowTUIResult{source: nowTUIWeb, at: time.Now(), web: app.NowWebPlaybackSnapshot{}})
 	if !model.begin(nowTUIWeb) {
 		t.Fatal("refresh remained blocked after completion")
+	}
+}
+
+func TestNowTUIBackgroundRefreshDoesNotChangeVisibleLoadingState(t *testing.T) {
+	model := populatedNowTUIModel(time.Now())
+	if !model.beginBackground(nowTUIWeb) {
+		t.Fatal("background refresh was not started")
+	}
+	if model.web.loading {
+		t.Fatal("background refresh exposed a visible REFRESHING state")
 	}
 }
 
@@ -278,6 +306,89 @@ func TestRenderNowTUIUsesCRLFInRawTerminalMode(t *testing.T) {
 	}
 }
 
+func TestRenderNowTUISkipsUnchangedFrames(t *testing.T) {
+	var output bytes.Buffer
+	runtime := nowTUIRuntime{
+		output:  &output,
+		now:     time.Now,
+		size:    func() (int, int) { return 60, 20 },
+		theme:   nowTUITheme{mode: nowTUINoColor},
+		unicode: true,
+	}
+	model := populatedNowTUIModel(time.Now())
+	lastFrame := ""
+	if !renderNowTUIIfChanged(runtime, model, &lastFrame) {
+		t.Fatal("initial frame was not rendered")
+	}
+	initialSize := output.Len()
+	if renderNowTUIIfChanged(runtime, model, &lastFrame) {
+		t.Fatal("unchanged frame was rendered again")
+	}
+	if output.Len() != initialSize {
+		t.Fatalf("output size changed from %d to %d", initialSize, output.Len())
+	}
+}
+
+func TestNowTUIQueueForDisplayHidesHighConfidenceWebCurrentEpisode(t *testing.T) {
+	now := time.Now()
+	model := populatedNowTUIModel(now)
+	model.web.value.State = "paused"
+	position := int64(48*60 + 32)
+	currentTitle := "Scott Galloway On Money, Happiness, And The Search For Enough"
+	model.web.value.EpisodeTitle = &currentTitle
+	model.web.value.PositionSeconds = &position
+	model.queue.value.Occurrences = []app.CockpitQueueOccurrence{
+		{Position: 1, UUID: "current", Title: "  Scott   Galloway on Money, Happiness, and the Search for Enough ", PlayedUpTo: int(position), HasProgress: true},
+		{Position: 2, UUID: "next", Title: "The actual next episode"},
+		{Position: 3, UUID: "current", Title: currentTitle, PlayedUpTo: int(position), HasProgress: true},
+	}
+
+	queue := nowTUIQueueForDisplay(model)
+	if len(queue.value.Occurrences) != 2 {
+		t.Fatalf("visible occurrences = %d, want 2", len(queue.value.Occurrences))
+	}
+	if got := queue.value.Occurrences[0]; got.UUID != "next" || got.Position != 1 {
+		t.Fatalf("first visible occurrence = %+v, want renumbered next episode", got)
+	}
+	if got := queue.value.Occurrences[1]; got.UUID != "current" || got.Position != 2 {
+		t.Fatalf("later repeated occurrence was not preserved: %+v", got)
+	}
+	if queue.value.Status.Total != 2 {
+		t.Fatalf("visible queue total = %d, want 2", queue.value.Status.Total)
+	}
+	frame := renderNowTUIFrame(model, 100, 30, now, nowTUITheme{mode: nowTUINoColor}, true)
+	if !strings.Contains(frame, "NEXT The actual next episode") {
+		t.Fatalf("actual next episode was not labeled NEXT:\n%s", frame)
+	}
+}
+
+func TestNowTUIQueueForDisplayKeepsUncertainHeadOccurrence(t *testing.T) {
+	now := time.Now()
+	model := populatedNowTUIModel(now)
+	model.web.value.State = "playing"
+	position := int64(30 * 60)
+	title := "Same title"
+	model.web.value.EpisodeTitle = &title
+	model.web.value.PositionSeconds = &position
+
+	tests := []struct {
+		name string
+		head app.CockpitQueueOccurrence
+	}{
+		{name: "missing progress", head: app.CockpitQueueOccurrence{Position: 1, Title: title}},
+		{name: "distant progress", head: app.CockpitQueueOccurrence{Position: 1, Title: title, PlayedUpTo: 10, HasProgress: true}},
+		{name: "different title", head: app.CockpitQueueOccurrence{Position: 1, Title: "Another episode", PlayedUpTo: int(position), HasProgress: true}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			model.queue.value.Occurrences = []app.CockpitQueueOccurrence{test.head}
+			if got := nowTUIQueueForDisplay(model).value.Occurrences; len(got) != 1 {
+				t.Fatalf("uncertain head occurrence was hidden: %+v", got)
+			}
+		})
+	}
+}
+
 func TestNowTUIKeyDecoder(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -353,6 +464,11 @@ func TestNowTUILoopRunsPendingManualRefreshAfterBlockedCollection(t *testing.T) 
 		releaseFirst: make(chan struct{}),
 	}
 	writes := make(chan struct{}, 8)
+	renders := make(chan struct{}, 8)
+	now := func() time.Time {
+		renders <- struct{}{}
+		return time.Date(2026, 9, 2, 12, 0, 0, 0, time.UTC)
+	}
 	done := make(chan int, 1)
 	go func() {
 		done <- runNowTUILoop(ctx, nowTUIRuntime{
@@ -361,7 +477,7 @@ func TestNowTUILoopRunsPendingManualRefreshAfterBlockedCollection(t *testing.T) 
 			collector:          collector,
 			playbackInterval:   time.Hour,
 			queueInterval:      time.Hour,
-			now:                time.Now,
+			now:                now,
 			size:               func() (int, int) { return 100, 30 },
 			theme:              nowTUITheme{mode: nowTUINoColor},
 			unicode:            true,
@@ -370,9 +486,10 @@ func TestNowTUILoopRunsPendingManualRefreshAfterBlockedCollection(t *testing.T) 
 	}()
 
 	waitNowTUIInt32(t, collector.webCalls, 1, "first Web collection did not start")
-	go inputWriter.Write([]byte("r"))
 	waitNowTUIWrite(t, writes, "initial frame was not rendered")
-	waitNowTUIWrite(t, writes, "manual refresh was not processed")
+	waitNowTUIWrite(t, renders, "initial frame was not evaluated")
+	go inputWriter.Write([]byte("r"))
+	waitNowTUIWrite(t, renders, "manual refresh was not processed")
 	close(collector.releaseFirst)
 	waitNowTUIInt32(t, collector.webCalls, 2, "pending Web refresh did not run")
 	go inputWriter.Write([]byte("q"))

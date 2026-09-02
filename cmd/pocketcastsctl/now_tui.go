@@ -97,19 +97,34 @@ func newNowTUIModel() nowTUIModel {
 }
 
 func (model *nowTUIModel) begin(source nowTUISource) bool {
+	return model.beginWithLoading(source, true)
+}
+
+func (model *nowTUIModel) beginBackground(source nowTUISource) bool {
+	return model.beginWithLoading(source, false)
+}
+
+func (model *nowTUIModel) beginWithLoading(source nowTUISource, visible bool) bool {
 	if model.inFlight[source] {
 		return false
 	}
 	model.inFlight[source] = true
+	if !visible {
+		return true
+	}
+	model.setLoading(source, true)
+	return true
+}
+
+func (model *nowTUIModel) setLoading(source nowTUISource, loading bool) {
 	switch source {
 	case nowTUIWeb:
-		model.web.loading = true
+		model.web.loading = loading
 	case nowTUILocal:
-		model.local.loading = true
+		model.local.loading = loading
 	case nowTUIQueue:
-		model.queue.loading = true
+		model.queue.loading = loading
 	}
-	return true
 }
 
 func (model *nowTUIModel) request(source nowTUISource) bool {
@@ -117,6 +132,7 @@ func (model *nowTUIModel) request(source nowTUISource) bool {
 		return true
 	}
 	model.pending[source] = true
+	model.setLoading(source, true)
 	return false
 }
 
@@ -241,6 +257,12 @@ func runNowTUILoop(ctx context.Context, runtime nowTUIRuntime) int {
 		}
 		go collectNowTUISource(ctx, runtime.collector, source, runtime.now, runtime.collectorCompleted)
 	}
+	backgroundRefresh := func(source nowTUISource) {
+		if !model.beginBackground(source) {
+			return
+		}
+		go collectNowTUISource(ctx, runtime.collector, source, runtime.now, runtime.collectorCompleted)
+	}
 	requestRefresh := func(source nowTUISource) {
 		if !model.request(source) {
 			return
@@ -250,7 +272,11 @@ func runNowTUILoop(ctx context.Context, runtime nowTUIRuntime) int {
 	refresh(nowTUIWeb)
 	refresh(nowTUILocal)
 	refresh(nowTUIQueue)
-	renderNowTUI(runtime, model)
+	lastFrame := ""
+	render := func() {
+		renderNowTUIIfChanged(runtime, model, &lastFrame)
+	}
+	render()
 
 	for {
 		select {
@@ -273,34 +299,33 @@ func runNowTUILoop(ctx context.Context, runtime nowTUIRuntime) int {
 				maximum := nowTUIMaxQueueOffset(model, width, height)
 				model.queueOffset = min(maximum, min(model.queueOffset, maximum)+1)
 			}
-			renderNowTUI(runtime, model)
+			render()
 		case result := <-runtime.collectorCompleted:
 			model.apply(result)
 			if model.takePending(result.source) {
 				refresh(result.source)
 			}
-			renderNowTUI(runtime, model)
+			render()
 		case <-playbackTicker.C:
-			refresh(nowTUIWeb)
-			refresh(nowTUILocal)
-			renderNowTUI(runtime, model)
+			backgroundRefresh(nowTUIWeb)
+			backgroundRefresh(nowTUILocal)
 		case <-queueTicker.C:
-			refresh(nowTUIQueue)
-			renderNowTUI(runtime, model)
+			backgroundRefresh(nowTUIQueue)
 		case <-ageTicker.C:
-			renderNowTUI(runtime, model)
+			render()
 		case <-runtime.resize:
-			renderNowTUI(runtime, model)
+			render()
 		}
 	}
 }
 
 func nowTUIMaxQueueOffset(model nowTUIModel, width, height int) int {
+	queue := nowTUIQueueForDisplay(model)
 	visible := nowTUIQueueVisibleRows(width, height)
-	if model.queue.hasValue && model.queue.err != "" {
+	if queue.hasValue && queue.err != "" {
 		visible = max(1, visible-1)
 	}
-	return max(0, len(model.queue.value.Occurrences)-visible)
+	return max(0, len(queue.value.Occurrences)-visible)
 }
 
 func collectNowTUISource(ctx context.Context, collector nowTUICollector, source nowTUISource, now func() time.Time, results chan<- nowTUIResult) {
@@ -331,12 +356,30 @@ func nowTUIQueueError(status app.NowQueueStatus) string {
 }
 
 func renderNowTUI(runtime nowTUIRuntime, model nowTUIModel) {
+	frame := currentNowTUIFrame(runtime, model)
+	writeNowTUIFrame(runtime.output, frame)
+}
+
+func renderNowTUIIfChanged(runtime nowTUIRuntime, model nowTUIModel, lastFrame *string) bool {
+	frame := currentNowTUIFrame(runtime, model)
+	if frame == *lastFrame {
+		return false
+	}
+	*lastFrame = frame
+	writeNowTUIFrame(runtime.output, frame)
+	return true
+}
+
+func currentNowTUIFrame(runtime nowTUIRuntime, model nowTUIModel) string {
 	width, height := runtime.size()
-	frame := renderNowTUIFrame(model, width, height, runtime.now(), runtime.theme, runtime.unicode)
+	return renderNowTUIFrame(model, width, height, runtime.now(), runtime.theme, runtime.unicode)
+}
+
+func writeNowTUIFrame(output io.Writer, frame string) {
 	// MakeRaw disables the terminal's NL-to-CRNL output translation. Emit both
 	// bytes so every rendered row starts in column zero instead of stair-stepping.
 	frame = strings.ReplaceAll(frame, "\n", "\r\n")
-	fmt.Fprint(runtime.output, "\x1b[H\x1b[2J", frame)
+	fmt.Fprint(output, "\x1b[H\x1b[2J", frame)
 }
 
 func terminalSize(fd int) (int, int) {

@@ -13,9 +13,10 @@ import (
 )
 
 const (
-	nowTUIWideMinimum = 88
-	nowTUIMaxWidth    = 512
-	nowTUIMaxHeight   = 200
+	nowTUIWideMinimum                   = 88
+	nowTUIMaxWidth                      = 512
+	nowTUIMaxHeight                     = 200
+	nowTUICurrentProgressToleranceInSec = 120
 )
 
 type nowTUIColorMode uint8
@@ -169,9 +170,10 @@ func (theme nowTUITheme) tone(label nowTUILabel) string {
 func renderNowTUIFrame(model nowTUIModel, width, height int, now time.Time, theme nowTUITheme, unicodeOutput bool) string {
 	width = max(1, min(width, nowTUIMaxWidth))
 	height = max(1, min(height, nowTUIMaxHeight))
+	queue := nowTUIQueueForDisplay(model)
 	chars := nowTUICharacters(unicodeOutput)
 	if width < 40 || height < 20 {
-		return renderNowTUICompact(model, width, height, now, theme, chars)
+		return renderNowTUICompact(model, queue, width, height, now, theme, chars)
 	}
 
 	lines := make([]string, 0, height)
@@ -188,7 +190,7 @@ func renderNowTUIFrame(model nowTUIModel, width, height int, now time.Time, them
 			strings.Repeat(" ", leftWidth),
 		)
 		left = append(left, renderNowTUILocalPanel(model.local, leftWidth, localHeight, now, theme, chars)...)
-		right := renderNowTUIQueuePanel(model.queue, model.queueOffset, rightWidth, bodyHeight, now, theme, chars)
+		right := renderNowTUIQueuePanel(queue, model.queueOffset, rightWidth, bodyHeight, now, theme, chars)
 		for index := range bodyHeight {
 			lines = append(lines, left[index]+strings.Repeat(" ", gap)+right[index])
 		}
@@ -197,15 +199,15 @@ func renderNowTUIFrame(model nowTUIModel, width, height int, now time.Time, them
 		localHeight := 4
 		queueHeight := bodyHeight - webHeight - localHeight - 2
 		if queueHeight < 4 {
-			return renderNowTUICompact(model, width, height, now, theme, chars)
+			return renderNowTUICompact(model, queue, width, height, now, theme, chars)
 		}
 		lines = append(lines, renderNowTUIWebPanel(model.web, width, webHeight, now, theme, chars)...)
 		lines = append(lines, strings.Repeat(" ", width))
 		lines = append(lines, renderNowTUILocalPanel(model.local, width, localHeight, now, theme, chars)...)
 		lines = append(lines, strings.Repeat(" ", width))
-		lines = append(lines, renderNowTUIQueuePanel(model.queue, model.queueOffset, width, queueHeight, now, theme, chars)...)
+		lines = append(lines, renderNowTUIQueuePanel(queue, model.queueOffset, width, queueHeight, now, theme, chars)...)
 	}
-	lines = append(lines, renderNowTUIFooter(model, width, now, theme, chars))
+	lines = append(lines, renderNowTUIFooter(model, queue, width, now, theme, chars))
 
 	for index, line := range lines {
 		lines[index] = paintNowTUILine(line, width, theme)
@@ -213,7 +215,7 @@ func renderNowTUIFrame(model nowTUIModel, width, height int, now time.Time, them
 	return strings.Join(lines[:min(height, len(lines))], "\n")
 }
 
-func renderNowTUICompact(model nowTUIModel, width, height int, now time.Time, theme nowTUITheme, chars nowTUIBoxChars) string {
+func renderNowTUICompact(model nowTUIModel, queue nowTUIQueueState, width, height int, now time.Time, theme nowTUITheme, chars nowTUIBoxChars) string {
 	unicodeOutput := nowTUIUsesUnicode(chars)
 	sources := []struct {
 		line     string
@@ -221,7 +223,7 @@ func renderNowTUICompact(model nowTUIModel, width, height int, now time.Time, th
 	}{
 		{line: renderNowTUICompactSource("WEB", nowTUIWebLabel(model.web, now), compactNowTUIWeb(model.web), width, theme, unicodeOutput), hasError: model.web.err != ""},
 		{line: renderNowTUICompactSource("LOCAL", nowTUILocalLabel(model.local, now), compactNowTUILocal(model.local), width, theme, unicodeOutput), hasError: model.local.err != ""},
-		{line: renderNowTUICompactSource("QUEUE", nowTUIQueueLabel(model.queue, now), compactNowTUIQueue(model.queue, model.queueOffset), width, theme, unicodeOutput), hasError: model.queue.err != ""},
+		{line: renderNowTUICompactSource("QUEUE", nowTUIQueueLabel(queue, now), compactNowTUIQueue(queue, model.queueOffset), width, theme, unicodeOutput), hasError: queue.err != ""},
 	}
 	lines := make([]string, 0, height)
 	if height >= 4 {
@@ -265,7 +267,7 @@ func renderNowTUIHeader(width int, theme nowTUITheme, chars nowTUIBoxChars) stri
 	return spreadNowTUIThree(brand, center, live, width)
 }
 
-func renderNowTUIFooter(model nowTUIModel, width int, now time.Time, theme nowTUITheme, chars nowTUIBoxChars) string {
+func renderNowTUIFooter(model nowTUIModel, queue nowTUIQueueState, width int, now time.Time, theme nowTUITheme, chars nowTUIBoxChars) string {
 	keys := "j/k scroll  r refresh  q quit"
 	separator := " | "
 	if nowTUIUsesUnicode(chars) {
@@ -274,12 +276,48 @@ func renderNowTUIFooter(model nowTUIModel, width int, now time.Time, theme nowTU
 	health := strings.Join([]string{
 		"WEB " + nowTUIWebLabel(model.web, now).text,
 		"LOCAL " + nowTUILocalLabel(model.local, now).text,
-		"QUEUE " + nowTUIQueueLabel(model.queue, now).text,
+		"QUEUE " + nowTUIQueueLabel(queue, now).text,
 	}, separator)
 	if nowTUICellWidth(keys)+nowTUICellWidth(health)+2 > width {
 		return theme.muted(fitNowTUIPlain(keys, width, false))
 	}
 	return theme.muted(keys) + strings.Repeat(" ", width-nowTUICellWidth(keys)-nowTUICellWidth(health)) + theme.blue(health)
+}
+
+func nowTUIQueueForDisplay(model nowTUIModel) nowTUIQueueState {
+	queue := model.queue
+	if !queue.hasValue || len(queue.value.Occurrences) == 0 || !nowTUIWebMatchesQueueHead(model.web, queue.value.Occurrences[0]) {
+		return queue
+	}
+
+	visible := queue.value.Occurrences[1:]
+	queue.value.Occurrences = make([]app.CockpitQueueOccurrence, len(visible))
+	copy(queue.value.Occurrences, visible)
+	for index := range queue.value.Occurrences {
+		queue.value.Occurrences[index].Position = index + 1
+	}
+	queue.value.Status.Total = len(queue.value.Occurrences)
+	queue.value.Status.NextTitle = ""
+	if len(queue.value.Occurrences) > 0 {
+		queue.value.Status.NextTitle = queue.value.Occurrences[0].Title
+	}
+	return queue
+}
+
+func nowTUIWebMatchesQueueHead(web nowTUIWebState, head app.CockpitQueueOccurrence) bool {
+	if !web.hasValue || web.err != "" || (web.value.State != "playing" && web.value.State != "paused") || web.value.EpisodeTitle == nil || web.value.PositionSeconds == nil || !head.HasProgress {
+		return false
+	}
+	webTitle := strings.ToLower(strings.Join(strings.Fields(*web.value.EpisodeTitle), " "))
+	queueTitle := strings.ToLower(strings.Join(strings.Fields(head.Title), " "))
+	if webTitle == "" || webTitle != queueTitle {
+		return false
+	}
+	difference := *web.value.PositionSeconds - int64(head.PlayedUpTo)
+	if difference < 0 {
+		difference = -difference
+	}
+	return difference <= nowTUICurrentProgressToleranceInSec
 }
 
 func renderNowTUIWebPanel(state nowTUIWebState, width, height int, now time.Time, theme nowTUITheme, chars nowTUIBoxChars) []string {
