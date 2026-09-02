@@ -12,6 +12,10 @@ _Avoid_: Active player
 A point-in-time observation of one playback source: its state plus any available episode identity and timing details. A snapshot remains valid when some details are unavailable.
 _Avoid_: Playback status
 
+**Stale snapshot**:
+The last successful snapshot retained after a newer observation fails. Its age must remain visible so it is not mistaken for current state.
+_Avoid_: Cached status
+
 **Web Player playback**:
 Episode playback occurring in the Pocket Casts Web Player in a browser tab.
 _Avoid_: Browser playback
@@ -23,6 +27,10 @@ _Avoid_: Native playback, offline playback
 **Managed local playback**:
 Local playback that pocketcastsctl started and can still identify as the same playback across commands.
 _Avoid_: Owned process, local session
+
+**Now-playing cockpit**:
+A terminal view that presents each playback source separately alongside an ordered preview of Up Next. It never infers a single active playback source.
+_Avoid_: Active-player view, unified player
 
 ## Authentication
 

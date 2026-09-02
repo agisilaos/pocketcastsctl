@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="680" viewBox="0 0 1200 680" role="img" aria-labelledby="title description">
+  <title id="title">pocketcastsctl now terminal cockpit</title>
+  <desc id="description">Wide terminal layout with Web Player and local playback cards on the left and a scrollable Up Next queue on the right.</desc>
+  <rect width="1200" height="680" rx="16" fill="#161718"/>
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace">
+    <text x="36" y="48" fill="#F43E37" font-size="24" font-weight="700">━</text>
+    <text x="66" y="48" fill="#FFFFFF" font-size="24" font-weight="700">POCKET CASTS</text>
+    <text x="568" y="48" fill="#9C9FA4" font-size="20">NOW</text>
+    <circle cx="1093" cy="40" r="7" fill="#78D549"/>
+    <text x="1110" y="47" fill="#FFFFFF" font-size="20">LIVE</text>
+
+    <rect x="28" y="70" width="444" height="372" rx="8" fill="#292B2E" stroke="#9C9FA4" stroke-width="2"/>
+    <text x="52" y="108" fill="#FFFFFF" font-size="21" font-weight="700">WEB PLAYER</text>
+    <text x="354" y="108" fill="#78D549" font-size="19" font-weight="700">PLAYING</text>
+    <text x="52" y="160" fill="#9C9FA4" font-size="19">Software Design Notes</text>
+    <text x="52" y="196" fill="#FFFFFF" font-size="23" font-weight="700">Ep. 5 — A Deep Module</text>
+    <rect x="52" y="244" width="372" height="12" rx="6" fill="#4A4D51"/>
+    <rect x="52" y="244" width="134" height="12" rx="6" fill="#F43E37"/>
+    <text x="52" y="292" fill="#FFFFFF" font-size="18">18:42</text>
+    <text x="373" y="292" fill="#FFFFFF" font-size="18">52:10</text>
+
+    <rect x="28" y="460" width="444" height="142" rx="8" fill="#292B2E" stroke="#9C9FA4" stroke-width="2"/>
+    <text x="52" y="500" fill="#FFFFFF" font-size="21" font-weight="700">LOCAL</text>
+    <text x="360" y="500" fill="#9C9FA4" font-size="19" font-weight="700">STOPPED</text>
+    <text x="52" y="554" fill="#9C9FA4" font-size="18">No managed local playback</text>
+
+    <rect x="492" y="70" width="680" height="532" rx="8" fill="#292B2E" stroke="#9C9FA4" stroke-width="2"/>
+    <text x="516" y="108" fill="#FFFFFF" font-size="21" font-weight="700">UP NEXT</text>
+    <text x="1018" y="108" fill="#9C9FA4" font-size="19">7 EPISODES</text>
+    <line x1="516" y1="132" x2="1148" y2="132" stroke="#4A4D51"/>
+
+    <text x="516" y="174" fill="#F43E37" font-size="18" font-weight="700">NEXT</text>
+    <text x="582" y="174" fill="#FFFFFF" font-size="19" font-weight="700">Designing Deep Modules</text>
+    <text x="1003" y="174" fill="#9C9FA4" font-size="16">2026-09-01</text>
+
+    <text x="516" y="226" fill="#9C9FA4" font-size="18">02</text>
+    <text x="582" y="226" fill="#FFFFFF" font-size="19" font-weight="700">Good Interfaces</text>
+    <text x="1003" y="226" fill="#9C9FA4" font-size="16">2026-08-29</text>
+
+    <text x="516" y="278" fill="#9C9FA4" font-size="18">03</text>
+    <text x="582" y="278" fill="#FFFFFF" font-size="19" font-weight="700">Visible State</text>
+    <text x="1003" y="278" fill="#9C9FA4" font-size="16">12:05 played</text>
+
+    <text x="516" y="330" fill="#9C9FA4" font-size="18">04</text>
+    <text x="582" y="330" fill="#FFFFFF" font-size="19" font-weight="700">Small, Sharp Tools</text>
+    <text x="1003" y="330" fill="#9C9FA4" font-size="16">2026-08-21</text>
+
+    <text x="516" y="382" fill="#9C9FA4" font-size="18">05</text>
+    <text x="582" y="382" fill="#FFFFFF" font-size="19" font-weight="700">Terminal Places</text>
+    <text x="1003" y="382" fill="#9C9FA4" font-size="16">2026-08-18</text>
+
+    <text x="516" y="434" fill="#9C9FA4" font-size="18">06</text>
+    <text x="582" y="434" fill="#FFFFFF" font-size="19" font-weight="700">Reliable Refresh</text>
+    <text x="1003" y="434" fill="#9C9FA4" font-size="16">2026-08-12</text>
+
+    <text x="516" y="486" fill="#9C9FA4" font-size="18">07</text>
+    <text x="582" y="486" fill="#FFFFFF" font-size="19" font-weight="700">Graceful Fallbacks</text>
+    <text x="1003" y="486" fill="#9C9FA4" font-size="16">2026-08-08</text>
+
+    <text x="36" y="646" fill="#9C9FA4" font-size="17">j/k scroll  ·  r refresh  ·  q quit</text>
+    <text x="756" y="646" fill="#33B8F4" font-size="17">WEB PLAYING  ·  LOCAL STOPPED  ·  QUEUE READY</text>
+  </g>
+</svg>

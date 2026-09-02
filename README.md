@@ -48,6 +48,7 @@ Show build metadata:
 ./bin/pocketcastsctl --version
 ./bin/pocketcastsctl help
 ./bin/pocketcastsctl now
+./bin/pocketcastsctl now --tui
 ./bin/pocketcastsctl now --watch
 ./bin/pocketcastsctl help setup
 ./bin/pocketcastsctl help queue api
@@ -101,7 +102,7 @@ Output contract table:
 
 | Command | Human | `--plain` | `--json` |
 | --- | --- | --- | --- |
-| `now` | dashboard with Web Player playback details | key/value lines | full snapshot object |
+| `now` | dashboard; `--tui` opens the interactive cockpit | key/value lines | full snapshot object |
 | `setup` | guided onboarding | key/value step report | structured step report |
 | `doctor` | checklist | tab-separated checks | structured checks + counts |
 | `web tabs` | URL list | URL list | JSON array of URLs |
@@ -136,12 +137,19 @@ Use `now` as the main dashboard command:
 
 ```bash
 ./bin/pocketcastsctl now
+./bin/pocketcastsctl now --tui
 ./bin/pocketcastsctl now --watch --interval 3s
 ./bin/pocketcastsctl now --verify-auth
 ./bin/pocketcastsctl now --json
 ```
 
 `now` merges a Web Player playback snapshot, local status, queue health, auth state, and next-action suggestions in one view. Web Player and local playback collection run concurrently with the API check. With `--verify-auth`, queue health and auth verification share one Up Next request and credential manager; successful authentication does not require a readable queue response. Watch mode reports positions observed from the player at each interval; it does not estimate progress between observations.
+
+`now --tui` opens a framework-free, read-only terminal cockpit without adding dependencies. Its wide layout keeps separate Web Player and managed local playback cards beside a scrollable Up Next panel; narrower terminals stack those panels, and very small terminals use a compact view. Press `j`/`k` or the arrow keys to scroll, `r` to refresh every source, and `q` or Ctrl-C to quit. The alternate screen and cursor state are restored on exit.
+
+The TUI draws immediately and updates Web Player, local playback, and Up Next independently. Playback is observed every five seconds by default (`--interval` changes the cadence; minimum 250ms), while Up Next refreshes every 30 seconds or when `r` is pressed. Routine background observations stay visually quiet, and unchanged frames are not redrawn; pressing `r` still shows an explicit refresh. Refreshes never overlap for the same source. If a refresh fails, the last successful snapshot remains visible with its age and the source error. Missing browser automation or API authentication affects only its own panel.
+
+The TUI requires interactive stdin and stdout; redirected use fails with a hint to run ordinary `now`. It uses Pocket Casts' red-and-cool-grey palette when the terminal supports color, respects `NO_COLOR`, and falls back to ASCII when the locale does not advertise UTF-8. Queue rows preserve API order and repeated occurrences. Pocket Casts may keep the current Web episode at the head of its Up Next response; when that row's normalized title and saved progress closely match the current Web snapshot, the TUI hides that one occurrence and labels the following row `NEXT`. Uncertain matches remain visible, and later repeated occurrences are preserved. Queue podcast names and durations are omitted because the currently observed Up Next response does not provide them reliably.
 
 The combined API check has a six-second budget, including credential lookup and retries. Ordinary `now` makes one attempt; `now --verify-auth` allows two attempts and `auth verify` allows three. Verification retries HTTP 408, 429, and 5xx responses and recognized transient network errors, stopping when its deadline expires or the caller cancels. The client's existing token refresh and request replay can add requests within an attempt.
 

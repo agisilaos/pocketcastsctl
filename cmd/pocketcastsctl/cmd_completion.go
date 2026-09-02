@@ -46,7 +46,7 @@ _pocketcastsctl_completions() {
       return 0
       ;;
     now)
-      COMPREPLY=( $(compgen -W "--json --plain --watch --interactive --verify-auth --interval --max-updates" -- "$cur") )
+      COMPREPLY=( $(compgen -W "--tui --json --plain --watch --interactive --verify-auth --interval --max-updates" -- "$cur") )
       return 0
       ;;
     setup)
@@ -186,7 +186,7 @@ _pocketcastsctl_completions() {
       _values "shell" "bash" "zsh" "fish"
       ;;
     now)
-      _values "flags" "--json" "--plain" "--watch" "--interactive" "--verify-auth" "--interval" "--max-updates"
+      _values "flags" "--tui" "--json" "--plain" "--watch" "--interactive" "--verify-auth" "--interval" "--max-updates"
       ;;
     setup)
       if (( CURRENT == 3 )); then
@@ -294,7 +294,7 @@ _pocketcastsctl_completions "$@"
 		"fish": `complete -c pocketcastsctl -f -n '__fish_use_subcommand' -a 'help version completion now doctor setup start config auth web queue local har'
 complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from completion' -a 'bash zsh fish'
 
-complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from now' -l json -l plain -l watch -l interactive -l verify-auth -l interval -l max-updates
+complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from now' -l tui -l json -l plain -l watch -l interactive -l verify-auth -l interval -l max-updates
 complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from setup' -a 'run check auth verify'
 complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from setup' -l json -l plain -l no-input
 complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from start' -l json -l plain -l no-input

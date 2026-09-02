@@ -23,8 +23,9 @@ func runNow(args []string, cfg config.Config) int {
 	jsonOut := fs.Bool("json", false, "output JSON")
 	plain := fs.Bool("plain", false, "plain tab-separated output")
 	watch := fs.Bool("watch", false, "refresh continuously")
+	tui := fs.Bool("tui", false, "open the interactive now-playing cockpit")
 	interactive := fs.Bool("interactive", false, "prompt to run a suggested next action")
-	interval := fs.Duration("interval", 5*time.Second, "refresh interval in watch mode")
+	interval := fs.Duration("interval", 5*time.Second, "refresh interval for watch mode or TUI playback")
 	verifyAuth := fs.Bool("verify-auth", false, "verify auth with API (slower)")
 	maxUpdates := fs.Int("max-updates", 0, "max snapshots in watch mode (0 = unlimited)")
 	if err := parseCommandFlags(fs, args); err != nil {
@@ -34,8 +35,9 @@ func runNow(args []string, cfg config.Config) int {
 		fmt.Fprintf(os.Stderr, "failed to parse flags: %v\n", err)
 		return 2
 	}
+	playbackInterval := *interval
 	if fs.NArg() != 0 {
-		fmt.Fprintln(os.Stderr, "usage: pocketcastsctl now [--watch] [--interactive] [--interval 5s] [--verify-auth] [--json|--plain]")
+		fmt.Fprintln(os.Stderr, "usage: pocketcastsctl now [--tui|--watch] [--interactive] [--interval duration] [--verify-auth] [--json|--plain]")
 		return 2
 	}
 	if *interval <= 0 {
@@ -49,6 +51,17 @@ func runNow(args []string, cfg config.Config) int {
 	if *interactive && (*jsonOut || *plain || *watch) {
 		fmt.Fprintln(os.Stderr, "now: --interactive requires non-watch human output (omit --json/--plain/--watch)")
 		return 2
+	}
+	if *tui && (*jsonOut || *plain || *watch || *interactive || *verifyAuth || *maxUpdates != 0) {
+		fmt.Fprintln(os.Stderr, "now: --tui cannot be combined with --json, --plain, --watch, --interactive, --verify-auth, or --max-updates")
+		return 2
+	}
+	if *tui && playbackInterval < 250*time.Millisecond {
+		fmt.Fprintln(os.Stderr, "now: --tui requires --interval >= 250ms")
+		return 2
+	}
+	if *tui {
+		return nowTUIRunner(cfg, playbackInterval)
 	}
 
 	render := func(s app.NowSnapshot) {
