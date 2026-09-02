@@ -221,9 +221,12 @@ func TestRenderNowTUIKeepsStaleAgeAndErrorVisibleInConstrainedLayouts(t *testing
 	}
 
 	model.apply(nowTUIResult{source: nowTUIWeb, at: now, err: "Web Player unavailable"})
+	model.apply(nowTUIResult{source: nowTUILocal, at: now, err: "Local playback unavailable"})
 	stacked := renderNowTUIFrame(model, 60, 20, now, nowTUITheme{mode: nowTUINoColor}, true)
-	if !strings.Contains(stacked, "STALE 18s") || !strings.Contains(stacked, "Web Player unavailable") {
-		t.Fatalf("short stacked frame hid stale Web error:\n%s", stacked)
+	for _, want := range []string{"STALE 18s", "Web Player unavailable", "Local playback unavailable"} {
+		if !strings.Contains(stacked, want) {
+			t.Fatalf("short stacked frame missing %q:\n%s", want, stacked)
+		}
 	}
 }
 

@@ -211,21 +211,25 @@ func renderNowTUIFrame(model nowTUIModel, width, height int, now time.Time, them
 
 func renderNowTUICompact(model nowTUIModel, width, height int, now time.Time, theme nowTUITheme, chars nowTUIBoxChars) string {
 	unicodeOutput := nowTUIUsesUnicode(chars)
-	sourceLines := []string{
-		renderNowTUICompactSource("WEB", nowTUIWebLabel(model.web, now), compactNowTUIWeb(model.web), width, theme, unicodeOutput),
-		renderNowTUICompactSource("LOCAL", nowTUILocalLabel(model.local, now), compactNowTUILocal(model.local), width, theme, unicodeOutput),
-		renderNowTUICompactSource("QUEUE", nowTUIQueueLabel(model.queue, now), compactNowTUIQueue(model.queue, model.queueOffset), width, theme, unicodeOutput),
+	sources := []struct {
+		line     string
+		hasError bool
+	}{
+		{line: renderNowTUICompactSource("WEB", nowTUIWebLabel(model.web, now), compactNowTUIWeb(model.web), width, theme, unicodeOutput), hasError: model.web.err != ""},
+		{line: renderNowTUICompactSource("LOCAL", nowTUILocalLabel(model.local, now), compactNowTUILocal(model.local), width, theme, unicodeOutput), hasError: model.local.err != ""},
+		{line: renderNowTUICompactSource("QUEUE", nowTUIQueueLabel(model.queue, now), compactNowTUIQueue(model.queue, model.queueOffset), width, theme, unicodeOutput), hasError: model.queue.err != ""},
 	}
 	lines := make([]string, 0, height)
 	if height >= 4 {
 		lines = append(lines, renderNowTUIHeader(width, theme, chars))
-		lines = append(lines, sourceLines...)
+		for _, source := range sources {
+			lines = append(lines, source.line)
+		}
 	} else {
-		statesWithErrors := []bool{model.web.err != "", model.local.err != "", model.queue.err != ""}
 		for _, wantError := range []bool{true, false} {
-			for index, hasError := range statesWithErrors {
-				if hasError == wantError {
-					lines = append(lines, sourceLines[index])
+			for _, source := range sources {
+				if source.hasError == wantError {
+					lines = append(lines, source.line)
 				}
 			}
 		}
@@ -312,6 +316,9 @@ func renderNowTUILocalPanel(state nowTUILocalState, width, height int, now time.
 	bodyWidth := max(1, width-4)
 	unicodeOutput := nowTUIUsesUnicode(chars)
 	body := make([]string, 0, 3)
+	if state.err != "" && state.hasValue {
+		body = append(body, theme.orange(fitNowTUIPlain("! "+state.err, bodyWidth, unicodeOutput)))
+	}
 	if !state.hasValue {
 		message := "Checking managed local playback..."
 		if state.err != "" {
@@ -323,9 +330,7 @@ func renderNowTUILocalPanel(state nowTUILocalState, width, height int, now time.
 	} else {
 		body = append(body, theme.muted(fitNowTUIPlain("No managed local playback", bodyWidth, unicodeOutput)))
 	}
-	if state.err != "" && state.hasValue {
-		body = append(body, theme.orange(fitNowTUIPlain("! "+state.err, bodyWidth, unicodeOutput)))
-	} else if len(state.warnings) > 0 {
+	if state.err == "" && len(state.warnings) > 0 {
 		body = append(body, theme.orange(fitNowTUIPlain("! "+state.warnings[0], bodyWidth, unicodeOutput)))
 	}
 	return renderNowTUIBox("LOCAL", nowTUILocalLabel(state, now), body, width, height, theme, chars)
