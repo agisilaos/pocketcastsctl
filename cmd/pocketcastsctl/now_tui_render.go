@@ -27,9 +27,20 @@ type nowTUITheme struct {
 	mode nowTUIColorMode
 }
 
+type nowTUITone uint8
+
+const (
+	nowTUIPrimary nowTUITone = iota
+	nowTUIRed
+	nowTUIGreen
+	nowTUIOrange
+	nowTUIBlue
+	nowTUIMuted
+)
+
 type nowTUILabel struct {
 	text string
-	tone string
+	tone nowTUITone
 }
 
 type nowTUIBoxChars struct {
@@ -136,15 +147,15 @@ func (theme nowTUITheme) resetBackground() string {
 
 func (theme nowTUITheme) tone(label nowTUILabel) string {
 	switch label.tone {
-	case "red":
+	case nowTUIRed:
 		return theme.red(label.text)
-	case "green":
+	case nowTUIGreen:
 		return theme.green(label.text)
-	case "orange":
+	case nowTUIOrange:
 		return theme.orange(label.text)
-	case "blue":
+	case nowTUIBlue:
 		return theme.blue(label.text)
-	case "muted":
+	case nowTUIMuted:
 		return theme.muted(label.text)
 	default:
 		return theme.primary(label.text)
@@ -200,11 +211,24 @@ func renderNowTUIFrame(model nowTUIModel, width, height int, now time.Time, them
 
 func renderNowTUICompact(model nowTUIModel, width, height int, now time.Time, theme nowTUITheme, chars nowTUIBoxChars) string {
 	unicodeOutput := nowTUIUsesUnicode(chars)
-	lines := []string{
-		renderNowTUIHeader(width, theme, chars),
+	sourceLines := []string{
 		renderNowTUICompactSource("WEB", nowTUIWebLabel(model.web, now), compactNowTUIWeb(model.web), width, theme, unicodeOutput),
 		renderNowTUICompactSource("LOCAL", nowTUILocalLabel(model.local, now), compactNowTUILocal(model.local), width, theme, unicodeOutput),
 		renderNowTUICompactSource("QUEUE", nowTUIQueueLabel(model.queue, now), compactNowTUIQueue(model.queue, model.queueOffset), width, theme, unicodeOutput),
+	}
+	lines := make([]string, 0, height)
+	if height >= 4 {
+		lines = append(lines, renderNowTUIHeader(width, theme, chars))
+		lines = append(lines, sourceLines...)
+	} else {
+		statesWithErrors := []bool{model.web.err != "", model.local.err != "", model.queue.err != ""}
+		for _, wantError := range []bool{true, false} {
+			for index, hasError := range statesWithErrors {
+				if hasError == wantError {
+					lines = append(lines, sourceLines[index])
+				}
+			}
+		}
 	}
 	if height > 5 {
 		keys := "j/k scroll | r refresh | q quit"
@@ -263,6 +287,9 @@ func renderNowTUIWebPanel(state nowTUIWebState, width, height int, now time.Time
 	} else {
 		podcast := playbackText(state.value.PodcastTitle)
 		episode := playbackText(state.value.EpisodeTitle)
+		if state.err != "" {
+			body = append(body, theme.orange(fitNowTUIPlain("! "+state.err, bodyWidth, unicodeOutput)))
+		}
 		body = append(body,
 			theme.muted(fitNowTUIPlain(podcast, bodyWidth, unicodeOutput)),
 			theme.bold(theme.primary(fitNowTUIPlain(episode, bodyWidth, unicodeOutput))),
@@ -277,9 +304,6 @@ func renderNowTUIWebPanel(state nowTUIWebState, width, height int, now time.Time
 			theme.red(strings.Repeat(chars.progressFull, filled))+theme.muted(strings.Repeat(chars.progressEmpty, progressWidth-filled)),
 			spreadNowTUITwo(playbackTime(state.value.PositionSeconds), playbackTime(state.value.DurationSeconds), bodyWidth),
 		)
-		if state.err != "" {
-			body = append(body, theme.orange(fitNowTUIPlain("! "+state.err, bodyWidth, unicodeOutput)))
-		}
 	}
 	return renderNowTUIBox("WEB PLAYER", nowTUIWebLabel(state, now), body, width, height, theme, chars)
 }
@@ -327,7 +351,7 @@ func renderNowTUIQueuePanel(state nowTUIQueueState, offset, width, height int, n
 		start := min(max(0, offset), max(0, len(occurrences)-rowCapacity))
 		end := min(len(occurrences), start+rowCapacity)
 		if state.err == "" && !state.loading && len(occurrences) > rowCapacity {
-			status = nowTUILabel{text: fmt.Sprintf("%d-%d / %d", start+1, end, len(occurrences)), tone: "muted"}
+			status = nowTUILabel{text: fmt.Sprintf("%d-%d / %d", start+1, end, len(occurrences)), tone: nowTUIMuted}
 		}
 		if len(occurrences) == 0 {
 			body = append(body, theme.muted("Up Next is empty"))
@@ -341,10 +365,10 @@ func renderNowTUIQueuePanel(state nowTUIQueueState, offset, width, height int, n
 
 func renderNowTUIQueueRow(occurrence app.CockpitQueueOccurrence, width int, theme nowTUITheme, unicodeOutput bool) string {
 	label := fmt.Sprintf("%02d", occurrence.Position)
-	labelTone := "muted"
+	labelTone := nowTUIMuted
 	if occurrence.Position == 1 {
 		label = "NEXT"
-		labelTone = "red"
+		labelTone = nowTUIRed
 	}
 	metadata := ""
 	if published := sanitizeNowTUIText(occurrence.Published); len(published) >= 10 {
@@ -409,42 +433,42 @@ func renderNowTUIBoxLine(content string, innerWidth int, theme nowTUITheme, char
 func nowTUIWebLabel(state nowTUIWebState, now time.Time) nowTUILabel {
 	if state.err != "" {
 		if state.hasValue {
-			return nowTUILabel{text: "STALE " + formatNowTUIAge(now.Sub(state.observedAt)), tone: "orange"}
+			return nowTUILabel{text: "STALE " + formatNowTUIAge(now.Sub(state.observedAt)), tone: nowTUIOrange}
 		}
-		return nowTUILabel{text: "ERROR", tone: "orange"}
+		return nowTUILabel{text: "ERROR", tone: nowTUIOrange}
 	}
 	if !state.hasValue {
-		return nowTUILabel{text: "LOADING", tone: "blue"}
+		return nowTUILabel{text: "LOADING", tone: nowTUIBlue}
 	}
 	if state.loading {
-		return nowTUILabel{text: "REFRESHING", tone: "blue"}
+		return nowTUILabel{text: "REFRESHING", tone: nowTUIBlue}
 	}
 	switch state.value.State {
 	case "playing":
-		return nowTUILabel{text: "PLAYING", tone: "green"}
+		return nowTUILabel{text: "PLAYING", tone: nowTUIGreen}
 	case "loading", "transition":
-		return nowTUILabel{text: strings.ToUpper(string(state.value.State)), tone: "orange"}
+		return nowTUILabel{text: strings.ToUpper(string(state.value.State)), tone: nowTUIOrange}
 	default:
-		return nowTUILabel{text: strings.ToUpper(string(state.value.State)), tone: "muted"}
+		return nowTUILabel{text: strings.ToUpper(string(state.value.State)), tone: nowTUIMuted}
 	}
 }
 
 func nowTUILocalLabel(state nowTUILocalState, now time.Time) nowTUILabel {
 	if state.err != "" {
 		if state.hasValue {
-			return nowTUILabel{text: "STALE " + formatNowTUIAge(now.Sub(state.observedAt)), tone: "orange"}
+			return nowTUILabel{text: "STALE " + formatNowTUIAge(now.Sub(state.observedAt)), tone: nowTUIOrange}
 		}
-		return nowTUILabel{text: "ERROR", tone: "orange"}
+		return nowTUILabel{text: "ERROR", tone: nowTUIOrange}
 	}
 	if !state.hasValue {
-		return nowTUILabel{text: "LOADING", tone: "blue"}
+		return nowTUILabel{text: "LOADING", tone: nowTUIBlue}
 	}
 	if state.loading {
-		return nowTUILabel{text: "REFRESHING", tone: "blue"}
+		return nowTUILabel{text: "REFRESHING", tone: nowTUIBlue}
 	}
-	tone := "muted"
+	tone := nowTUIMuted
 	if state.value.Status == "playing" {
-		tone = "green"
+		tone = nowTUIGreen
 	}
 	return nowTUILabel{text: strings.ToUpper(state.value.Status), tone: tone}
 }
@@ -452,33 +476,46 @@ func nowTUILocalLabel(state nowTUILocalState, now time.Time) nowTUILabel {
 func nowTUIQueueLabel(state nowTUIQueueState, now time.Time) nowTUILabel {
 	if state.err != "" {
 		if state.hasValue {
-			return nowTUILabel{text: "STALE " + formatNowTUIAge(now.Sub(state.observedAt)), tone: "orange"}
+			return nowTUILabel{text: "STALE " + formatNowTUIAge(now.Sub(state.observedAt)), tone: nowTUIOrange}
 		}
-		return nowTUILabel{text: "ERROR", tone: "orange"}
+		return nowTUILabel{text: "ERROR", tone: nowTUIOrange}
 	}
 	if !state.hasValue {
-		return nowTUILabel{text: "LOADING", tone: "blue"}
+		return nowTUILabel{text: "LOADING", tone: nowTUIBlue}
 	}
 	if state.loading {
-		return nowTUILabel{text: "REFRESHING", tone: "blue"}
+		return nowTUILabel{text: "REFRESHING", tone: nowTUIBlue}
 	}
 	count := len(state.value.Occurrences)
 	if count == 1 {
-		return nowTUILabel{text: "1 EPISODE", tone: "muted"}
+		return nowTUILabel{text: "1 EPISODE", tone: nowTUIMuted}
 	}
-	return nowTUILabel{text: strconv.Itoa(count) + " EPISODES", tone: "muted"}
+	return nowTUILabel{text: strconv.Itoa(count) + " EPISODES", tone: nowTUIMuted}
 }
 
 func renderNowTUICompactSource(source string, label nowTUILabel, detail string, width int, theme nowTUITheme, unicodeOutput bool) string {
 	leftWidth := nowTUICellWidth(source) + 1 + nowTUICellWidth(label.text)
 	if leftWidth >= width {
-		return theme.tone(nowTUILabel{text: fitNowTUIPlain(source+" "+label.text, width, unicodeOutput), tone: label.tone})
+		status := source + " " + label.text
+		if strings.HasPrefix(label.text, "STALE ") {
+			age := strings.TrimPrefix(label.text, "STALE ")
+			for _, candidate := range []string{source[:1] + " S " + age, "S " + age, age} {
+				if nowTUICellWidth(candidate) <= width {
+					status = candidate
+					break
+				}
+			}
+		}
+		return theme.tone(nowTUILabel{text: fitNowTUIPlain(status, width, unicodeOutput), tone: label.tone})
 	}
 	detail = fitNowTUIPlain(detail, max(1, width-leftWidth-2), unicodeOutput)
 	return theme.bold(theme.primary(source)) + " " + theme.tone(label) + "  " + theme.muted(detail)
 }
 
 func compactNowTUIWeb(state nowTUIWebState) string {
+	if state.err != "" {
+		return "! " + state.err
+	}
 	if !state.hasValue {
 		return "No Web Player observation"
 	}
@@ -486,6 +523,9 @@ func compactNowTUIWeb(state nowTUIWebState) string {
 }
 
 func compactNowTUILocal(state nowTUILocalState) string {
+	if state.err != "" {
+		return "! " + state.err
+	}
 	if !state.hasValue || strings.TrimSpace(state.value.Title) == "" {
 		return "No managed local playback"
 	}
@@ -493,6 +533,9 @@ func compactNowTUILocal(state nowTUILocalState) string {
 }
 
 func compactNowTUIQueue(state nowTUIQueueState, offset int) string {
+	if state.err != "" {
+		return "! " + state.err
+	}
 	if !state.hasValue || len(state.value.Occurrences) == 0 {
 		return "No queued episode"
 	}

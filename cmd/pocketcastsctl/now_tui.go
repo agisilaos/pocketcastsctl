@@ -314,18 +314,20 @@ func collectNowTUISource(ctx context.Context, collector nowTUICollector, source 
 		result.err = result.local.Error
 	case nowTUIQueue:
 		result.queue = collector.Queue(ctx)
-		if result.queue.Status.Status != "ready" && result.queue.Status.Status != "empty" {
-			result.err = result.queue.Status.Error
-			if strings.TrimSpace(result.err) == "" {
-				result.err = "Up Next is " + result.queue.Status.Status
-			}
-		}
+		result.err = nowTUIQueueError(result.queue.Status)
 	}
 	result.at = now()
 	select {
 	case results <- result:
 	case <-ctx.Done():
 	}
+}
+
+func nowTUIQueueError(status app.NowQueueStatus) string {
+	if status.Status == "ready" || status.Status == "empty" {
+		return ""
+	}
+	return "Up Next unavailable"
 }
 
 func renderNowTUI(runtime nowTUIRuntime, model nowTUIModel) {

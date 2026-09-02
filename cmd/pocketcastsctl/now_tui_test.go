@@ -92,8 +92,20 @@ func TestNowTUIModelKeepsLastSuccessfulSnapshotWhenRefreshFails(t *testing.T) {
 		t.Fatalf("last successful queue was discarded: %+v", model.queue)
 	}
 	label := nowTUIQueueLabel(model.queue, observedAt.Add(18*time.Second))
-	if label.text != "STALE 18s" || label.tone != "orange" {
+	if label.text != "STALE 18s" || label.tone != nowTUIOrange {
 		t.Fatalf("stale label = %+v", label)
+	}
+}
+
+func TestNowTUIQueueErrorDoesNotExposeAuthenticationDetails(t *testing.T) {
+	for _, status := range []app.NowQueueStatus{
+		{Status: "unauthorized", Error: "API authentication is not configured"},
+		{Status: "unauthorized", Error: "API returned 401 Unauthorized"},
+		{Status: "unavailable", Error: "credential store failed: secret detail"},
+	} {
+		if got := nowTUIQueueError(status); got != "Up Next unavailable" {
+			t.Fatalf("queue error = %q, want generic unavailable message", got)
+		}
 	}
 }
 
@@ -190,6 +202,28 @@ func TestRenderNowTUICompactShowsScrolledOccurrence(t *testing.T) {
 	frame := renderNowTUIFrame(model, 35, 10, now, nowTUITheme{mode: nowTUINoColor}, true)
 	if !strings.Contains(frame, "Second occurrence") || strings.Contains(frame, "First occurrence") {
 		t.Fatalf("compact queue ignored scroll offset:\n%s", frame)
+	}
+}
+
+func TestRenderNowTUIKeepsStaleAgeAndErrorVisibleInConstrainedLayouts(t *testing.T) {
+	now := time.Date(2026, 9, 2, 12, 0, 18, 0, time.UTC)
+	model := populatedNowTUIModel(now.Add(-18 * time.Second))
+	model.apply(nowTUIResult{source: nowTUIQueue, at: now, err: "Up Next unavailable"})
+
+	tiny := renderNowTUIFrame(model, 8, 1, now, nowTUITheme{mode: nowTUINoColor}, false)
+	if !strings.Contains(tiny, "S 18s") {
+		t.Fatalf("tiny compact frame hid stale age: %q", tiny)
+	}
+
+	compact := renderNowTUIFrame(model, 35, 10, now, nowTUITheme{mode: nowTUINoColor}, true)
+	if !strings.Contains(compact, "STALE 18s") || !strings.Contains(compact, "! Up Next") {
+		t.Fatalf("compact frame hid stale status or error:\n%s", compact)
+	}
+
+	model.apply(nowTUIResult{source: nowTUIWeb, at: now, err: "Web Player unavailable"})
+	stacked := renderNowTUIFrame(model, 60, 20, now, nowTUITheme{mode: nowTUINoColor}, true)
+	if !strings.Contains(stacked, "STALE 18s") || !strings.Contains(stacked, "Web Player unavailable") {
+		t.Fatalf("short stacked frame hid stale Web error:\n%s", stacked)
 	}
 }
 
