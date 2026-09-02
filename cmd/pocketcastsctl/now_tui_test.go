@@ -164,6 +164,9 @@ func TestRenderNowTUIWideAndNarrowLayouts(t *testing.T) {
 		t.Fatalf("narrow panels are not stacked in source order:\n%s", narrow)
 	}
 	assertNowTUIFrameSize(t, narrow, 60, 30)
+
+	userTerminal := renderNowTUIFrame(model, 244, 70, now, theme, true)
+	assertNowTUIFrameSize(t, userTerminal, 244, 70)
 }
 
 func TestRenderNowTUIUsesPocketCastsTrueColorPalette(t *testing.T) {
@@ -250,6 +253,25 @@ func TestRenderNowTUIASCIIChromeContainsNoUnicode(t *testing.T) {
 			}
 		}
 		assertNowTUIFrameSize(t, frame, size[0], size[1])
+	}
+}
+
+func TestRenderNowTUIUsesCRLFInRawTerminalMode(t *testing.T) {
+	var output bytes.Buffer
+	renderNowTUI(nowTUIRuntime{
+		output:  &output,
+		now:     time.Now,
+		size:    func() (int, int) { return 60, 20 },
+		theme:   nowTUITheme{mode: nowTUINoColor},
+		unicode: true,
+	}, populatedNowTUIModel(time.Now()))
+
+	rendered := output.String()
+	if got := strings.Count(rendered, "\r\n"); got != 19 {
+		t.Fatalf("CRLF count = %d, want 19", got)
+	}
+	if strings.Contains(strings.ReplaceAll(rendered, "\r\n", ""), "\n") {
+		t.Fatalf("raw terminal output contains a bare newline: %q", rendered)
 	}
 }
 

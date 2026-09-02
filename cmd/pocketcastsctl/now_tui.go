@@ -333,6 +333,9 @@ func nowTUIQueueError(status app.NowQueueStatus) string {
 func renderNowTUI(runtime nowTUIRuntime, model nowTUIModel) {
 	width, height := runtime.size()
 	frame := renderNowTUIFrame(model, width, height, runtime.now(), runtime.theme, runtime.unicode)
+	// MakeRaw disables the terminal's NL-to-CRNL output translation. Emit both
+	// bytes so every rendered row starts in column zero instead of stair-stepping.
+	frame = strings.ReplaceAll(frame, "\n", "\r\n")
 	fmt.Fprint(runtime.output, "\x1b[H\x1b[2J", frame)
 }
 

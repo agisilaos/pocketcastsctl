@@ -163,8 +163,8 @@ func (theme nowTUITheme) tone(label nowTUILabel) string {
 }
 
 func renderNowTUIFrame(model nowTUIModel, width, height int, now time.Time, theme nowTUITheme, unicodeOutput bool) string {
-	width = max(1, min(width, 240))
-	height = max(1, min(height, 80))
+	width = max(1, width)
+	height = max(1, height)
 	chars := nowTUICharacters(unicodeOutput)
 	if width < 40 || height < 20 {
 		return renderNowTUICompact(model, width, height, now, theme, chars)
