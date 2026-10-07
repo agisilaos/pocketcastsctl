@@ -98,7 +98,6 @@ func SummarizeFile(path string, opts SummarizeOptions) (Summary, error) {
 
 func Summarize(f File, opts SummarizeOptions) Summary {
 	hostNeedle := strings.TrimSpace(opts.Host)
-	hostNeedleLower := strings.ToLower(hostNeedle)
 
 	type key struct {
 		method string
@@ -111,23 +110,13 @@ func Summarize(f File, opts SummarizeOptions) Summary {
 	matched := 0
 
 	for _, e := range f.Log.Entries {
-		raw := strings.TrimSpace(e.Request.URL)
-		if raw == "" {
-			continue
-		}
-		u, err := url.Parse(raw)
-		if err != nil {
-			continue
-		}
-
-		h := u.Hostname()
-		if hostNeedleLower != "" && !strings.Contains(strings.ToLower(h), hostNeedleLower) {
+		r, ok := analyzeRequest(e.Request, hostNeedle)
+		if !ok {
 			continue
 		}
 		matched++
 
-		p := u.EscapedPath()
-		k := key{method: strings.ToUpper(strings.TrimSpace(e.Request.Method)), host: h, path: p}
+		k := key{method: r.method, host: r.host, path: r.path}
 		ec := counts[k]
 		if ec == nil {
 			ec = &EndpointCount{Method: k.method, Host: k.host, Path: k.path}
@@ -144,9 +133,9 @@ func Summarize(f File, opts SummarizeOptions) Summary {
 		if hasHeader(e.Request.Headers, "x-csrf-token") || hasHeader(e.Request.Headers, "x-xsrf-token") {
 			ec.Hints = addHint(ec.Hints, "csrf")
 		}
-		if e.Request.PostData != nil && strings.Contains(strings.ToLower(e.Request.PostData.MimeType), "json") {
+		if r.jsonBody {
 			ec.Hints = addHint(ec.Hints, "json")
-			if looksLikeGraphQL(e.Request.PostData.Text) {
+			if r.graphql != notGraphQL {
 				ec.Hints = addHint(ec.Hints, "graphql")
 			}
 		}
@@ -215,15 +204,62 @@ func addHint(hints []string, h string) []string {
 	return append(hints, h)
 }
 
-func looksLikeGraphQL(postDataText string) bool {
-	// Best-effort: Pocket Casts may use GraphQL; HAR postData.text is a JSON string.
-	// We don't want to print secrets; we only mark a hint if the shape resembles GraphQL.
-	var m map[string]any
-	if err := json.Unmarshal([]byte(postDataText), &m); err != nil {
-		return false
+// Request analysis is deliberately separate from redaction's fail-closed traversal.
+type graphqlKind uint8
+
+const (
+	notGraphQL graphqlKind = iota
+	unnamedGraphQL
+	namedGraphQL
+)
+
+type analyzedRequest struct {
+	method        string
+	host          string
+	path          string
+	jsonBody      bool
+	graphql       graphqlKind
+	operationName string
+	variableKeys  []string
+}
+
+func analyzeRequest(req Request, hostFilter string) (analyzedRequest, bool) {
+	raw := strings.TrimSpace(req.URL)
+	if raw == "" {
+		return analyzedRequest{}, false
 	}
-	_, hasQuery := m["query"]
-	_, hasOperation := m["operationName"]
-	_, hasVariables := m["variables"]
-	return hasQuery || (hasOperation && hasVariables)
+	u, err := url.Parse(raw)
+	if err != nil || u.Hostname() == "" {
+		return analyzedRequest{}, false
+	}
+	host := strings.ToLower(u.Hostname())
+	filter := strings.ToLower(strings.TrimSpace(hostFilter))
+	if filter != "" && host != filter && !strings.HasSuffix(host, "."+filter) {
+		return analyzedRequest{}, false
+	}
+	r := analyzedRequest{
+		method: strings.ToUpper(strings.TrimSpace(req.Method)),
+		host:   host,
+		path:   u.EscapedPath(),
+	}
+	if req.PostData == nil || !strings.Contains(strings.ToLower(req.PostData.MimeType), "json") {
+		return r, true
+	}
+	r.jsonBody = true
+	// Only single JSON objects are supported; batch arrays are not operations.
+	var body map[string]any
+	if err := json.Unmarshal([]byte(req.PostData.Text), &body); err != nil {
+		return r, true
+	}
+	opName, _ := body["operationName"].(string)
+	query, _ := body["query"].(string)
+	switch {
+	case strings.TrimSpace(opName) != "":
+		r.graphql = namedGraphQL
+		r.operationName = opName
+		r.variableKeys = extractTopLevelKeys(body["variables"])
+	case strings.TrimSpace(query) != "":
+		r.graphql = unnamedGraphQL
+	}
+	return r, true
 }

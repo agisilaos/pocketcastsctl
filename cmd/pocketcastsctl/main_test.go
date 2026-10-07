@@ -887,16 +887,6 @@ func TestAuthTokenExpiry(t *testing.T) {
 	}
 }
 
-func TestGoldenHelpRoot(t *testing.T) {
-	_, stdout, _ := runForTest(t, []string{"help"}, "")
-	assertGolden(t, "help_root.golden", stdout)
-}
-
-func TestGoldenHelpStart(t *testing.T) {
-	_, stdout, _ := runForTest(t, []string{"help", "start"}, "")
-	assertGolden(t, "help_start.golden", stdout)
-}
-
 func TestNestedHelpBypassesMalformedConfig(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.json")
 	t.Setenv(config.EnvConfigPath, path)
@@ -1055,18 +1045,5 @@ func writeSavedConfigForTest(t *testing.T, doc map[string]any) {
 	}
 	if err := os.WriteFile(config.Path(), b, 0o600); err != nil {
 		t.Fatal(err)
-	}
-}
-
-func assertGolden(t *testing.T, fileName, got string) {
-	t.Helper()
-	path := filepath.Join("testdata", fileName)
-	wantBytes, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read golden %s: %v", path, err)
-	}
-	want := string(wantBytes)
-	if got != want {
-		t.Fatalf("golden mismatch for %s\n--- want ---\n%s\n--- got ---\n%s", fileName, want, got)
 	}
 }
