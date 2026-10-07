@@ -74,9 +74,9 @@ func TestManagerReconstructsSavedSession(t *testing.T) {
 			if err := store.Save(context.Background(), "active", Credentials{AccessToken: token, RefreshToken: "refresh"}); err != nil {
 				t.Fatal(err)
 			}
-			session, source, err := NewManager(cfg, ManagerOptions{Store: store}).Snapshot(context.Background())
-			if err != nil || source != SourceKeychain || session.AccountID != wantID || session.Email != wantEmail || session.ExpiresAt != wantExpiry || session.Method != "password" || session.Scope != ScopeWebPlayer || session.TokenType != "Bearer" || session.RefreshToken != "refresh" {
-				t.Fatalf("reconstructed metadata mismatch: source=%s error=%v", source, err)
+			session, err := NewManager(cfg, ManagerOptions{Store: store}).Snapshot(context.Background())
+			if err != nil || session.Source != SourceKeychain || session.AccountID != wantID || session.Email != wantEmail || session.ExpiresAt != wantExpiry || session.Method != "password" || session.Scope != ScopeWebPlayer {
+				t.Fatalf("reconstructed metadata mismatch: source=%s error=%v", session.Source, err)
 			}
 		})
 	}
@@ -118,7 +118,7 @@ func TestManagerRefreshPersistenceRecovery(t *testing.T) {
 			if _, err := manager.ForceRefresh(context.Background()); err == nil {
 				t.Fatal("refresh succeeded despite persistence failure")
 			}
-			snapshot, _, err := manager.Snapshot(context.Background())
+			snapshot, err := manager.Snapshot(context.Background())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -126,7 +126,7 @@ func TestManagerRefreshPersistenceRecovery(t *testing.T) {
 			if metadataFailure {
 				want = Credentials{AccessToken: "new-access", RefreshToken: "new-refresh"}
 			}
-			if snapshot.credentials() != want || store.credentials["active"] != want {
+			if snapshot.Source != SourceKeychain || manager.session.credentials() != want || store.credentials["active"] != want {
 				t.Fatal("refresh persistence failure lost recoverable credentials")
 			}
 			after, err := os.ReadFile(path)
@@ -135,8 +135,9 @@ func TestManagerRefreshPersistenceRecovery(t *testing.T) {
 			}
 			// A new process reconstructs account/method/scope from the old configuration
 			// even if credentials were rotated before metadata could be saved.
-			reloaded, _, err := NewManager(cfg, ManagerOptions{Store: store}).Snapshot(context.Background())
-			if err != nil || reloaded.credentials() != want || reloaded.Email != cfg.Auth.Email || reloaded.Method != cfg.Auth.Method || reloaded.Scope != cfg.Auth.Scope {
+			reloadedManager := NewManager(cfg, ManagerOptions{Store: store})
+			reloaded, err := reloadedManager.Snapshot(context.Background())
+			if err != nil || reloadedManager.session.credentials() != want || reloaded.Email != cfg.Auth.Email || reloaded.Method != cfg.Auth.Method || reloaded.Scope != cfg.Auth.Scope {
 				t.Fatal("new process could not reconstruct recoverable session")
 			}
 		})

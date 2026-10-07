@@ -85,7 +85,7 @@ func TestSessionReplacementPreflightUsesResolvedSession(t *testing.T) {
 func TestConfirmSessionReplacementUsesResolvedAccount(t *testing.T) {
 	tests := []struct {
 		name      string
-		current   authn.Session
+		current   authn.ResolvedSession
 		candidate authn.Session
 		force     bool
 		wantError bool
@@ -96,29 +96,29 @@ func TestConfirmSessionReplacementUsesResolvedAccount(t *testing.T) {
 		},
 		{
 			name:      "same account ID",
-			current:   authn.Session{AccessToken: "current", AccountID: "account-1"},
+			current:   authn.ResolvedSession{Source: authn.SourceKeychain, SessionMetadata: authn.SessionMetadata{AccountID: "account-1"}},
 			candidate: authn.Session{AccountID: "account-1"},
 		},
 		{
 			name:      "same normalized email",
-			current:   authn.Session{AccessToken: "current", Email: "person@example.com"},
+			current:   authn.ResolvedSession{Source: authn.SourceKeychain, SessionMetadata: authn.SessionMetadata{Email: "person@example.com"}},
 			candidate: authn.Session{Email: "Person@Example.com"},
 		},
 		{
 			name:      "different account requires force",
-			current:   authn.Session{AccessToken: "current", AccountID: "account-1"},
+			current:   authn.ResolvedSession{Source: authn.SourceKeychain, SessionMetadata: authn.SessionMetadata{AccountID: "account-1"}},
 			candidate: authn.Session{AccountID: "account-2"},
 			wantError: true,
 		},
 		{
 			name:      "unknown current identity requires force",
-			current:   authn.Session{AccessToken: "opaque-current"},
+			current:   authn.ResolvedSession{Source: authn.SourceKeychain},
 			candidate: authn.Session{AccountID: "account-2"},
 			wantError: true,
 		},
 		{
 			name:      "force permits different account",
-			current:   authn.Session{AccessToken: "current", AccountID: "account-1"},
+			current:   authn.ResolvedSession{Source: authn.SourceKeychain, SessionMetadata: authn.SessionMetadata{AccountID: "account-1"}},
 			candidate: authn.Session{AccountID: "account-2"},
 			force:     true,
 		},

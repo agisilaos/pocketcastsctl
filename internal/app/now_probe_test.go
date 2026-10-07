@@ -175,19 +175,21 @@ func TestNowProbeUsesOneManagerThroughRefresh(t *testing.T) {
 
 func TestNowProbeCredentialLoadFailureDoesNotFallBack(t *testing.T) {
 	t.Setenv(config.EnvAccessToken, "")
-	loads, requests := 0, 0
-	store := probeStore{load: func(context.Context) (authn.Credentials, error) {
-		loads++
-		return authn.Credentials{}, errors.New("Keychain unavailable")
-	}}
-	client := &http.Client{Transport: probeTransport(func(*http.Request) (*http.Response, error) {
-		requests++
-		return probeResponse(200, `{"episodes":[]}`), nil
-	})}
-	cfg := config.Config{Auth: config.AuthConfig{SessionKey: "active"}, APIHeaders: map[string]string{"Authorization": "Bearer legacy-token"}}
-	auth, queue := collectNowAPIStatus(context.Background(), cfg, NowOptions{VerifyAuth: true}, authn.ManagerOptions{Store: store, HTTP: client})
-	if loads != 1 || requests != 0 || auth.Status != "missing" || auth.AuthorizationExists || queue.Status != "unavailable" || auth.Error == "" {
-		t.Fatalf("loads=%d requests=%d auth=%+v queue=%+v", loads, requests, auth, queue)
+	for _, loadErr := range []error{errors.New("Keychain unavailable"), nil} {
+		loads, requests := 0, 0
+		store := probeStore{load: func(context.Context) (authn.Credentials, error) {
+			loads++
+			return authn.Credentials{}, loadErr
+		}}
+		client := &http.Client{Transport: probeTransport(func(*http.Request) (*http.Response, error) {
+			requests++
+			return probeResponse(200, `{"episodes":[]}`), nil
+		})}
+		cfg := config.Config{Auth: config.AuthConfig{SessionKey: "active"}, APIHeaders: map[string]string{"Authorization": "Bearer legacy-token"}}
+		auth, queue := collectNowAPIStatus(context.Background(), cfg, NowOptions{VerifyAuth: true}, authn.ManagerOptions{Store: store, HTTP: client})
+		if loads != 1 || requests != 0 || auth.Status != "missing" || auth.AuthorizationExists || queue.Status != "unavailable" || auth.Error == "" {
+			t.Fatalf("loads=%d requests=%d auth=%+v queue=%+v", loads, requests, auth, queue)
+		}
 	}
 }
 

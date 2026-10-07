@@ -106,15 +106,22 @@ func (m *Manager) ForceRefresh(ctx context.Context) (string, error) {
 	return m.session.AccessToken, nil
 }
 
+// ResolvedSession observes the source and non-secret metadata of configured credentials.
+type ResolvedSession struct {
+	Source Source
+	SessionMetadata
+}
+
 // Snapshot reads local credential state without performing network I/O or
-// refreshing an expired access token.
-func (m *Manager) Snapshot(ctx context.Context) (Session, Source, error) {
+// refreshing an expired access token. Success means credentials are configured;
+// failures return SourceNone and no session metadata.
+func (m *Manager) Snapshot(ctx context.Context) (ResolvedSession, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if err := m.loadLocked(ctx); err != nil {
-		return Session{}, SourceNone, err
+		return ResolvedSession{Source: SourceNone}, err
 	}
-	return m.session, m.source, nil
+	return ResolvedSession{Source: m.source, SessionMetadata: m.session.Metadata()}, nil
 }
 
 func (m *Manager) Warning() string {
@@ -138,9 +145,13 @@ func (m *Manager) loadLocked(ctx context.Context) error {
 	if key := strings.TrimSpace(m.cfg.Auth.SessionKey); key != "" {
 		credentials, err := m.store.Load(ctx, key)
 		if err == nil {
-			m.session = sessionFromCredentials(credentials, m.cfg.Auth)
-			m.source = SourceKeychain
-			return nil
+			session := sessionFromCredentials(credentials, m.cfg.Auth)
+			if session.AccessToken != "" {
+				m.session = session
+				m.source = SourceKeychain
+				return nil
+			}
+			err = errors.New("API session in Keychain has no access token")
 		}
 		m.loadErr = fmt.Errorf("%w: %v", ErrCredentialUnavailable, err)
 		return m.loadErr

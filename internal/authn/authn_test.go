@@ -101,8 +101,8 @@ func TestManagerDoesNotFallBackToPlaintextWhenKeychainSessionFails(t *testing.T)
 	if token, err := manager.AccessToken(context.Background()); token != "" || !errors.Is(err, ErrCredentialUnavailable) {
 		t.Fatalf("token=%q error=%v, want unavailable Keychain error", token, err)
 	}
-	if _, source, _ := manager.Snapshot(context.Background()); source != SourceNone {
-		t.Fatalf("source=%q, want none", source)
+	if snapshot, _ := manager.Snapshot(context.Background()); snapshot.Source != SourceNone {
+		t.Fatalf("source=%q, want none", snapshot.Source)
 	}
 }
 
@@ -122,9 +122,9 @@ func TestManagerCredentialPrecedence(t *testing.T) {
 	if token != "environment-token" {
 		t.Fatalf("token = %q, want environment token", token)
 	}
-	_, source, _ := manager.Snapshot(context.Background())
-	if source != SourceEnvironment {
-		t.Fatalf("source = %q, want environment", source)
+	snapshot, _ := manager.Snapshot(context.Background())
+	if snapshot.Source != SourceEnvironment {
+		t.Fatalf("source = %q, want environment", snapshot.Source)
 	}
 
 	t.Setenv(config.EnvAccessToken, "")
@@ -136,9 +136,9 @@ func TestManagerCredentialPrecedence(t *testing.T) {
 	if token != "keychain-token" {
 		t.Fatalf("token = %q, want keychain token", token)
 	}
-	_, source, _ = manager.Snapshot(context.Background())
-	if source != SourceKeychain {
-		t.Fatalf("source = %q, want keychain", source)
+	snapshot, _ = manager.Snapshot(context.Background())
+	if snapshot.Source != SourceKeychain {
+		t.Fatalf("source = %q, want keychain", snapshot.Source)
 	}
 
 	cfg.Auth = config.AuthConfig{}
@@ -150,9 +150,9 @@ func TestManagerCredentialPrecedence(t *testing.T) {
 	if token != "legacy-token" || manager.Warning() == "" {
 		t.Fatalf("legacy fallback = %q, warning = %q", token, manager.Warning())
 	}
-	_, source, _ = manager.Snapshot(context.Background())
-	if source != SourceLegacy {
-		t.Fatalf("source = %q, want legacy", source)
+	snapshot, _ = manager.Snapshot(context.Background())
+	if snapshot.Source != SourceLegacy {
+		t.Fatalf("source = %q, want legacy", snapshot.Source)
 	}
 }
 
@@ -359,8 +359,10 @@ func TestInstallValidatesBeforeReplacingActiveSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	reloaded, source, err := NewManager(saved, ManagerOptions{Store: store}).Snapshot(context.Background())
-	if err != nil || source != SourceKeychain || reloaded.AccessToken != "candidate" || reloaded.RefreshToken != "refresh" || reloaded.Email != "person@example.com" || reloaded.Method != "password" || reloaded.Scope != ScopeWebPlayer {
+	manager := NewManager(saved, ManagerOptions{Store: store})
+	reloaded, err := manager.Snapshot(context.Background())
+	token, tokenErr := manager.AccessToken(context.Background())
+	if err != nil || tokenErr != nil || reloaded.Source != SourceKeychain || token != "candidate" || store.credentials[updated.Auth.SessionKey].RefreshToken != "refresh" || reloaded.Email != "person@example.com" || reloaded.Method != "password" || reloaded.Scope != ScopeWebPlayer {
 		t.Fatal("installed session could not be reconstructed in a new process")
 	}
 }

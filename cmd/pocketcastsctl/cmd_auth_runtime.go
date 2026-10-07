@@ -91,19 +91,19 @@ func promptSecret(prompt string) (string, error) {
 	return string(raw), nil
 }
 
-func sessionReplacementPreflight(cfg config.Config) (authn.Session, error) {
+func sessionReplacementPreflight(cfg config.Config) (authn.ResolvedSession, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	session, source, err := newAuthManager(cfg).Snapshot(ctx)
+	session, err := newAuthManager(cfg).Snapshot(ctx)
 	if errors.Is(err, authn.ErrNotConfigured) {
-		return authn.Session{}, nil
+		return authn.ResolvedSession{Source: authn.SourceNone}, nil
 	}
 	if err != nil {
-		return authn.Session{}, fmt.Errorf("resolve active API session: %w; restore Keychain access or run `pocketcastsctl auth logout` before retrying", err)
+		return authn.ResolvedSession{Source: authn.SourceNone}, fmt.Errorf("resolve active API session: %w; restore Keychain access or run `pocketcastsctl auth logout` before retrying", err)
 	}
-	if source == authn.SourceEnvironment {
-		return authn.Session{}, errEnvironmentOverrideActive
+	if session.Source == authn.SourceEnvironment {
+		return authn.ResolvedSession{Source: authn.SourceNone}, errEnvironmentOverrideActive
 	}
 	return session, nil
 }
@@ -115,8 +115,8 @@ func renderSessionReplacementPreflightError(command string, err error, mode auth
 	return renderAuthCommandError(command, "auth.session.resolve_failed", err, mode, 1)
 }
 
-func confirmSessionReplacement(current, candidate authn.Session, force, interactive bool) error {
-	if strings.TrimSpace(current.AccessToken) == "" || !authn.NeedsAccountConfirmation(current.AccountID, current.Email, candidate) {
+func confirmSessionReplacement(current authn.ResolvedSession, candidate authn.Session, force, interactive bool) error {
+	if current.Source == authn.SourceNone || current.Source == "" || !authn.NeedsAccountConfirmation(current.AccountID, current.Email, candidate) {
 		return nil
 	}
 	if force {
@@ -155,7 +155,7 @@ func renderAuthCommandError(command, code string, err error, mode authOutputMode
 	}
 }
 
-func renderAuthSuccess(command string, session authn.Session, source, profile string, mode authOutputMode) int {
+func renderAuthSuccess(command string, session authn.SessionMetadata, source, profile string, mode authOutputMode) int {
 	switch mode {
 	case authOutputJSON:
 		result := map[string]any{

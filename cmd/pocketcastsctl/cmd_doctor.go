@@ -330,14 +330,14 @@ func collectDoctorChecks(cfg config.Config, includeAPIValidation bool) []doctorC
 
 	authManager := newAuthManager(cfg)
 	authCtx, authCancel := context.WithTimeout(context.Background(), 5*time.Second)
-	authSession, authSource, authErr := authManager.Snapshot(authCtx)
+	authSession, authErr := authManager.Snapshot(authCtx)
 	authCancel()
-	authConfigured := authErr == nil && strings.TrimSpace(authSession.AccessToken) != ""
-	if authConfigured && string(authSource) != "legacy_config" {
+	authConfigured := authErr == nil
+	if authConfigured && string(authSession.Source) != "legacy_config" {
 		checks = append(checks, doctorCheck{
 			ID:      "api_session",
 			Status:  "ok",
-			Message: fmt.Sprintf("API session available from %s", authSource),
+			Message: fmt.Sprintf("API session available from %s", authSession.Source),
 		})
 	} else if authConfigured {
 		checks = append(checks, doctorCheck{
