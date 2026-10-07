@@ -75,31 +75,122 @@ func TestReleaseUsesConfigurableHTTPSHomebrewTapRemote(t *testing.T) {
 	}
 }
 
-func TestCheckHelpDocsDriftScript(t *testing.T) {
-	t.Run("drift detected", func(t *testing.T) {
-		repo := setupHelpDriftRepo(t, true)
-		out, err := runCmd(repo, "bash", "scripts/check-help-docs-drift.sh")
-		if err == nil {
-			t.Fatalf("expected drift failure")
+func TestHelpSnapshots(t *testing.T) {
+	t.Run("check and deterministic update", func(t *testing.T) {
+		repo := setupHelpSnapshotsRepo(t)
+		mustRun(t, repo, "bash", "scripts/update-help.sh", "--check")
+		for i := 0; i < 2; i++ {
+			mustRun(t, repo, "bash", "scripts/update-help.sh")
+			for file, want := range map[string]string{"root.txt": "HELP ROOT\n", "start.txt": "HELP START\n"} {
+				if got := mustReadFile(t, filepath.Join(repo, "docs/help", file)); got != want {
+					t.Fatalf("%s = %q, want %q", file, got, want)
+				}
+			}
 		}
-		if !strings.Contains(out, "help root output drifted") {
-			t.Fatalf("unexpected output: %s", out)
+		mustRun(t, repo, "bash", "scripts/update-help.sh", "--check")
+	})
+
+	for _, file := range []string{"root.txt", "start.txt"} {
+		t.Run("stale "+file, func(t *testing.T) {
+			repo := setupHelpSnapshotsRepo(t)
+			path := filepath.Join(repo, "docs/help", file)
+			mustWriteFile(t, path, "OLD HELP\n")
+			out, err := runCmd(repo, "bash", "scripts/update-help.sh", "--check")
+			if err == nil || !strings.Contains(out, "help output drift detected in "+file) {
+				t.Fatalf("expected drift failure: %v\n%s", err, out)
+			}
+			if got := mustReadFile(t, path); got != "OLD HELP\n" {
+				t.Fatalf("check changed snapshot: %q", got)
+			}
+			mustRun(t, repo, "bash", "scripts/update-help.sh")
+			mustRun(t, repo, "bash", "scripts/update-help.sh", "--check")
+		})
+		t.Run("missing "+file, func(t *testing.T) {
+			repo := setupHelpSnapshotsRepo(t)
+			path := filepath.Join(repo, "docs/help", file)
+			if err := os.Remove(path); err != nil {
+				t.Fatal(err)
+			}
+			out, err := runCmd(repo, "bash", "scripts/update-help.sh", "--check")
+			if err == nil || !strings.Contains(out, "help output drift detected in "+file) {
+				t.Fatalf("expected missing snapshot failure: %v\n%s", err, out)
+			}
+			if _, err := os.Stat(path); !os.IsNotExist(err) {
+				t.Fatalf("check created missing snapshot: %v", err)
+			}
+			mustRun(t, repo, "bash", "scripts/update-help.sh")
+			mustRun(t, repo, "bash", "scripts/update-help.sh", "--check")
+		})
+	}
+
+	t.Run("registry owns new commands", func(t *testing.T) {
+		repo := setupHelpSnapshotsRepo(t)
+		registry := filepath.Join(repo, "scripts/help-snapshots.txt")
+		mustWriteFile(t, registry, mustReadFile(t, registry)+"extra.txt\thelp extra\n")
+		mustRun(t, repo, "bash", "scripts/update-help.sh")
+		if got := mustReadFile(t, filepath.Join(repo, "docs/help/extra.txt")); got != "HELP EXTRA\n" {
+			t.Fatalf("new registry entry not generated: %q", got)
+		}
+		mustRun(t, repo, "bash", "scripts/update-help.sh", "--check")
+	})
+
+	for _, file := range []string{"extra.txt", ".hidden"} {
+		t.Run("unregistered "+file, func(t *testing.T) {
+			repo := setupHelpSnapshotsRepo(t)
+			path := filepath.Join(repo, "docs/help", file)
+			mustWriteFile(t, path, "EXTRA\n")
+			for _, args := range [][]string{{"--check"}, {}} {
+				out, err := runCmd(repo, "bash", append([]string{"scripts/update-help.sh"}, args...)...)
+				if err == nil || !strings.Contains(out, "unregistered help snapshot") {
+					t.Fatalf("expected extra snapshot failure: %v\n%s", err, out)
+				}
+			}
+			if got := mustReadFile(t, path); got != "EXTRA\n" {
+				t.Fatalf("update removed unregistered snapshot: %q", got)
+			}
+		})
+	}
+
+	for name, registry := range map[string]string{
+		"empty":              "# no entries\n",
+		"missing separator":  "root.txt help\n",
+		"missing command":    "root.txt\t\n",
+		"unsafe filename":    "../root.txt\thelp\n",
+		"duplicate filename": "root.txt\thelp\nroot.txt\thelp start\n",
+	} {
+		t.Run("invalid registry "+name, func(t *testing.T) {
+			repo := setupHelpSnapshotsRepo(t)
+			mustWriteFile(t, filepath.Join(repo, "scripts/help-snapshots.txt"), registry)
+			for _, args := range [][]string{{"--check"}, {}} {
+				out, err := runCmd(repo, "bash", append([]string{"scripts/update-help.sh"}, args...)...)
+				if err == nil || !strings.Contains(out, "error:") {
+					t.Fatalf("expected invalid registry failure: %v\n%s", err, out)
+				}
+			}
+			if got := mustReadFile(t, filepath.Join(repo, "docs/help/root.txt")); got != "HELP ROOT\n" {
+				t.Fatalf("invalid registry changed snapshot: %q", got)
+			}
+		})
+	}
+
+	t.Run("failed generation preserves snapshots", func(t *testing.T) {
+		repo := setupHelpSnapshotsRepo(t)
+		mustWriteFile(t, filepath.Join(repo, "scripts/help-snapshots.txt"), "root.txt\thelp\nstart.txt\tinvalid\n")
+		mustWriteFile(t, filepath.Join(repo, "docs/help/root.txt"), "OLD HELP\n")
+		if out, err := runCmd(repo, "bash", "scripts/update-help.sh"); err == nil {
+			t.Fatalf("expected generation failure: %s", out)
+		}
+		if got := mustReadFile(t, filepath.Join(repo, "docs/help/root.txt")); got != "OLD HELP\n" {
+			t.Fatalf("failed generation changed snapshot: %q", got)
 		}
 	})
 
-	t.Run("update snapshots", func(t *testing.T) {
-		repo := setupHelpDriftRepo(t, false)
-		out, err := runCmd(repo, "bash", "scripts/check-help-docs-drift.sh", "--update")
-		if err != nil {
-			t.Fatalf("unexpected update error: %v\n%s", err, out)
-		}
-		root := mustReadFile(t, filepath.Join(repo, "docs/cli-help/help-root.txt"))
-		start := mustReadFile(t, filepath.Join(repo, "docs/cli-help/help-start.txt"))
-		if strings.TrimSpace(root) != "HELP ROOT" {
-			t.Fatalf("unexpected root snapshot: %q", root)
-		}
-		if strings.TrimSpace(start) != "HELP START" {
-			t.Fatalf("unexpected start snapshot: %q", start)
+	t.Run("scratch output directory", func(t *testing.T) {
+		repo := setupHelpSnapshotsRepo(t)
+		mustRun(t, repo, "bash", "scripts/update-help.sh", "--out-dir", "scratch help")
+		mustRun(t, repo, "bash", "scripts/update-help.sh", "--check", "--out-dir", "scratch help")
+		if got := mustReadFile(t, filepath.Join(repo, "scratch help/root.txt")); got != "HELP ROOT\n" {
+			t.Fatalf("unexpected scratch snapshot: %q", got)
 		}
 	})
 }
@@ -144,10 +235,12 @@ func main() {
 	return repo
 }
 
-func setupHelpDriftRepo(t *testing.T, withDrift bool) string {
+func setupHelpSnapshotsRepo(t *testing.T) string {
 	t.Helper()
 	repo := t.TempDir()
-	mustCopyFile(t, repoRootPath(t, "scripts/check-help-docs-drift.sh"), filepath.Join(repo, "scripts/check-help-docs-drift.sh"))
+	for _, path := range []string{"scripts/update-help.sh", "scripts/help-snapshots.txt"} {
+		mustCopyFile(t, repoRootPath(t, path), filepath.Join(repo, path))
+	}
 	mustWriteFile(t, filepath.Join(repo, "go.mod"), "module example.com/helpdrift\n\ngo 1.24\n")
 	mustWriteFile(t, filepath.Join(repo, "cmd/pocketcastsctl/main.go"), `package main
 
@@ -157,21 +250,21 @@ import (
 )
 
 func main() {
-	args := os.Args[1:]
-	if len(args) >= 2 && args[0] == "help" && args[1] == "start" {
-		fmt.Println("HELP START")
-		return
-	}
-	if len(args) >= 1 && args[0] == "help" {
+	switch {
+	case len(os.Args) == 2 && os.Args[1] == "help":
 		fmt.Println("HELP ROOT")
-		return
+	case len(os.Args) == 3 && os.Args[1] == "help" && os.Args[2] == "start":
+		fmt.Println("HELP START")
+	case len(os.Args) == 3 && os.Args[1] == "help" && os.Args[2] == "extra":
+		fmt.Println("HELP EXTRA")
+	default:
+		fmt.Fprintln(os.Stderr, "invalid command")
+		os.Exit(2)
 	}
 }
 `)
-	if withDrift {
-		mustWriteFile(t, filepath.Join(repo, "docs/cli-help/help-root.txt"), "OLD ROOT\n")
-		mustWriteFile(t, filepath.Join(repo, "docs/cli-help/help-start.txt"), "OLD START\n")
-	}
+	mustWriteFile(t, filepath.Join(repo, "docs/help/root.txt"), "HELP ROOT\n")
+	mustWriteFile(t, filepath.Join(repo, "docs/help/start.txt"), "HELP START\n")
 	return repo
 }
 

@@ -23,10 +23,8 @@ func TestSessionReplacementPreflightUsesResolvedSession(t *testing.T) {
 
 	t.Run("keychain session overrides stale metadata and legacy", func(t *testing.T) {
 		store := useCommandMemoryStore(t)
-		store.sessions["active"] = authn.Session{
-			AccessToken: "keychain-token",
-			AccountID:   "resolved-account",
-			Email:       "resolved@example.com",
+		store.credentials["active"] = authn.Credentials{
+			AccessToken: "x." + base64.RawURLEncoding.EncodeToString([]byte(`{"sub":"resolved-account","email":"resolved@example.com"}`)) + ".y",
 		}
 		cfg := config.Default()
 		cfg.Auth = config.AuthConfig{
@@ -87,7 +85,7 @@ func TestSessionReplacementPreflightUsesResolvedSession(t *testing.T) {
 func TestConfirmSessionReplacementUsesResolvedAccount(t *testing.T) {
 	tests := []struct {
 		name      string
-		current   authn.Session
+		current   authn.ResolvedSession
 		candidate authn.Session
 		force     bool
 		wantError bool
@@ -98,29 +96,29 @@ func TestConfirmSessionReplacementUsesResolvedAccount(t *testing.T) {
 		},
 		{
 			name:      "same account ID",
-			current:   authn.Session{AccessToken: "current", AccountID: "account-1"},
+			current:   authn.ResolvedSession{Source: authn.SourceKeychain, SessionMetadata: authn.SessionMetadata{AccountID: "account-1"}},
 			candidate: authn.Session{AccountID: "account-1"},
 		},
 		{
 			name:      "same normalized email",
-			current:   authn.Session{AccessToken: "current", Email: "person@example.com"},
+			current:   authn.ResolvedSession{Source: authn.SourceKeychain, SessionMetadata: authn.SessionMetadata{Email: "person@example.com"}},
 			candidate: authn.Session{Email: "Person@Example.com"},
 		},
 		{
 			name:      "different account requires force",
-			current:   authn.Session{AccessToken: "current", AccountID: "account-1"},
+			current:   authn.ResolvedSession{Source: authn.SourceKeychain, SessionMetadata: authn.SessionMetadata{AccountID: "account-1"}},
 			candidate: authn.Session{AccountID: "account-2"},
 			wantError: true,
 		},
 		{
 			name:      "unknown current identity requires force",
-			current:   authn.Session{AccessToken: "opaque-current"},
+			current:   authn.ResolvedSession{Source: authn.SourceKeychain},
 			candidate: authn.Session{AccountID: "account-2"},
 			wantError: true,
 		},
 		{
 			name:      "force permits different account",
-			current:   authn.Session{AccessToken: "current", AccountID: "account-1"},
+			current:   authn.ResolvedSession{Source: authn.SourceKeychain, SessionMetadata: authn.SessionMetadata{AccountID: "account-1"}},
 			candidate: authn.Session{AccountID: "account-2"},
 			force:     true,
 		},
@@ -156,7 +154,7 @@ func TestAuthCommandsRefuseEnvironmentOverrideBeforeCandidateWork(t *testing.T) 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			store := useCommandMemoryStore(t)
-			store.sessions["dormant"] = authn.Session{AccessToken: "dormant-token", Email: "saved@example.com"}
+			store.credentials["dormant"] = authn.Credentials{AccessToken: "dormant-token"}
 			configPath := filepath.Join(t.TempDir(), "config.json")
 			t.Setenv(config.EnvConfigPath, configPath)
 
@@ -198,7 +196,7 @@ func TestAuthCommandsRefuseEnvironmentOverrideBeforeCandidateWork(t *testing.T) 
 			if store.loads != 0 || store.saves != 0 || store.deletes != 0 {
 				t.Fatalf("credential store touched: loads=%d saves=%d deletes=%d", store.loads, store.saves, store.deletes)
 			}
-			if got := store.sessions["dormant"].AccessToken; got != "dormant-token" {
+			if got := store.credentials["dormant"].AccessToken; got != "dormant-token" {
 				t.Fatalf("dormant credential = %q", got)
 			}
 			after, err := os.ReadFile(configPath)
@@ -230,7 +228,7 @@ func TestAuthLoginReplacementUsesResolvedKeychainAccount(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			store := useCommandMemoryStore(t)
-			store.sessions["active"] = authn.Session{AccessToken: "current-token", Email: tt.currentEmail}
+			store.credentials["active"] = authn.Credentials{AccessToken: "x." + base64.RawURLEncoding.EncodeToString([]byte(`{"email":"`+tt.currentEmail+`"}`)) + ".y"}
 			t.Setenv(config.EnvConfigPath, filepath.Join(t.TempDir(), "config.json"))
 
 			var loginCalls, validationCalls atomic.Int32
@@ -285,7 +283,7 @@ func TestAuthLoginReplacementUsesResolvedKeychainAccount(t *testing.T) {
 func TestAuthImportBrowserReplacementUsesResolvedKeychainAccount(t *testing.T) {
 	t.Setenv(config.EnvAccessToken, "")
 	store := useCommandMemoryStore(t)
-	store.sessions["active"] = authn.Session{AccessToken: "current-token", Email: "current@example.com"}
+	store.credentials["active"] = authn.Credentials{AccessToken: "x." + base64.RawURLEncoding.EncodeToString([]byte(`{"email":"current@example.com"}`)) + ".y"}
 	t.Setenv(config.EnvConfigPath, filepath.Join(t.TempDir(), "config.json"))
 
 	cookie := url.PathEscape(`{"accessToken":"candidate-token","email":"candidate@example.com"}`)

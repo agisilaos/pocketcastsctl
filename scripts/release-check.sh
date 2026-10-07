@@ -32,6 +32,7 @@ for tool in go git python3; do
 done
 
 git rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "not inside a git work tree"
+git rev-parse -q --verify HEAD >/dev/null 2>&1 || die "repository has no commits yet; create an initial commit before running release scripts"
 if [[ -n "$(git status --porcelain --untracked-files=all)" ]]; then
   die "working tree is not clean (tracked, staged, or untracked changes present)"
 fi
@@ -78,7 +79,7 @@ echo "[release-check] running vet"
 go vet ./...
 
 echo "[release-check] running script tests"
-go test ./scripts -run 'TestReleaseCheckModes|TestChangelogTraceability|TestCheckHelpDocsDriftScript|TestReleaseUsesConfigurableHTTPSHomebrewTapRemote'
+go test ./scripts -run 'TestReleaseCheckModes|TestChangelogTraceability|TestHelpSnapshots|TestReleaseUsesConfigurableHTTPSHomebrewTapRemote'
 
 echo "[release-check] running docs check"
 ./scripts/docs-check.sh
