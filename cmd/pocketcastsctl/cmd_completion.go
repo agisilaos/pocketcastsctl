@@ -25,305 +25,363 @@ func runCompletion(args []string) int {
 	return 0
 }
 
-func completionScripts() map[string]string {
-	return map[string]string{
-		"bash": `#!/usr/bin/env bash
-_pocketcastsctl_completions() {
-  local cur prev cmd sub
-  cur="${COMP_WORDS[COMP_CWORD]}"
-  prev="${COMP_WORDS[COMP_CWORD-1]}"
-  cmd="${COMP_WORDS[1]}"
-  sub="${COMP_WORDS[2]}"
+// completionCommand is deliberately private to shell completion. It does not
+// dispatch commands or define their help; the parsers remain authoritative.
+type completionCommand struct {
+	name                string
+	options             []completionOption
+	children            []completionCommand
+	values              []string
+	flagsAfterArguments bool
+}
 
-  if [[ $COMP_CWORD -eq 1 ]]; then
-    COMPREPLY=( $(compgen -W "help version completion now doctor setup start config auth web queue local har" -- "$cur") )
-    return 0
+type completionOption struct {
+	name       string
+	takesValue bool
+	values     []string
+}
+
+func completionTree() completionCommand {
+	browsers := []string{"safari", "chrome", "dia", "arc", "brave", "edge"}
+	imports := []string{"chrome", "dia", "safari"}
+	flags := func(names ...string) []completionOption {
+		out := make([]completionOption, len(names))
+		for i, name := range names {
+			out[i] = completionOption{name: name}
+		}
+		return out
+	}
+	value := func(name string, choices ...string) completionOption {
+		return completionOption{name: name, takesValue: true, values: choices}
+	}
+	leaf := func(name string, options ...completionOption) completionCommand {
+		return completionCommand{name: name, options: options}
+	}
+	combine := func(groups ...[]completionOption) []completionOption {
+		var options []completionOption
+		for _, group := range groups {
+			options = append(options, group...)
+		}
+		return options
+	}
+	output := flags("json", "plain")
+	onboarding := flags("json", "plain", "no-input")
+	browser := []completionOption{value("browser", browsers...), value("browser-app"), value("url-contains")}
+	importOptions := append([]completionOption{value("browser", imports...), value("profile")}, flags("force", "no-input", "json", "plain")...)
+	syncOptions := combine(importOptions, []completionOption{value("browser-app"), value("url-contains"), value("header"), value("prefix"), value("key-contains")}, flags("dry-run"))
+	tabs := []completionOption{value("browser", browsers...), value("browser-app"), {name: "json"}, {name: "plain"}}
+	reorder := flags("dry-run", "json", "raw")
+	picker := []completionOption{value("search"), value("limit"), {name: "recent"}, {name: "unplayed"}, {name: "in-progress"}}
+	return completionCommand{children: []completionCommand{
+		{name: "help"}, {name: "version"},
+		{name: "completion", values: []string{"bash", "zsh", "fish"}},
+		leaf("now", append(flags("json", "plain", "watch", "interactive", "verify-auth"), value("interval"), value("max-updates"))...),
+		{name: "doctor", options: flags("json", "plain", "quick", "full", "fix", "apply"), children: []completionCommand{
+			{name: "explain", options: flags("json"), flagsAfterArguments: true, values: []string{"doctor.auth.invalid", "doctor.auth.unverified", "doctor.auth.session_missing", "doctor.auth.legacy_config", "doctor.auth.network.timeout", "doctor.auth.network.unreachable", "doctor.auth.api.unavailable"}},
+		}},
+		{name: "setup", options: onboarding, children: []completionCommand{leaf("run", onboarding...), leaf("check", onboarding...), leaf("auth", onboarding...), leaf("verify", onboarding...)}},
+		leaf("start", onboarding...),
+		{name: "config", children: []completionCommand{
+			leaf("init", flags("force")...), leaf("path"), leaf("show", flags("json", "reveal-secrets", "saved")...),
+			{name: "set", children: []completionCommand{{name: "browser", values: browsers}}},
+		}},
+		{name: "auth", children: []completionCommand{
+			leaf("login", append([]completionOption{value("email")}, flags("password-stdin", "force", "no-input", "json", "plain")...)...),
+			leaf("import-browser", importOptions...), leaf("refresh", output...), leaf("status", output...), leaf("verify", output...), leaf("logout", output...),
+			leaf("sync", syncOptions...), leaf("tabs", tabs...), leaf("clear", output...),
+		}},
+		{name: "web", children: []completionCommand{
+			leaf("login", value("browser", browsers...), value("browser-app"), value("url")), leaf("tabs", tabs...),
+			leaf("play", browser...), leaf("pause", browser...), leaf("toggle", browser...), leaf("next", browser...), leaf("prev", browser...),
+			leaf("status", combine(browser, flags("details", "json", "plain"))...),
+		}},
+		{name: "queue", children: []completionCommand{
+			leaf("ls", combine(flags("json", "plain"), []completionOption{value("search"), value("limit")}, browser)...),
+			{name: "api", children: []completionCommand{
+				leaf("ls", append(flags("json", "raw", "plain"), value("search"), value("limit"))...),
+				leaf("add", value("episode-json"), value("uuid"), value("podcast"), value("title"), value("published"), value("url"), completionOption{name: "raw"}),
+				leaf("rm", flags("dry-run", "force", "no-input", "raw")...), leaf("remove", flags("dry-run", "force", "no-input", "raw")...),
+				leaf("play", combine([]completionOption{value("search"), value("web-base")}, flags("dry-run"), browser)...),
+				leaf("pick", combine(picker, flags("no-play"), browser, []completionOption{value("web-base")})...),
+				leaf("bump", reorder...), leaf("move", reorder...), leaf("dedupe", reorder...),
+			}},
+		}},
+		{name: "local", children: []completionCommand{
+			leaf("pick", combine(picker, flags("from-start"))...),
+			leaf("play", flags("from-start", "dry-run")...), leaf("pause"), leaf("resume"), leaf("stop"), leaf("status", output...),
+		}},
+		{name: "har", children: []completionCommand{leaf("summarize", value("host"), completionOption{name: "json"}), leaf("graphql", value("host"), completionOption{name: "json"}), leaf("redact")}},
+	}}
+}
+
+func walkCompletion(node completionCommand, path string, visit func(completionCommand, string)) {
+	visit(node, path)
+	for _, child := range node.children {
+		childPath := strings.TrimSpace(path + " " + child.name)
+		walkCompletion(child, childPath, visit)
+	}
+}
+
+func completionBool(value bool) int {
+	if value {
+		return 1
+	}
+	return 0
+}
+
+func completionQuote(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'"
+}
+
+func completionFishQuote(value string) string {
+	return "'" + strings.NewReplacer("\\", "\\\\", "'", "\\'").Replace(value) + "'"
+}
+
+func completionWords(words []string, quote func(string) string) string {
+	quoted := make([]string, len(words))
+	for i, word := range words {
+		quoted[i] = quote(word)
+	}
+	return strings.Join(quoted, " ")
+}
+
+// Both array-based shells use the same resolver. The small adapters below
+// handle their different word indexing and candidate-registration APIs.
+func renderArrayCompletion(tree completionCommand) string {
+	var b strings.Builder
+	b.WriteString(`_pocketcastsctl_candidates() {
+  local cur="$1" command_path='' pending='' word option candidate prefix='' positional=0 flags_started=0 after_arguments=0
+  shift
+  local -a children option_names value_options values choices
+  for word in "$@" ''; do
+    children=() option_names=() value_options=() values=()
+    case "$command_path" in
+`)
+	walkCompletion(tree, "", func(node completionCommand, path string) {
+		var children, options, valueOptions []string
+		for _, child := range node.children {
+			children = append(children, child.name)
+		}
+		for _, option := range node.options {
+			options = append(options, "--"+option.name)
+			if option.takesValue {
+				valueOptions = append(valueOptions, "--"+option.name)
+			}
+		}
+		fmt.Fprintf(&b, "      %s) children=(%s); option_names=(%s); value_options=(%s); values=(%s); after_arguments=%d ;;\n", completionQuote(path), completionWords(children, completionQuote), completionWords(options, completionQuote), completionWords(valueOptions, completionQuote), completionWords(node.values, completionQuote), completionBool(node.flagsAfterArguments))
+	})
+	b.WriteString(`      *) return ;;
+    esac
+    # Process one final iteration to load the current path's metadata.
+    if [[ $# -eq 0 ]]; then break; fi
+    shift
+    if [[ -n "$pending" ]]; then pending=''; continue; fi
+    [[ $positional -gt 0 && $after_arguments -eq 0 || $positional -eq 2 ]] && continue
+    if [[ "$word" == -- ]]; then positional=2; continue; fi
+    if [[ "$word" == -* ]]; then
+      flags_started=1
+      option="${word%%=*}"
+      [[ "$option" == --* ]] || option="-$option"
+      case " ${option_names[*]} " in *" $option "*) ;; *) return ;; esac
+      case " ${value_options[*]} " in
+        *" $option "*) [[ "$word" == *=* ]] || pending="$option" ;;
+      esac
+      continue
+    fi
+    if [[ $flags_started -eq 0 ]]; then
+      case " ${children[*]} " in
+        *" $word "*) command_path="${command_path:+$command_path }$word"; continue ;;
+      esac
+    fi
+    positional=1
+    values=()
+  done
+  if [[ $positional -gt 0 && $after_arguments -eq 0 || $positional -eq 2 ]]; then return; fi
+  if [[ "$cur" == --*=* ]]; then
+    pending="${cur%%=*}"; prefix="$pending="; cur="${cur#*=}"
   fi
+  choices=("${children[@]}" "${option_names[@]}" "${values[@]}")
+  if [[ -n "$pending" ]]; then
+    choices=()
+    case "$command_path|$pending" in
+`)
+	walkCompletion(tree, "", func(node completionCommand, path string) {
+		for _, option := range node.options {
+			if option.takesValue {
+				fmt.Fprintf(&b, "      %s) choices=(%s) ;;\n", completionQuote(path+"|--"+option.name), completionWords(option.values, completionQuote))
+			}
+		}
+	})
+	b.WriteString(`    esac
+  elif [[ $positional -eq 1 ]]; then
+    choices=("${option_names[@]}")
+  elif [[ $flags_started -eq 1 ]]; then
+    choices=("${option_names[@]}" "${values[@]}")
+  fi
+  for candidate in "${choices[@]}"; do
+    [[ "$candidate" == "$cur"* ]] && printf '%s\n' "$prefix$candidate"
+  done
+  return 0
+}
+`)
+	return b.String()
+}
 
-  case "$cmd" in
-    completion)
-      COMPREPLY=( $(compgen -W "bash zsh fish" -- "$cur") )
-      return 0
-      ;;
-    now)
-      COMPREPLY=( $(compgen -W "--json --plain --watch --interactive --verify-auth --interval --max-updates" -- "$cur") )
-      return 0
-      ;;
-    setup)
-      if [[ $COMP_CWORD -eq 2 ]]; then
-        COMPREPLY=( $(compgen -W "run check auth verify --json --plain --no-input" -- "$cur") )
-      else
-        COMPREPLY=( $(compgen -W "--json --plain --no-input" -- "$cur") )
-      fi
-      return 0
-      ;;
-    start)
-      COMPREPLY=( $(compgen -W "--json --plain --no-input" -- "$cur") )
-      return 0
-      ;;
-    doctor)
-      if [[ $COMP_CWORD -eq 2 ]]; then
-        COMPREPLY=( $(compgen -W "explain --json --plain --quick --full --fix --apply" -- "$cur") )
-      else
-        COMPREPLY=( $(compgen -W "--json --plain --quick --full --fix --apply doctor.auth.invalid doctor.auth.unverified doctor.auth.session_missing doctor.auth.legacy_config" -- "$cur") )
-      fi
-      return 0
-      ;;
-    auth)
-      if [[ $COMP_CWORD -eq 2 ]]; then
-        COMPREPLY=( $(compgen -W "login import-browser refresh status verify logout sync tabs clear" -- "$cur") )
-      else
-        case "$sub" in
-          login) COMPREPLY=( $(compgen -W "--email --password-stdin --force --no-input --json --plain" -- "$cur") ) ;;
-          import-browser) COMPREPLY=( $(compgen -W "--browser --profile --force --no-input --json --plain" -- "$cur") ) ;;
-          refresh|status|verify|logout) COMPREPLY=( $(compgen -W "--json --plain" -- "$cur") ) ;;
-          sync) COMPREPLY=( $(compgen -W "--browser --profile --force --no-input --json --plain" -- "$cur") ) ;;
-          tabs) COMPREPLY=( $(compgen -W "--browser --browser-app --json --plain" -- "$cur") ) ;;
-          clear) COMPREPLY=() ;;
-        esac
-      fi
-      return 0
-      ;;
-    config)
-      if [[ $COMP_CWORD -eq 2 ]]; then
-        COMPREPLY=( $(compgen -W "init path show set" -- "$cur") )
-      else
-        case "$sub" in
-          show) COMPREPLY=( $(compgen -W "--json --reveal-secrets" -- "$cur") ) ;;
-          set)
-            if [[ $COMP_CWORD -eq 3 ]]; then
-              COMPREPLY=( $(compgen -W "browser" -- "$cur") )
-            elif [[ "$prev" == "browser" ]]; then
-              COMPREPLY=( $(compgen -W "safari chrome dia arc brave edge" -- "$cur") )
-            fi
-            ;;
-        esac
-      fi
-      return 0
-      ;;
-    web)
-      if [[ $COMP_CWORD -eq 2 ]]; then
-        COMPREPLY=( $(compgen -W "login tabs play pause toggle next prev status" -- "$cur") )
-      else
-        case "$sub" in
-          login) COMPREPLY=( $(compgen -W "--browser --browser-app --url" -- "$cur") ) ;;
-          tabs) COMPREPLY=( $(compgen -W "--browser --browser-app --json --plain" -- "$cur") ) ;;
-          play|pause|toggle|next|prev) COMPREPLY=( $(compgen -W "--browser --browser-app --url-contains" -- "$cur") ) ;;
-          status) COMPREPLY=( $(compgen -W "--browser --browser-app --url-contains --details --json --plain" -- "$cur") ) ;;
-        esac
-      fi
-      return 0
-      ;;
-    queue)
-      if [[ $COMP_CWORD -eq 2 ]]; then
-        COMPREPLY=( $(compgen -W "ls api" -- "$cur") )
-      elif [[ "$sub" == "ls" ]]; then
-        COMPREPLY=( $(compgen -W "--json --plain --search --limit --browser --browser-app --url-contains" -- "$cur") )
-      elif [[ "$sub" == "api" ]]; then
-        local api_cmd="${COMP_WORDS[3]}"
-        if [[ $COMP_CWORD -eq 3 ]]; then
-          COMPREPLY=( $(compgen -W "ls add rm play pick bump move dedupe" -- "$cur") )
-        else
-          case "$api_cmd" in
-            ls) COMPREPLY=( $(compgen -W "--json --raw --plain --search --limit" -- "$cur") ) ;;
-            add) COMPREPLY=( $(compgen -W "--episode-json --uuid --podcast --title --published --url --raw" -- "$cur") ) ;;
-            rm) COMPREPLY=( $(compgen -W "--dry-run --force --no-input --raw" -- "$cur") ) ;;
-            play) COMPREPLY=( $(compgen -W "--search --dry-run --browser --browser-app --url-contains --web-base" -- "$cur") ) ;;
-            pick) COMPREPLY=( $(compgen -W "--search --limit --recent --unplayed --in-progress --no-play --browser --browser-app --url-contains --web-base" -- "$cur") ) ;;
-            bump) COMPREPLY=( $(compgen -W "--dry-run --json --raw" -- "$cur") ) ;;
-            move) COMPREPLY=( $(compgen -W "--dry-run --json --raw" -- "$cur") ) ;;
-            dedupe) COMPREPLY=( $(compgen -W "--dry-run --json --raw" -- "$cur") ) ;;
-          esac
-        fi
-      fi
-      return 0
-      ;;
-    local)
-      if [[ $COMP_CWORD -eq 2 ]]; then
-        COMPREPLY=( $(compgen -W "pick play pause resume stop status" -- "$cur") )
-      else
-        case "$sub" in
-          pick) COMPREPLY=( $(compgen -W "--search --limit --recent --unplayed --in-progress --from-start" -- "$cur") ) ;;
-          play) COMPREPLY=( $(compgen -W "--from-start --dry-run" -- "$cur") ) ;;
-          status) COMPREPLY=( $(compgen -W "--json --plain" -- "$cur") ) ;;
-          *) COMPREPLY=() ;;
-        esac
-      fi
-      return 0
-      ;;
-    har)
-      if [[ $COMP_CWORD -eq 2 ]]; then
-        COMPREPLY=( $(compgen -W "summarize graphql redact" -- "$cur") )
-      else
-        case "$sub" in
-          summarize|graphql) COMPREPLY=( $(compgen -W "--host --json" -- "$cur") ) ;;
-          redact) COMPREPLY=() ;;
-        esac
-      fi
-      return 0
-      ;;
-  esac
+func renderFishCompletion(tree completionCommand) string {
+	var b strings.Builder
+	b.WriteString(`function __pocketcastsctl_candidates
+    set -l tokens (commandline -opc)
+    set -e tokens[1]
+    set -l cur (commandline -ct)
+    set -l command_path ''
+    set -l pending ''
+    set -l prefix ''
+    set -l positional 0
+    set -l flags_started 0
+    set -l after_arguments 0
+    set -l children
+    set -l option_names
+    set -l value_options
+    set -l values
+    set -l remaining (count $tokens)
+    for word in $tokens ''
+        set children
+        set option_names
+        set value_options
+        set values
+        switch $command_path
+`)
+	walkCompletion(tree, "", func(node completionCommand, path string) {
+		var children, options, valueOptions []string
+		for _, child := range node.children {
+			children = append(children, child.name)
+		}
+		for _, option := range node.options {
+			options = append(options, "--"+option.name)
+			if option.takesValue {
+				valueOptions = append(valueOptions, "--"+option.name)
+			}
+		}
+		fmt.Fprintf(&b, "            case %s\n                set children %s\n                set option_names %s\n                set value_options %s\n                set values %s\n                set after_arguments %d\n", completionFishQuote(path), completionWords(children, completionFishQuote), completionWords(options, completionFishQuote), completionWords(valueOptions, completionFishQuote), completionWords(node.values, completionFishQuote), completionBool(node.flagsAfterArguments))
+	})
+	b.WriteString(`            case '*'
+                return
+        end
+        if test $remaining -eq 0
+            break
+        end
+        set remaining (math $remaining - 1)
+        if test -n "$pending"
+            set pending ''
+            continue
+        end
+        if test $positional -eq 2; or begin; test $positional -eq 1; and test $after_arguments -eq 0; end
+            continue
+        end
+        if test "$word" = --
+            set positional 2
+            continue
+        end
+        if string match -q -- '-*' "$word"
+            set flags_started 1
+            set -l option (string split -m1 = -- "$word")[1]
+            if not string match -q -- '--*' "$option"
+                set option "-$option"
+            end
+            contains -- "$option" $option_names; or return
+            if contains -- "$option" $value_options; and not string match -q '*=*' -- "$word"
+                set pending "$option"
+            end
+            continue
+        end
+        if test $flags_started -eq 0; and contains -- "$word" $children
+            set command_path (string trim -- "$command_path $word")
+            continue
+        end
+        set positional 1
+    end
+    if test $positional -eq 2; or begin; test $positional -eq 1; and test $after_arguments -eq 0; end
+        return
+    end
+    if string match -q -- '--*=*' "$cur"
+        set -l pair (string split -m1 = -- "$cur")
+        set pending $pair[1]
+        set prefix "$pending="
+        set cur $pair[2]
+    end
+    set -l choices $children $option_names $values
+    if test -n "$pending"
+        set choices
+        switch "$command_path|$pending"
+`)
+	walkCompletion(tree, "", func(node completionCommand, path string) {
+		for _, option := range node.options {
+			if option.takesValue {
+				fmt.Fprintf(&b, "            case %s\n                set choices %s\n", completionFishQuote(path+"|--"+option.name), completionWords(option.values, completionFishQuote))
+			}
+		}
+	})
+	b.WriteString(`        end
+    else if test $positional -eq 1
+        set choices $option_names
+    else if test $flags_started -eq 1
+        set choices $option_names $values
+    end
+    for candidate in $choices
+        if test -z "$cur"; or string match -q -- "$cur*" "$candidate"
+            printf '%s\n' "$prefix$candidate"
+        end
+    end
+end
+complete -c pocketcastsctl -f -a '(__pocketcastsctl_candidates)'
+`)
+	return b.String()
+}
 
+func completionScripts() map[string]string {
+	tree := completionTree()
+	resolver := renderArrayCompletion(tree)
+	return map[string]string{
+		"bash": "#!/usr/bin/env bash\n" + resolver + `_pocketcastsctl_completions() {
+  local candidate cur="${COMP_WORDS[COMP_CWORD]}" i word
+  local -a prior
+  # Bash treats '=' as a word break. Rejoin only assignment fragments, so
+  # --browser=c and completed --browser=chrome behave like unsplit tokens.
+  for ((i=1; i<COMP_CWORD; i++)); do
+    word="${COMP_WORDS[i]}"
+    if [[ "$word" == = && ${#prior[@]} -gt 0 ]]; then
+      prior[${#prior[@]}-1]+='='
+    elif [[ ${#prior[@]} -gt 0 && "${prior[${#prior[@]}-1]}" == --*= ]]; then
+      prior[${#prior[@]}-1]+="$word"
+    else
+      prior+=("$word")
+    fi
+  done
+  if [[ ${#prior[@]} -gt 0 && "${prior[${#prior[@]}-1]}" == --*= ]]; then
+    cur="${prior[${#prior[@]}-1]}$cur"
+    unset 'prior[${#prior[@]}-1]'
+  elif [[ "$cur" == = && ${#prior[@]} -gt 0 ]]; then
+    cur="${prior[${#prior[@]}-1]}="
+    unset 'prior[${#prior[@]}-1]'
+  fi
   COMPREPLY=()
+  while IFS= read -r candidate; do
+    if [[ "${COMP_WORDS[COMP_CWORD]}" != --*=* && "$cur" == --*=* ]]; then candidate="${candidate#*=}"; fi
+    COMPREPLY+=("$candidate")
+  done < <(
+    _pocketcastsctl_candidates "$cur" "${prior[@]}"
+  )
 }
 complete -F _pocketcastsctl_completions pocketcastsctl
 `,
-		"zsh": `#compdef pocketcastsctl
-_pocketcastsctl_completions() {
-  local curcontext="$curcontext" state line
-  local cmd sub
-  cmd="${words[2]}"
-  sub="${words[3]}"
-
-  if (( CURRENT == 2 )); then
-    _values "commands" \
-      "help" "version" "completion" "now" "doctor" "setup" "start" "config" "auth" "web" "queue" "local" "har"
-    return
-  fi
-
-  case "$cmd" in
-    completion)
-      _values "shell" "bash" "zsh" "fish"
-      ;;
-    now)
-      _values "flags" "--json" "--plain" "--watch" "--interactive" "--verify-auth" "--interval" "--max-updates"
-      ;;
-    setup)
-      if (( CURRENT == 3 )); then
-        _values "subcommands/flags" "run" "check" "auth" "verify" "--json" "--plain" "--no-input"
-      else
-        _values "flags" "--json" "--plain" "--no-input"
-      fi
-      ;;
-    start)
-      _values "flags" "--json" "--plain" "--no-input"
-      ;;
-    doctor)
-      if (( CURRENT == 3 )); then
-        _values "subcommands/flags" "explain" "--json" "--plain" "--quick" "--full" "--fix" "--apply"
-      else
-        _values "flags/codes" "--json" "--plain" "--quick" "--full" "--fix" "--apply" "doctor.auth.invalid" "doctor.auth.unverified" "doctor.auth.session_missing" "doctor.auth.legacy_config"
-      fi
-      ;;
-    auth)
-      if (( CURRENT == 3 )); then
-        _values "auth subcommands" "login" "import-browser" "refresh" "status" "verify" "logout" "sync" "tabs" "clear"
-      else
-        case "$sub" in
-          login) _values "flags" "--email" "--password-stdin" "--force" "--no-input" "--json" "--plain" ;;
-          import-browser) _values "flags" "--browser" "--profile" "--force" "--no-input" "--json" "--plain" ;;
-          refresh|status|verify|logout) _values "flags" "--json" "--plain" ;;
-          sync) _values "flags" "--browser" "--profile" "--force" "--no-input" "--json" "--plain" ;;
-          tabs) _values "flags" "--browser" "--browser-app" "--json" "--plain" ;;
-        esac
-      fi
-      ;;
-    config)
-      if (( CURRENT == 3 )); then
-        _values "config subcommands" "init" "path" "show" "set"
-      else
-        case "$sub" in
-          show) _values "flags" "--json" "--reveal-secrets" ;;
-          set)
-            if (( CURRENT == 4 )); then
-              _values "settings" "browser"
-            elif [[ "${words[4]}" == "browser" ]]; then
-              _values "browsers" "safari" "chrome" "dia" "arc" "brave" "edge"
-            fi
-            ;;
-        esac
-      fi
-      ;;
-    web)
-      if (( CURRENT == 3 )); then
-        _values "web subcommands" "login" "tabs" "play" "pause" "toggle" "next" "prev" "status"
-      else
-        case "$sub" in
-          login) _values "flags" "--browser" "--browser-app" "--url" ;;
-          tabs) _values "flags" "--browser" "--browser-app" "--json" "--plain" ;;
-          play|pause|toggle|next|prev) _values "flags" "--browser" "--browser-app" "--url-contains" ;;
-          status) _values "flags" "--browser" "--browser-app" "--url-contains" "--details" "--json" "--plain" ;;
-        esac
-      fi
-      ;;
-    queue)
-      if (( CURRENT == 3 )); then
-        _values "queue subcommands" "ls" "api"
-      elif [[ "$sub" == "ls" ]]; then
-        _values "flags" "--json" "--plain" "--search" "--limit" "--browser" "--browser-app" "--url-contains"
-      elif [[ "$sub" == "api" ]]; then
-        local api_cmd="${words[4]}"
-        if (( CURRENT == 4 )); then
-          _values "queue api subcommands" "ls" "add" "rm" "play" "pick" "bump" "move" "dedupe"
-        else
-          case "$api_cmd" in
-            ls) _values "flags" "--json" "--raw" "--plain" "--search" "--limit" ;;
-            add) _values "flags" "--episode-json" "--uuid" "--podcast" "--title" "--published" "--url" "--raw" ;;
-            rm) _values "flags" "--dry-run" "--force" "--no-input" "--raw" ;;
-            play) _values "flags" "--search" "--dry-run" "--browser" "--browser-app" "--url-contains" "--web-base" ;;
-            pick) _values "flags" "--search" "--limit" "--recent" "--unplayed" "--in-progress" "--no-play" "--browser" "--browser-app" "--url-contains" "--web-base" ;;
-            bump|move|dedupe) _values "flags" "--dry-run" "--json" "--raw" ;;
-          esac
-        fi
-      fi
-      ;;
-    local)
-      if (( CURRENT == 3 )); then
-        _values "local subcommands" "pick" "play" "pause" "resume" "stop" "status"
-      else
-        case "$sub" in
-          pick) _values "flags" "--search" "--limit" "--recent" "--unplayed" "--in-progress" "--from-start" ;;
-          play) _values "flags" "--from-start" "--dry-run" ;;
-          status) _values "flags" "--json" "--plain" ;;
-        esac
-      fi
-      ;;
-    har)
-      if (( CURRENT == 3 )); then
-        _values "har subcommands" "summarize" "graphql" "redact"
-      else
-        case "$sub" in
-          summarize|graphql) _values "flags" "--host" "--json" ;;
-        esac
-      fi
-      ;;
-  esac
+		"zsh": "#compdef pocketcastsctl\n" + resolver + `_pocketcastsctl_completions() {
+  local -a candidates prior
+  if (( CURRENT > 2 )); then prior=("${words[@]:1:$((CURRENT-2))}"); fi
+  candidates=("${(@f)$(_pocketcastsctl_candidates "${words[CURRENT]}" "${prior[@]}")}")
+  (( ${#candidates} )) && compadd -a candidates
 }
 _pocketcastsctl_completions "$@"
 `,
-		"fish": `complete -c pocketcastsctl -f -n '__fish_use_subcommand' -a 'help version completion now doctor setup start config auth web queue local har'
-complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from completion' -a 'bash zsh fish'
-
-complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from now' -l json -l plain -l watch -l interactive -l verify-auth -l interval -l max-updates
-complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from setup' -a 'run check auth verify'
-complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from setup' -l json -l plain -l no-input
-complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from start' -l json -l plain -l no-input
-complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from doctor' -a 'explain' -l json -l plain -l quick -l full -l fix -l apply
-complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from config' -a 'init path show set'
-complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from config; and __fish_seen_subcommand_from set' -a 'browser'
-complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from config; and __fish_seen_subcommand_from set; and __fish_seen_subcommand_from browser' -a 'safari chrome dia arc brave edge'
-complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from auth' -a 'login import-browser refresh status verify logout sync tabs clear'
-complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from web' -a 'login tabs play pause toggle next prev status'
-complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from auth; and __fish_seen_subcommand_from login' -l email -l password-stdin -l force -l no-input -l json -l plain
-complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from auth; and __fish_seen_subcommand_from import-browser' -l browser -l profile -l force -l no-input -l json -l plain
-complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from auth; and __fish_seen_subcommand_from sync' -l browser -l profile -l force -l no-input -l json -l plain
-complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from web; and __fish_seen_subcommand_from login' -l browser -l browser-app -l url
-complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from web; and __fish_seen_subcommand_from tabs' -l browser -l browser-app -l json -l plain
-complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from web; and __fish_seen_subcommand_from play pause toggle next prev' -l browser -l browser-app -l url-contains
-complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from web; and __fish_seen_subcommand_from status' -l details -l json -l plain -l browser -l browser-app -l url-contains
-complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from queue' -a 'ls api'
-complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from queue; and __fish_seen_subcommand_from api' -a 'ls add rm play pick bump move dedupe'
-complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from local' -a 'pick play pause resume stop status'
-complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from har' -a 'summarize graphql redact'
-
-complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from queue; and __fish_seen_subcommand_from api; and __fish_seen_subcommand_from play' -l dry-run -l search -l browser -l browser-app -l url-contains -l web-base
-complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from queue; and __fish_seen_subcommand_from api; and __fish_seen_subcommand_from bump' -l dry-run -l json -l raw
-complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from queue; and __fish_seen_subcommand_from api; and __fish_seen_subcommand_from move' -l dry-run -l json -l raw
-complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from queue; and __fish_seen_subcommand_from api; and __fish_seen_subcommand_from dedupe' -l dry-run -l json -l raw
-complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from local; and __fish_seen_subcommand_from play' -l dry-run -l from-start
-complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from queue; and __fish_seen_subcommand_from api; and __fish_seen_subcommand_from rm' -l dry-run -l force -l no-input
-complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from queue; and __fish_seen_subcommand_from ls' -l json -l plain -l search -l limit -l browser -l browser-app -l url-contains
-complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from queue; and __fish_seen_subcommand_from api; and __fish_seen_subcommand_from ls' -l json -l plain -l raw -l search -l limit
-`,
+		"fish": renderFishCompletion(tree),
 	}
 }
