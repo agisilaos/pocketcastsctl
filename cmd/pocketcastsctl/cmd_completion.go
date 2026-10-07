@@ -366,7 +366,7 @@ func completionScripts() map[string]string {
   fi
   COMPREPLY=()
   while IFS= read -r candidate; do
-    if [[ "${COMP_WORDS[COMP_CWORD]}" != --*=* && "$cur" == --*=* ]]; then candidate="${candidate#*=}"; fi
+    if [[ "$cur" == --*=* && "$COMP_WORDBREAKS" == *"="* ]]; then candidate="${candidate#*=}"; fi
     COMPREPLY+=("$candidate")
   done < <(
     _pocketcastsctl_candidates "$cur" "${prior[@]}"

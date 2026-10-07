@@ -160,7 +160,13 @@ func TestCompletionValuesAndScope(t *testing.T) {
 			executable, script := completionShell(t, shell)
 			for _, tc := range cases {
 				t.Run(tc.name, func(t *testing.T) {
-					assertCandidates(t, shellCandidates(t, executable, script, shell, tc.cur, tc.prior), tc.want)
+					want := tc.want
+					// Bash's COMP_WORDS can retain the full assignment even though
+					// readline replaces only the suffix after its '=' word break.
+					if shell == "bash" && tc.name == "inline browser" {
+						want = []string{"chrome"}
+					}
+					assertCandidates(t, shellCandidates(t, executable, script, shell, tc.cur, tc.prior), want)
 				})
 			}
 		})
@@ -211,5 +217,16 @@ func TestCompletionQuotesLiteralWords(t *testing.T) {
 				t.Fatalf("%s quoted words: %q", shell, output)
 			}
 		})
+	}
+}
+
+func TestCompletionBashAssignmentWithoutWordBreak(t *testing.T) {
+	executable, script := completionShell(t, "bash")
+	output, err := exec.Command(executable, "--noprofile", "--norc", "-c", `source "$1"; COMP_WORDBREAKS=${COMP_WORDBREAKS//=/}; COMP_WORDS=(pocketcastsctl web login --browser=c); COMP_CWORD=3; _pocketcastsctl_completions; printf '%s\n' "${COMPREPLY[@]}"`, "_", script).CombinedOutput()
+	if err != nil {
+		t.Fatalf("bash assignment completion: %v: %s", err, output)
+	}
+	if string(output) != "--browser=chrome\n" {
+		t.Fatalf("completion without '=' word break: %q", output)
 	}
 }
