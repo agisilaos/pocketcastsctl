@@ -35,6 +35,14 @@ type setupReport struct {
 	Error   string      `json:"error,omitempty"`
 }
 
+// setupOutcome keeps a step's report data and exit policy together. Warnings and
+// skipped authentication are non-blocking; auth failures preserve their code.
+type setupOutcome struct {
+	step     setupStep
+	exitCode int
+	next     []string
+}
+
 type setupOptions struct {
 	jsonOut  bool
 	plainOut bool
@@ -86,109 +94,125 @@ func runSetup(args []string, cfg config.Config, loadConfig configLoader) int {
 		mode = "agentic"
 	}
 	report := setupReport{
-		Status:  "ok",
 		Mode:    mode,
 		Command: subcmd,
 		Steps:   make([]setupStep, 0, 4),
 	}
 
-	fail := func(id, message, hint string, code int) int {
-		report.Status = "fail"
-		report.Error = message
-		report.Steps = append(report.Steps, setupStep{ID: id, Status: "fail", Message: message, Hint: strings.TrimSpace(hint)})
+	addStep := func(outcome setupOutcome) int {
+		report.Steps = append(report.Steps, outcome.step)
+		if outcome.next != nil {
+			report.Next = outcome.next
+		}
+		return outcome.exitCode
+	}
+	finish := func(code int) int {
+		// Derive aggregate fields only from the emitted steps. A later success
+		// cannot erase an earlier warning, skip, or failure.
+		report.Status = "ok"
+		for _, step := range report.Steps {
+			switch step.Status {
+			case "fail":
+				report.Status = "fail"
+				report.Error = step.Message
+			case "warn", "skip":
+				if report.Status == "ok" {
+					report.Status = "warn"
+				}
+			}
+		}
 		return renderSetupOutput(report, opts, code)
 	}
 
 	cfgNow := cfg
 	switch subcmd {
 	case "check":
-		if code := setupStepCheck(cfgNow, &report); code != 0 {
-			return renderSetupOutput(report, opts, code)
-		}
-		return renderSetupOutput(report, opts, 0)
+		return finish(addStep(setupStepCheck(cfgNow)))
 	case "auth":
-		if code := setupStepAuth(cfgNow, opts, &report); code != 0 {
-			return renderSetupOutput(report, opts, code)
-		}
-		return renderSetupOutput(report, opts, 0)
+		return finish(addStep(setupStepAuth(cfgNow, opts)))
 	case "verify":
-		if code := setupStepVerify(cfgNow, &report); code != 0 {
-			return renderSetupOutput(report, opts, code)
-		}
-		return renderSetupOutput(report, opts, 0)
+		return finish(addStep(setupStepVerify(cfgNow)))
 	case "run":
-		if code := setupStepCheck(cfgNow, &report); code != 0 {
-			return renderSetupOutput(report, opts, code)
+		if code := addStep(setupStepCheck(cfgNow)); code != 0 {
+			return finish(code)
 		}
-		if code := setupStepAuth(cfgNow, opts, &report); code != 0 {
-			return renderSetupOutput(report, opts, code)
+		auth := setupStepAuth(cfgNow, opts)
+		if code := addStep(auth); code != 0 {
+			return finish(code)
 		}
 		reloaded, err := loadConfig()
 		if err != nil {
-			message := fmt.Sprintf("failed to reload config: %v", err)
-			return fail("config", message, fmt.Sprintf("run `%s` to locate the config file", cliCommand("config path")), 1)
+			return finish(addStep(setupOutcome{
+				step: setupStep{
+					ID: "config", Status: "fail",
+					Message: fmt.Sprintf("failed to reload config: %v", err),
+					Hint:    fmt.Sprintf("run `%s` to locate the config file", cliCommand("config path")),
+				},
+				exitCode: 1,
+			}))
 		}
 		cfgNow = reloaded
 		if !setupAuthConfigured(cfgNow) {
-			report.Status = "warn"
-			return renderSetupOutput(report, opts, 0)
+			// The usual no-input path already has an auth skip. If credentials
+			// disappeared during reload, make that warning visible as a step too.
+			if auth.step.Status != "skip" {
+				addStep(setupOutcome{step: setupStep{
+					ID: "config", Status: "warn", Message: "auth not configured after config reload",
+					Hint: "run `pocketcastsctl auth login` or import a browser session",
+				}})
+			}
+			return finish(0)
 		}
-		if code := setupStepVerify(cfgNow, &report); code != 0 {
-			return renderSetupOutput(report, opts, code)
+		if code := addStep(setupStepVerify(cfgNow)); code != 0 {
+			return finish(code)
 		}
 		fmt.Fprintln(os.Stderr, "setup step 4/4: ready")
-		report.Next = []string{"pocketcastsctl queue api ls", "pocketcastsctl queue api play 1"}
-		report.Steps = append(report.Steps, setupStep{ID: "ready", Status: "ok", Message: "setup complete"})
-		return renderSetupOutput(report, opts, 0)
+		return finish(addStep(setupOutcome{
+			step: setupStep{ID: "ready", Status: "ok", Message: "setup complete"},
+			next: []string{"pocketcastsctl queue api ls", "pocketcastsctl queue api play 1"},
+		}))
 	default:
-		return fail("setup", "unknown setup command", "", 2)
+		return finish(addStep(setupOutcome{
+			step: setupStep{ID: "setup", Status: "fail", Message: "unknown setup command"}, exitCode: 2,
+		}))
 	}
 }
 
-func setupStepCheck(cfg config.Config, report *setupReport) int {
+func setupStepCheck(cfg config.Config) setupOutcome {
 	fmt.Fprintln(os.Stderr, "setup step 1/4: run quick environment checks")
 	checks := collectDoctorChecks(cfg, false)
 	_, warnCount, failCount := summarizeDoctorChecks(checks)
 	if failCount > 0 {
-		report.Status = "fail"
-		report.Error = "environment has blocking issues"
-		report.Steps = append(report.Steps, setupStep{
+		return setupOutcome{step: setupStep{
 			ID:      "check",
 			Status:  "fail",
 			Message: "environment has blocking issues",
 			Hint:    "run `pocketcastsctl doctor --full --fix`",
-		})
-		return 1
+		}, exitCode: 1}
 	}
 	if warnCount > 0 {
 		fmt.Fprintln(os.Stderr, "setup: quick checks passed with warnings")
-		report.Steps = append(report.Steps, setupStep{ID: "check", Status: "warn", Message: "quick checks passed with warnings"})
-		return 0
+		return setupOutcome{step: setupStep{ID: "check", Status: "warn", Message: "quick checks passed with warnings"}}
 	}
 	fmt.Fprintln(os.Stderr, "setup: quick checks passed")
-	report.Steps = append(report.Steps, setupStep{ID: "check", Status: "ok", Message: "quick checks passed"})
-	return 0
+	return setupOutcome{step: setupStep{ID: "check", Status: "ok", Message: "quick checks passed"}}
 }
 
-func setupStepAuth(cfg config.Config, opts setupOptions, report *setupReport) int {
+func setupStepAuth(cfg config.Config, opts setupOptions) setupOutcome {
 	fmt.Fprintln(os.Stderr, "setup step 2/4: ensure auth is configured")
 	if setupAuthConfigured(cfg) {
-		report.Steps = append(report.Steps, setupStep{ID: "auth", Status: "ok", Message: "auth configured"})
-		return 0
+		return setupOutcome{step: setupStep{ID: "auth", Status: "ok", Message: "auth configured"}}
 	}
 	if opts.noInput {
-		report.Status = "warn"
-		report.Steps = append(report.Steps, setupStep{
+		return setupOutcome{step: setupStep{
 			ID:      "auth",
 			Status:  "skip",
 			Message: "auth setup skipped in non-interactive mode",
 			Hint:    "pipe a password to `pocketcastsctl auth login --email <address> --password-stdin` or run `pocketcastsctl auth import-browser --browser <chrome|dia|safari>`",
-		})
-		report.Next = []string{
+		}, next: []string{
 			"pocketcastsctl auth login --email <address> --password-stdin",
 			"pocketcastsctl auth import-browser --browser <chrome|dia|safari> [--profile <name>]",
-		}
-		return 0
+		}}
 	}
 	fmt.Fprintln(os.Stderr, "Choose an authentication method:")
 	fmt.Fprintln(os.Stderr, "  1. Log in with Pocket Casts email and password")
@@ -199,19 +223,12 @@ func setupStepAuth(cfg config.Config, opts setupOptions, report *setupReport) in
 	answer := strings.TrimSpace(line)
 	if answer == "" || answer == "1" {
 		if code := runAuthLogin(nil, cfg); code != 0 {
-			report.Status = "fail"
-			report.Error = "terminal login failed"
-			report.Steps = append(report.Steps, setupStep{ID: "auth", Status: "fail", Message: "terminal login failed", Hint: "run `pocketcastsctl auth login`"})
-			return code
+			return setupOutcome{step: setupStep{ID: "auth", Status: "fail", Message: "terminal login failed", Hint: "run `pocketcastsctl auth login`"}, exitCode: code}
 		}
-		report.Steps = append(report.Steps, setupStep{ID: "auth", Status: "ok", Message: "terminal login complete"})
-		return 0
+		return setupOutcome{step: setupStep{ID: "auth", Status: "ok", Message: "terminal login complete"}}
 	}
 	if answer != "2" {
-		report.Status = "fail"
-		report.Error = "invalid authentication method"
-		report.Steps = append(report.Steps, setupStep{ID: "auth", Status: "fail", Message: "invalid authentication method", Hint: "choose 1 or 2"})
-		return 2
+		return setupOutcome{step: setupStep{ID: "auth", Status: "fail", Message: "invalid authentication method", Hint: "choose 1 or 2"}, exitCode: 2}
 	}
 	fmt.Fprint(os.Stderr, "Browser [dia]: ")
 	browserLine, _ := reader.ReadString('\n')
@@ -220,18 +237,14 @@ func setupStepAuth(cfg config.Config, opts setupOptions, report *setupReport) in
 		browser = "dia"
 	}
 	if code := runAuthImportBrowser([]string{"--browser", browser}, cfg); code != 0 {
-		report.Status = "fail"
-		report.Error = "browser session import failed"
-		report.Steps = append(report.Steps, setupStep{
+		return setupOutcome{step: setupStep{
 			ID:      "auth",
 			Status:  "fail",
 			Message: "browser session import failed",
 			Hint:    fmt.Sprintf("run `pocketcastsctl auth import-browser --browser %s`", browser),
-		})
-		return code
+		}, exitCode: code}
 	}
-	report.Steps = append(report.Steps, setupStep{ID: "auth", Status: "ok", Message: "browser session imported"})
-	return 0
+	return setupOutcome{step: setupStep{ID: "auth", Status: "ok", Message: "browser session imported"}}
 }
 
 func setupAuthConfigured(cfg config.Config) bool {
@@ -241,7 +254,7 @@ func setupAuthConfigured(cfg config.Config) bool {
 	return err == nil && strings.TrimSpace(session.AccessToken) != ""
 }
 
-func setupStepVerify(cfg config.Config, report *setupReport) int {
+func setupStepVerify(cfg config.Config) setupOutcome {
 	fmt.Fprintln(os.Stderr, "setup step 3/4: verify auth with API")
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	err := app.VerifyAuth(ctx, cfg)
@@ -251,18 +264,14 @@ func setupStepVerify(cfg config.Config, report *setupReport) int {
 		if app.KindOf(err) == app.KindTransient {
 			hint = "retry `pocketcastsctl auth verify` after checking network"
 		}
-		report.Status = "fail"
-		report.Error = strings.TrimSpace(err.Error())
-		report.Steps = append(report.Steps, setupStep{
+		return setupOutcome{step: setupStep{
 			ID:      "verify",
 			Status:  "fail",
 			Message: strings.TrimSpace(err.Error()),
 			Hint:    hint,
-		})
-		return 1
+		}, exitCode: 1}
 	}
-	report.Steps = append(report.Steps, setupStep{ID: "verify", Status: "ok", Message: "auth accepted by API"})
-	return 0
+	return setupOutcome{step: setupStep{ID: "verify", Status: "ok", Message: "auth accepted by API"}}
 }
 
 func renderSetupOutput(report setupReport, opts setupOptions, exitCode int) int {
