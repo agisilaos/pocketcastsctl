@@ -60,7 +60,7 @@ func runDoctor(args []string, cfg config.Config) int {
 		}
 	}
 
-	checks := collectDoctorChecks(cfg, includeAPIValidation)
+	checks, catalog := collectDoctorChecks(cfg, includeAPIValidation)
 	okCount, warnCount, failCount := summarizeDoctorChecks(checks)
 	overall := "ok"
 	if failCount > 0 {
@@ -68,10 +68,10 @@ func runDoctor(args []string, cfg config.Config) int {
 	} else if warnCount > 0 {
 		overall = "warn"
 	}
-	fixes := doctorSuggestedFixes(checks)
+	fixes := doctorSuggestedFixes(checks, catalog)
 	appliedFixes := []doctorFixResult{}
 	if *fix && *apply {
-		appliedFixes = applyDoctorFixes(checks)
+		appliedFixes = applyDoctorFixes(checks, catalog)
 	}
 
 	if *jsonOut {
@@ -159,41 +159,19 @@ type doctorFixResult struct {
 	Message string `json:"message"`
 }
 
-func applyDoctorFixes(checks []doctorCheck) []doctorFixResult {
-	type fixAction struct {
-		Action  string
-		Command string
-	}
-	actions := make([]fixAction, 0, 2)
-	seen := map[string]bool{}
-	add := func(action, command string) {
-		if seen[action] {
-			return
-		}
-		seen[action] = true
-		actions = append(actions, fixAction{Action: action, Command: command})
-	}
-
-	for _, c := range checks {
-		if c.Status == "ok" {
-			continue
-		}
-		switch c.ID {
-		case "config_file":
-			add("config_init", cliCommand("config init"))
-		}
-	}
+func applyDoctorFixes(checks []doctorCheck, catalog doctorCatalog) []doctorFixResult {
+	actions := planDoctorFixes(checks, catalog)
 
 	results := make([]doctorFixResult, 0, len(actions))
 	for _, action := range actions {
 		res := doctorFixResult{
-			Action:  action.Action,
+			Action:  string(action.Action),
 			Command: action.Command,
 			Status:  "ok",
 			Message: "applied",
 		}
 		switch action.Action {
-		case "config_init":
+		case doctorRepairConfigInit:
 			if _, err := os.Stat(config.Path()); err == nil {
 				res.Message = "config already exists; skipped"
 			} else if !errors.Is(err, os.ErrNotExist) {
@@ -224,7 +202,8 @@ func hasFailedDoctorFix(results []doctorFixResult) bool {
 	return false
 }
 
-func collectDoctorChecks(cfg config.Config, includeAPIValidation bool) []doctorCheck {
+func collectDoctorChecks(cfg config.Config, includeAPIValidation bool) ([]doctorCheck, doctorCatalog) {
+	var fallbackBrowser string
 	checks := make([]doctorCheck, 0, 9)
 
 	if _, err := exec.LookPath("osascript"); err != nil {
@@ -233,7 +212,6 @@ func collectDoctorChecks(cfg config.Config, includeAPIValidation bool) []doctorC
 			Status:  "fail",
 			Code:    "doctor.macos.automation.missing",
 			Message: "osascript not found",
-			Hint:    "run on macOS with AppleScript support",
 		})
 	} else {
 		checks = append(checks, doctorCheck{
@@ -253,7 +231,6 @@ func collectDoctorChecks(cfg config.Config, includeAPIValidation bool) []doctorC
 			Status:  "fail",
 			Code:    "doctor.browser.invalid_config",
 			Message: err.Error(),
-			Hint:    "set a supported browser via --browser or POCKETCASTS_BROWSER",
 		})
 	} else {
 		checks = append(checks, doctorCheck{
@@ -265,16 +242,12 @@ func collectDoctorChecks(cfg config.Config, includeAPIValidation bool) []doctorC
 		target := newBrowserTarget(cfg.Browser, cfg.BrowserApp, cfg.URLContains)
 		appName := target.applicationName()
 		if err := target.applicationError(); err != nil {
-			hint := "install the configured browser or select an installed browser with `--browser`"
-			if fallback, ok := browserFallback(appName); ok {
-				hint = fmt.Sprintf("run `%s`", cliCommand("config set browser "+fallback))
-			}
+			fallbackBrowser, _ = browserFallback(appName)
 			checks = append(checks, doctorCheck{
 				ID:      "browser_application",
 				Status:  "fail",
 				Code:    "doctor.browser.app_missing",
 				Message: err.Error(),
-				Hint:    hint,
 			})
 		} else {
 			checks = append(checks, doctorCheck{
@@ -291,7 +264,6 @@ func collectDoctorChecks(cfg config.Config, includeAPIValidation bool) []doctorC
 						Status:  "warn",
 						Code:    "doctor.browser.dia_not_running",
 						Message: "Dia is not running",
-						Hint:    fmt.Sprintf("run `%s`; it will launch Dia with AppleScript JavaScript support", cliCommand("web login --browser dia")),
 					})
 				case !state.AppleScriptJavaScript:
 					checks = append(checks, doctorCheck{
@@ -299,7 +271,6 @@ func collectDoctorChecks(cfg config.Config, includeAPIValidation bool) []doctorC
 						Status:  "fail",
 						Code:    "doctor.browser.dia_javascript_disabled",
 						Message: "Dia is running without AppleScript JavaScript support",
-						Hint:    fmt.Sprintf("quit Dia, then run `%s`", cliCommand("web login --browser dia")),
 					})
 				default:
 					checks = append(checks, doctorCheck{
@@ -318,7 +289,6 @@ func collectDoctorChecks(cfg config.Config, includeAPIValidation bool) []doctorC
 			Status:  "warn",
 			Code:    "doctor.config.missing",
 			Message: "config file not found",
-			Hint:    fmt.Sprintf("run `%s`", cliCommand("config init")),
 		})
 	} else {
 		checks = append(checks, doctorCheck{
@@ -345,7 +315,6 @@ func collectDoctorChecks(cfg config.Config, includeAPIValidation bool) []doctorC
 			Status:  "warn",
 			Code:    "doctor.auth.legacy_config",
 			Message: "legacy plaintext Authorization config is in use",
-			Hint:    "run `pocketcastsctl auth login` or `pocketcastsctl auth import-browser --browser dia`",
 		})
 	} else {
 		message := "API session missing"
@@ -357,7 +326,6 @@ func collectDoctorChecks(cfg config.Config, includeAPIValidation bool) []doctorC
 			Status:  "warn",
 			Code:    "doctor.auth.session_missing",
 			Message: message,
-			Hint:    fmt.Sprintf("run `%s` or `%s`", cliCommand("auth login"), cliCommand("auth import-browser --browser dia")),
 		})
 	}
 
@@ -369,16 +337,14 @@ func collectDoctorChecks(cfg config.Config, includeAPIValidation bool) []doctorC
 					Status:  "fail",
 					Code:    "doctor.auth.invalid",
 					Message: "stored auth is rejected (401 Unauthorized)",
-					Hint:    fmt.Sprintf("run `%s` or import a fresh browser session", cliCommand("auth login")),
 				})
 			} else {
-				code, msg, hint := classifyAuthValidationError(err)
+				code, msg := classifyAuthValidationError(err)
 				checks = append(checks, doctorCheck{
 					ID:      "auth_validation",
 					Status:  "warn",
 					Code:    code,
 					Message: msg,
-					Hint:    hint,
 				})
 			}
 		} else {
@@ -408,7 +374,6 @@ func collectDoctorChecks(cfg config.Config, includeAPIValidation bool) []doctorC
 			Status:  "warn",
 			Code:    "doctor.local_player.missing",
 			Message: "no local player found (mpv/afplay)",
-			Hint:    "install mpv for better local playback",
 		})
 	}
 
@@ -418,7 +383,6 @@ func collectDoctorChecks(cfg config.Config, includeAPIValidation bool) []doctorC
 			Status:  "warn",
 			Code:    "doctor.picker.fzf_missing",
 			Message: "fzf not found (interactive picker will use basic prompt)",
-			Hint:    "install fzf for a faster picker UX",
 		})
 	} else {
 		checks = append(checks, doctorCheck{
@@ -428,7 +392,11 @@ func collectDoctorChecks(cfg config.Config, includeAPIValidation bool) []doctorC
 		})
 	}
 
-	return checks
+	catalog := doctorCodeCatalog(fallbackBrowser)
+	for i := range checks {
+		checks[i].Hint = catalog[checks[i].Code].Hint
+	}
+	return checks, catalog
 }
 
 func summarizeDoctorChecks(checks []doctorCheck) (okCount, warnCount, failCount int) {
@@ -445,52 +413,44 @@ func summarizeDoctorChecks(checks []doctorCheck) (okCount, warnCount, failCount 
 	return okCount, warnCount, failCount
 }
 
-func doctorSuggestedFixes(checks []doctorCheck) []string {
+func doctorSuggestedFixes(checks []doctorCheck, catalog doctorCatalog) []string {
 	seen := map[string]bool{}
 	out := []string{}
-	add := func(cmd string) {
-		cmd = strings.TrimSpace(cmd)
-		if cmd == "" || seen[cmd] {
-			return
-		}
-		seen[cmd] = true
-		out = append(out, cmd)
-	}
 	for _, c := range checks {
-		switch c.ID {
-		case "config_file":
-			if c.Status != "ok" {
-				add(cliCommand("config init"))
-			}
-		case "browser_application":
-			if c.Status != "ok" {
-				if applicationAvailable("Safari") {
-					add(cliCommand("config set browser safari"))
-				} else if applicationAvailable("Google Chrome") {
-					add(cliCommand("config set browser chrome"))
-				}
-			}
-		case "api_session":
-			if c.Status != "ok" {
-				add(cliCommand("auth login"))
-				add(cliCommand("auth import-browser --browser dia"))
-			}
-		case "auth_validation":
-			if c.Status != "ok" {
-				add(cliCommand("auth login"))
-				add(cliCommand("auth import-browser --browser dia"))
-			}
-		case "picker_optional":
-			if c.Status != "ok" {
-				add("brew install fzf")
-			}
-		case "local_player":
-			if c.Status != "ok" {
-				add("brew install mpv")
+		if c.Status == "ok" {
+			continue
+		}
+		for _, command := range catalog[c.Code].Commands {
+			if !seen[command] {
+				seen[command] = true
+				out = append(out, command)
 			}
 		}
 	}
 	return out
+}
+
+type doctorRepairKind string
+
+const doctorRepairConfigInit doctorRepairKind = "config_init"
+
+type doctorFixAction struct {
+	Action  doctorRepairKind
+	Command string
+}
+
+func planDoctorFixes(checks []doctorCheck, catalog doctorCatalog) []doctorFixAction {
+	actions := []doctorFixAction{}
+	seen := map[doctorRepairKind]bool{}
+	for _, c := range checks {
+		entry := catalog[c.Code]
+		if c.Status == "ok" || entry.Repair == "" || seen[entry.Repair] {
+			continue
+		}
+		seen[entry.Repair] = true
+		actions = append(actions, doctorFixAction{Action: entry.Repair, Command: entry.Commands[0]})
+	}
+	return actions
 }
 
 func runDoctorExplain(args []string) int {
@@ -521,7 +481,11 @@ func runDoctorExplain(args []string) int {
 		return 2
 	}
 	code := strings.TrimSpace(fs.Arg(0))
-	entry, ok := doctorCodeCatalog()[code]
+	var fallbackBrowser string
+	if code == "doctor.browser.app_missing" {
+		fallbackBrowser, _ = browserFallback("")
+	}
+	entry, ok := doctorCodeCatalog(fallbackBrowser)[code]
 	if !ok {
 		fmt.Fprintf(os.Stderr, "doctor explain: unknown code %q\n", code)
 		return 2
@@ -531,7 +495,7 @@ func runDoctorExplain(args []string) int {
 			"code":        code,
 			"title":       entry.Title,
 			"description": entry.Description,
-			"fix":         entry.Fix,
+			"fix":         entry.Hint,
 		}
 		if err := printJSON(out); err != nil {
 			errf("failed to render doctor explain JSON: %v\n", err)
@@ -542,92 +506,118 @@ func runDoctorExplain(args []string) int {
 	fmt.Printf("code: %s\n", code)
 	fmt.Printf("title: %s\n", entry.Title)
 	fmt.Printf("description: %s\n", entry.Description)
-	fmt.Printf("fix: %s\n", entry.Fix)
+	fmt.Printf("fix: %s\n", entry.Hint)
 	return 0
 }
 
+// doctorCodeEntry owns remediation metadata; probes only report observations.
 type doctorCodeEntry struct {
 	Title       string
 	Description string
-	Fix         string
+	Hint        string
+	Commands    []string
+	Repair      doctorRepairKind
 }
 
-func doctorCodeCatalog() map[string]doctorCodeEntry {
-	return map[string]doctorCodeEntry{
+type doctorCatalog map[string]doctorCodeEntry
+
+// fallbackBrowser is a direct probe observation, not a catalog callback.
+func doctorCodeCatalog(fallbackBrowser string) doctorCatalog {
+	browserHint := "install the configured browser or select an installed browser with `--browser`"
+	var browserCommands []string
+	if fallbackBrowser != "" {
+		browserCommands = []string{cliCommand("config set browser " + fallbackBrowser)}
+		browserHint = fmt.Sprintf("run `%s`", browserCommands[0])
+	}
+	return doctorCatalog{
 		"doctor.macos.automation.missing": {
 			Title:       "AppleScript unavailable",
 			Description: "The `osascript` executable is missing, so browser automation commands cannot run.",
-			Fix:         "run on macOS with AppleScript support",
+			Hint:        "run on macOS with AppleScript support",
 		},
 		"doctor.browser.invalid_config": {
 			Title:       "Invalid browser configuration",
 			Description: "Configured browser or app name is not supported for automation.",
-			Fix:         "set a supported browser via --browser or POCKETCASTS_BROWSER",
+			Hint:        "set a supported browser via --browser or POCKETCASTS_BROWSER",
 		},
 		"doctor.browser.app_missing": {
 			Title:       "Browser application missing",
 			Description: "The configured browser name is valid, but the corresponding macOS application is not installed.",
-			Fix:         cliCommand("config set browser safari"),
+			Hint:        browserHint,
+			Commands:    browserCommands,
 		},
 		"doctor.browser.dia_not_running": {
 			Title:       "Dia is not running",
 			Description: "Dia must be launched with AppleScript JavaScript support before Web Player automation can run.",
-			Fix:         cliCommand("web login --browser dia"),
+			Hint:        fmt.Sprintf("run `%s`; it will launch Dia with AppleScript JavaScript support", cliCommand("web login --browser dia")),
+			Commands:    []string{cliCommand("web login --browser dia")},
 		},
 		"doctor.browser.dia_javascript_disabled": {
 			Title:       "Dia JavaScript automation disabled",
 			Description: "The running Dia process was not launched with --enable-applescript-javascript.",
-			Fix:         fmt.Sprintf("quit Dia, then run `%s`", cliCommand("web login --browser dia")),
+			Hint:        fmt.Sprintf("quit Dia, then run `%s`", cliCommand("web login --browser dia")),
+			Commands:    []string{cliCommand("web login --browser dia")},
 		},
 		"doctor.config.missing": {
 			Title:       "Config file missing",
 			Description: "No config file was found at the expected location.",
-			Fix:         cliCommand("config init"),
+			Hint:        fmt.Sprintf("run `%s`", cliCommand("config init")),
+			Commands:    []string{cliCommand("config init")},
+			Repair:      doctorRepairConfigInit,
 		},
 		"doctor.auth.session_missing": {
 			Title:       "API session missing",
 			Description: "No environment, Keychain, or legacy API credential is available.",
-			Fix:         cliCommand("auth login"),
+			Hint:        fmt.Sprintf("run `%s` or `%s`", cliCommand("auth login"), cliCommand("auth import-browser --browser dia")),
+			Commands:    []string{cliCommand("auth login"), cliCommand("auth import-browser --browser dia")},
 		},
 		"doctor.auth.legacy_config": {
 			Title:       "Legacy plaintext credential",
 			Description: "The CLI is using a deprecated Authorization header from the JSON config.",
-			Fix:         fmt.Sprintf("%s or %s", cliCommand("auth login"), cliCommand("auth import-browser --browser dia")),
+			Hint:        fmt.Sprintf("run `%s` or `%s`", cliCommand("auth login"), cliCommand("auth import-browser --browser dia")),
+			Commands:    []string{cliCommand("auth login"), cliCommand("auth import-browser --browser dia")},
 		},
 		"doctor.auth.invalid": {
 			Title:       "API session rejected",
 			Description: "The API returned 401 after the active session was refreshed or could not be refreshed.",
-			Fix:         cliCommand("auth login"),
+			Hint:        fmt.Sprintf("run `%s` or import a fresh browser session", cliCommand("auth login")),
+			Commands:    []string{cliCommand("auth login"), cliCommand("auth import-browser --browser dia")},
 		},
 		"doctor.auth.unverified": {
 			Title:       "Auth not verified",
 			Description: "Auth could not be validated due to transient/API issues right now.",
-			Fix:         fmt.Sprintf("retry `%s`", cliCommand("auth verify")),
+			Hint:        fmt.Sprintf("retry `%s`", cliCommand("auth verify")),
+			Commands:    []string{cliCommand("auth verify")},
 		},
 		"doctor.auth.network.timeout": {
 			Title:       "Auth validation timeout",
 			Description: "API validation timed out before a response was received.",
-			Fix:         fmt.Sprintf("check connectivity/VPN and retry `%s`", cliCommand("auth verify")),
+			Hint:        fmt.Sprintf("check connectivity/VPN and retry `%s`", cliCommand("auth verify")),
+			Commands:    []string{cliCommand("auth verify")},
 		},
 		"doctor.auth.network.unreachable": {
 			Title:       "Auth validation network issue",
 			Description: "API validation failed due to DNS/connectivity/network transport errors.",
-			Fix:         fmt.Sprintf("check network access and retry `%s`", cliCommand("auth verify")),
+			Hint:        "check network access to Pocket Casts API and retry `" + cliCommand("auth verify") + "`",
+			Commands:    []string{cliCommand("auth verify")},
 		},
 		"doctor.auth.api.unavailable": {
 			Title:       "Auth validation API unavailable",
 			Description: "Pocket Casts API returned transient server errors during auth validation.",
-			Fix:         fmt.Sprintf("retry later; inspect with `%s` if persistent", cliCommand("queue api ls --raw")),
+			Hint:        fmt.Sprintf("retry later; if persistent, inspect with `%s`", cliCommand("queue api ls --raw")),
+			Commands:    []string{cliCommand("queue api ls --raw")},
 		},
 		"doctor.local_player.missing": {
 			Title:       "No local player found",
 			Description: "Neither `mpv` nor `afplay` was found on PATH.",
-			Fix:         "brew install mpv",
+			Hint:        "install mpv for better local playback",
+			Commands:    []string{"brew install mpv"},
 		},
 		"doctor.picker.fzf_missing": {
 			Title:       "fzf not installed",
 			Description: "Interactive picker falls back to a basic prompt without `fzf`.",
-			Fix:         "brew install fzf",
+			Hint:        "install fzf for a faster picker UX",
+			Commands:    []string{"brew install fzf"},
 		},
 	}
 }
@@ -642,19 +632,19 @@ func verifyAuthWithAPI(cfg config.Config) (bool, error) {
 	return true, nil
 }
 
-func classifyAuthValidationError(err error) (code, message, hint string) {
+func classifyAuthValidationError(err error) (code, message string) {
 	if err == nil {
-		return "doctor.auth.unverified", "unable to validate auth now", fmt.Sprintf("retry `%s`", cliCommand("auth verify"))
+		return "doctor.auth.unverified", "unable to validate auth now"
 	}
 	s := strings.ToLower(strings.TrimSpace(err.Error()))
 	switch {
-	case strings.Contains(s, "timeout"):
-		return "doctor.auth.network.timeout", "auth validation timed out", fmt.Sprintf("check connectivity/VPN and retry `%s`", cliCommand("auth verify"))
+	case errors.Is(err, context.DeadlineExceeded), strings.Contains(s, "timeout"):
+		return "doctor.auth.network.timeout", "auth validation timed out"
 	case strings.Contains(s, "connection refused"), strings.Contains(s, "no such host"), strings.Contains(s, "network is unreachable"), strings.Contains(s, "connection reset"):
-		return "doctor.auth.network.unreachable", "auth validation failed due to network/connectivity", "check network access to Pocket Casts API and retry"
+		return "doctor.auth.network.unreachable", "auth validation failed due to network/connectivity"
 	case strings.Contains(s, "http 5"):
-		return "doctor.auth.api.unavailable", "Pocket Casts API unavailable during auth validation", fmt.Sprintf("retry later; if persistent, inspect with `%s`", cliCommand("queue api ls --raw"))
+		return "doctor.auth.api.unavailable", "Pocket Casts API unavailable during auth validation"
 	default:
-		return "doctor.auth.unverified", fmt.Sprintf("unable to validate auth now (%v)", err), fmt.Sprintf("retry `%s`", cliCommand("auth verify"))
+		return "doctor.auth.unverified", fmt.Sprintf("unable to validate auth now (%v)", err)
 	}
 }

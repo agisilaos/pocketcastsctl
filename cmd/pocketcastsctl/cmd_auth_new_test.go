@@ -326,7 +326,8 @@ func TestEmptyStoredCredentialsReportMissingAcrossAuthCallers(t *testing.T) {
 		t.Fatalf("replacement error=%v", err)
 	}
 	foundSession := false
-	for _, check := range collectDoctorChecks(cfg, false) {
+	checks, _ := collectDoctorChecks(cfg, false)
+	for _, check := range checks {
 		if check.ID == "api_session" {
 			foundSession = true
 		}
