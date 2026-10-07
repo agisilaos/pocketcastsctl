@@ -320,7 +320,7 @@ func runNowTUILoop(ctx context.Context, runtime nowTUIRuntime) int {
 }
 
 func nowTUIMaxQueueOffset(model nowTUIModel, width, height int) int {
-	queue := nowTUIQueueForDisplay(model)
+	queue := model.queue
 	visible := nowTUIQueueVisibleRows(width, height)
 	if queue.hasValue && queue.err != "" {
 		visible = max(1, visible-1)

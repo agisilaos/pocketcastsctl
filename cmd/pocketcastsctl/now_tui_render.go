@@ -13,10 +13,9 @@ import (
 )
 
 const (
-	nowTUIWideMinimum                   = 88
-	nowTUIMaxWidth                      = 512
-	nowTUIMaxHeight                     = 200
-	nowTUICurrentProgressToleranceInSec = 120
+	nowTUIWideMinimum = 88
+	nowTUIMaxWidth    = 512
+	nowTUIMaxHeight   = 200
 )
 
 type nowTUIColorMode uint8
@@ -170,7 +169,7 @@ func (theme nowTUITheme) tone(label nowTUILabel) string {
 func renderNowTUIFrame(model nowTUIModel, width, height int, now time.Time, theme nowTUITheme, unicodeOutput bool) string {
 	width = max(1, min(width, nowTUIMaxWidth))
 	height = max(1, min(height, nowTUIMaxHeight))
-	queue := nowTUIQueueForDisplay(model)
+	queue := model.queue
 	chars := nowTUICharacters(unicodeOutput)
 	if width < 40 || height < 20 {
 		return renderNowTUICompact(model, queue, width, height, now, theme, chars)
@@ -282,42 +281,6 @@ func renderNowTUIFooter(model nowTUIModel, queue nowTUIQueueState, width int, no
 		return theme.muted(fitNowTUIPlain(keys, width, false))
 	}
 	return theme.muted(keys) + strings.Repeat(" ", width-nowTUICellWidth(keys)-nowTUICellWidth(health)) + theme.blue(health)
-}
-
-func nowTUIQueueForDisplay(model nowTUIModel) nowTUIQueueState {
-	queue := model.queue
-	if !queue.hasValue || len(queue.value.Occurrences) == 0 || !nowTUIWebMatchesQueueHead(model.web, queue.value.Occurrences[0]) {
-		return queue
-	}
-
-	visible := queue.value.Occurrences[1:]
-	queue.value.Occurrences = make([]app.CockpitQueueOccurrence, len(visible))
-	copy(queue.value.Occurrences, visible)
-	for index := range queue.value.Occurrences {
-		queue.value.Occurrences[index].Position = index + 1
-	}
-	queue.value.Status.Total = len(queue.value.Occurrences)
-	queue.value.Status.NextTitle = ""
-	if len(queue.value.Occurrences) > 0 {
-		queue.value.Status.NextTitle = queue.value.Occurrences[0].Title
-	}
-	return queue
-}
-
-func nowTUIWebMatchesQueueHead(web nowTUIWebState, head app.CockpitQueueOccurrence) bool {
-	if !web.hasValue || web.err != "" || (web.value.State != "playing" && web.value.State != "paused") || web.value.EpisodeTitle == nil || web.value.PositionSeconds == nil || !head.HasProgress {
-		return false
-	}
-	webTitle := strings.ToLower(strings.Join(strings.Fields(*web.value.EpisodeTitle), " "))
-	queueTitle := strings.ToLower(strings.Join(strings.Fields(head.Title), " "))
-	if webTitle == "" || webTitle != queueTitle {
-		return false
-	}
-	difference := *web.value.PositionSeconds - int64(head.PlayedUpTo)
-	if difference < 0 {
-		difference = -difference
-	}
-	return difference <= nowTUICurrentProgressToleranceInSec
 }
 
 func renderNowTUIWebPanel(state nowTUIWebState, width, height int, now time.Time, theme nowTUITheme, chars nowTUIBoxChars) []string {

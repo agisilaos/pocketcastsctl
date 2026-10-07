@@ -329,61 +329,42 @@ func TestRenderNowTUISkipsUnchangedFrames(t *testing.T) {
 	}
 }
 
-func TestNowTUIQueueForDisplayHidesHighConfidenceWebCurrentEpisode(t *testing.T) {
-	now := time.Now()
-	model := populatedNowTUIModel(now)
-	model.web.value.State = "paused"
-	position := int64(48*60 + 32)
-	currentTitle := "Scott Galloway On Money, Happiness, And The Search For Enough"
-	model.web.value.EpisodeTitle = &currentTitle
-	model.web.value.PositionSeconds = &position
-	model.queue.value.Occurrences = []app.CockpitQueueOccurrence{
-		{Position: 1, UUID: "current", Title: "  Scott   Galloway on Money, Happiness, and the Search for Enough ", PlayedUpTo: int(position), HasProgress: true},
-		{Position: 2, UUID: "next", Title: "The actual next episode"},
-		{Position: 3, UUID: "current", Title: currentTitle, PlayedUpTo: int(position), HasProgress: true},
-	}
+func TestNowTUIRenderPreservesQueueHeadAndRepeatedOccurrences(t *testing.T) {
+	for _, state := range []browsercontrol.PlaybackState{"playing", "paused", "unknown"} {
+		t.Run(string(state), func(t *testing.T) {
+			now := time.Now()
+			model := populatedNowTUIModel(now)
+			model.web.value.State = state
+			position := int64(30 * 60)
+			title := "Same title"
+			model.web.value.EpisodeTitle = &title
+			model.web.value.PositionSeconds = &position
+			model.queue.value.Status.Total = 3
+			model.queue.value.Status.NextTitle = title
+			model.queue.value.Occurrences = []app.CockpitQueueOccurrence{
+				{Position: 1, UUID: "different-episode", Title: title, PlayedUpTo: int(position), HasProgress: true},
+				{Position: 2, UUID: "middle", Title: "Another episode"},
+				{Position: 3, UUID: "different-episode", Title: title, PlayedUpTo: int(position), HasProgress: true},
+			}
 
-	queue := nowTUIQueueForDisplay(model)
-	if len(queue.value.Occurrences) != 2 {
-		t.Fatalf("visible occurrences = %d, want 2", len(queue.value.Occurrences))
-	}
-	if got := queue.value.Occurrences[0]; got.UUID != "next" || got.Position != 1 {
-		t.Fatalf("first visible occurrence = %+v, want renumbered next episode", got)
-	}
-	if got := queue.value.Occurrences[1]; got.UUID != "current" || got.Position != 2 {
-		t.Fatalf("later repeated occurrence was not preserved: %+v", got)
-	}
-	if queue.value.Status.Total != 2 {
-		t.Fatalf("visible queue total = %d, want 2", queue.value.Status.Total)
-	}
-	frame := renderNowTUIFrame(model, 100, 30, now, nowTUITheme{mode: nowTUINoColor}, true)
-	if !strings.Contains(frame, "NEXT The actual next episode") {
-		t.Fatalf("actual next episode was not labeled NEXT:\n%s", frame)
-	}
-}
-
-func TestNowTUIQueueForDisplayKeepsUncertainHeadOccurrence(t *testing.T) {
-	now := time.Now()
-	model := populatedNowTUIModel(now)
-	model.web.value.State = "playing"
-	position := int64(30 * 60)
-	title := "Same title"
-	model.web.value.EpisodeTitle = &title
-	model.web.value.PositionSeconds = &position
-
-	tests := []struct {
-		name string
-		head app.CockpitQueueOccurrence
-	}{
-		{name: "missing progress", head: app.CockpitQueueOccurrence{Position: 1, Title: title}},
-		{name: "distant progress", head: app.CockpitQueueOccurrence{Position: 1, Title: title, PlayedUpTo: 10, HasProgress: true}},
-		{name: "different title", head: app.CockpitQueueOccurrence{Position: 1, Title: "Another episode", PlayedUpTo: int(position), HasProgress: true}},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			model.queue.value.Occurrences = []app.CockpitQueueOccurrence{test.head}
-			if got := nowTUIQueueForDisplay(model).value.Occurrences; len(got) != 1 {
-				t.Fatalf("uncertain head occurrence was hidden: %+v", got)
+			for _, width := range []int{100, 60} {
+				frame := renderNowTUIFrame(model, width, 30, now, nowTUITheme{mode: nowTUINoColor}, true)
+				first := strings.Index(frame, "NEXT Same title")
+				middle := strings.Index(frame, "02   Another episode")
+				last := strings.Index(frame, "03   Same title")
+				if first < 0 || middle <= first || last <= middle || !strings.Contains(frame, "3 EPISODES") {
+					t.Fatalf("width %d changed the observed queue order, positions or count:\n%s", width, frame)
+				}
+			}
+			if offset := nowTUIMaxQueueOffset(model, 35, 10); offset != 2 {
+				t.Fatalf("maximum compact offset = %d, want 2", offset)
+			}
+			for offset, want := range []string{"Same title", "Another episode", "Same title"} {
+				model.queueOffset = offset
+				frame := renderNowTUIFrame(model, 35, 10, now, nowTUITheme{mode: nowTUINoColor}, true)
+				if !strings.Contains(frame, "QUEUE 3 EPISODES  "+want) {
+					t.Fatalf("compact offset %d did not preserve its queue occurrence:\n%s", offset, frame)
+				}
 			}
 		})
 	}
