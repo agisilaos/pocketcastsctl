@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -91,5 +92,35 @@ func TestDoctorApplyReportsWriteFailure(t *testing.T) {
 	results := applyDoctorFixes([]doctorCheck{{Code: "doctor.config.missing", Status: "warn"}}, doctorCodeCatalog(""))
 	if len(results) != 1 || !hasFailedDoctorFix(results) {
 		t.Fatalf("failed repair not reported: %+v", results)
+	}
+}
+
+func TestDoctorApplyFailureAffectsExitStatus(t *testing.T) {
+	toolsDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(toolsDir, "osascript"), []byte("scratch"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", toolsDir)
+	parent := filepath.Join(t.TempDir(), "not-a-directory")
+	if err := os.WriteFile(parent, []byte("scratch"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(config.EnvConfigPath, filepath.Join(parent, "config.json"))
+	t.Setenv(config.EnvAccessToken, "")
+	previous := applicationAvailable
+	applicationAvailable = func(string) bool { return true }
+	t.Cleanup(func() { applicationAvailable = previous })
+	exit, stdout, stderr := runForTestWithRunner(t, []string{"--quick", "--fix", "--apply", "--json"}, "", func(args []string) int {
+		return runDoctor(args, config.Default())
+	})
+	var report struct {
+		Counts  map[string]int    `json:"counts"`
+		Repairs []doctorFixResult `json:"applied_fixes"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
+		t.Fatal(err)
+	}
+	if exit != 1 || stderr != "" || report.Counts["fail"] != 0 || len(report.Repairs) != 1 || report.Repairs[0].Status != "fail" {
+		t.Fatalf("repair failure must affect exit despite no failing checks: exit=%d stderr=%q report=%+v", exit, stderr, report)
 	}
 }

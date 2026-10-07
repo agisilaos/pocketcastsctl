@@ -279,7 +279,7 @@ For a recognized empty queue, `queue api ls --json` prints `[]`, the plain listi
 
 Transient API or network warnings suggest retrying verification or inspecting the API response; they do not imply that the API session is invalid. A rejected session suggests login or browser session import. Legacy plaintext credentials retain migration guidance to a saved API session.
 
-`doctor --fix` only prints guidance. Adding `--apply` can create a missing default config with `config init`; it does not log in, import credentials, change browsers, or install tools. The report and exit status describe the checks before repairs; rerun Doctor to check the resulting state.
+`doctor --fix` only prints guidance. Adding `--apply` can create a missing default config with `config init`; it does not log in, import credentials, change browsers, or install tools. Check statuses describe the state before repairs; applied repair failures also make the command exit unsuccessfully. Rerun Doctor to check the resulting state.
 
 Deprecated short aliases (still work for now, but print warnings):
 
