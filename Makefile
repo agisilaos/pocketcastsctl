@@ -17,7 +17,7 @@ bench-local-ci:
 	go test ./internal/localplayback -run '^$$' -bench 'BenchmarkSnapshot' -benchmem -benchtime=100x
 
 test-scripts:
-	go test ./scripts -run 'TestReleaseCheckModes|TestChangelogTraceability|TestCheckHelpDocsDriftScript|TestReleaseUsesConfigurableHTTPSHomebrewTapRemote'
+	go test ./scripts -run 'TestReleaseCheckModes|TestChangelogTraceability|TestHelpSnapshots|TestReleaseUsesConfigurableHTTPSHomebrewTapRemote'
 
 test-scripts-cover:
 	go test -cover ./scripts
@@ -32,10 +32,10 @@ fmt-check:
 	@test -z "$$(gofmt -l cmd internal scripts)"
 
 check-help:
-	./scripts/check-help.sh
+	./scripts/update-help.sh --check
 
 check-help-docs:
-	./scripts/check-help.sh
+	./scripts/update-help.sh --check
 
 docs-check:
 	./scripts/docs-check.sh

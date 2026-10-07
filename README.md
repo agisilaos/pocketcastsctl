@@ -406,9 +406,24 @@ See `RELEASING.md` for the agent authoring policy and full runbook. Release scri
 
 ## Docs
 
-- CLI help snapshots: `docs/cli-help/help-root.txt`, `docs/cli-help/help-start.txt`
+- CLI help snapshots: `docs/help/root.txt`, `docs/help/start.txt`
 - Product roadmap: `ROADMAP.md`
 - Release history: `CHANGELOG.md`
+
+The registry in `scripts/help-snapshots.txt` maps each snapshot filename to its
+CLI help command. Go golden tests and documentation checks use the same files.
+From the repository root, check, regenerate after a help change, then check again:
+
+```bash
+make check-help
+scripts/update-help.sh
+make check-help
+```
+
+Checks fail for stale, missing, or unregistered files. Add new snapshot commands
+to the registry; remove obsolete files from `docs/help` when removing an entry.
+Use `scripts/update-help.sh --help` for options, including `--out-dir <path>` to
+generate or check snapshots in a scratch directory.
 
 ## Roadmap
 
