@@ -1,6 +1,6 @@
 # Roadmap
 
-The immediate goal is to restore a green delivery runway, ship the accumulated post-`v0.1.5` work as `v0.1.6`, and then deepen the terminal playback experience with Rich Now Playing.
+With the `v0.1.7` playback and queue baseline shipped, the immediate goal is to turn the existing `now` dashboard into a responsive, source-aware terminal cockpit.
 
 ## v0.1.6 Delivery Baseline
 
@@ -19,23 +19,23 @@ The immediate goal is to restore a green delivery runway, ship the accumulated p
 - `CHANGELOG.md`, generated help, and release notes agree on `v0.1.6`.
 - The `v0.1.6` tag and release artifacts are published from `main`.
 
-## Next: Rich Now Playing
+## Next: Framework-Free Terminal Cockpit
 
 ### Scope
 
-- Introduce a Web Player playback snapshot containing state plus available episode, podcast, position, duration, and progress details.
-- Enrich `web status --json` and every `now` output mode additively.
-- Add `web status --details` for rich human and plain output while preserving the existing one-token default.
-- Keep partial metadata successful and preserve state-only behavior as the fallback.
-- Validate metadata extraction in Chrome and Safari before locking browser-specific selectors.
-- Collect independent `now` sources concurrently so slow auth or queue checks cannot starve Web Player details.
+- Add `now --tui` without changing existing human, plain, JSON, watch, or interactive contracts.
+- Use the standard library and the existing `x/term` dependency for terminal lifecycle, input, resizing, and rendering.
+- Present Web Player and managed local playback as independent sources beside the ordered Up Next queue.
+- Refresh sources asynchronously without overlapping observations, and retain explicitly aged stale snapshots after transient failures.
+- Use Pocket Casts' red-and-cool-grey palette with `NO_COLOR`, non-UTF-8, narrow-terminal, and compact fallbacks.
 
 ### Done when
 
-- Existing human, plain, and JSON consumers continue to work without changes.
-- Chrome and Safari expose a trustworthy snapshot across playing, paused, loading, transition, and no-episode states.
-- Unsupported or incomplete browser metadata degrades to explicit unknown/omitted details without command failure.
-- `now --watch` shows observed progress without overlapping refresh cycles.
+- Existing human, plain, JSON, watch, and interactive consumers continue to work without changes.
+- The TUI remains responsive while any source is slow, unavailable, or unauthenticated.
+- Web, local, and queue refreshes never overlap with an earlier observation of the same source.
+- Resize, quit, Ctrl-C, termination signals, `NO_COLOR`, and non-UTF-8 terminals leave the terminal usable.
+- Up Next preserves repeated occurrences and never infers player identity from episode titles.
 - Focused contract tests, full unit tests, vet, formatting, docs, and help snapshot checks pass.
 
 ## Working style

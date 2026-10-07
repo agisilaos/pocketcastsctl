@@ -145,6 +145,7 @@ func TestCompletionValuesAndScope(t *testing.T) {
 		cur   string
 		want  []string
 	}{
+		{"now TUI flag", []string{"now"}, "--t", []string{"--tui"}},
 		{"browser prefix", []string{"web", "login", "--browser"}, "c", []string{"chrome"}},
 		{"import sources", []string{"auth", "import-browser", "--browser"}, "", []string{"chrome", "dia", "safari"}},
 		{"inline browser", []string{"web", "login"}, "--browser=c", []string{"--browser=chrome"}},

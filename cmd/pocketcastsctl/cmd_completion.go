@@ -81,7 +81,7 @@ func completionTree() completionCommand {
 	return completionCommand{children: []completionCommand{
 		{name: "help"}, {name: "version"},
 		{name: "completion", values: []string{"bash", "zsh", "fish"}},
-		leaf("now", append(flags("json", "plain", "watch", "interactive", "verify-auth"), value("interval"), value("max-updates"))...),
+		leaf("now", append(flags("tui", "json", "plain", "watch", "interactive", "verify-auth"), value("interval"), value("max-updates"))...),
 		{name: "doctor", options: flags("json", "plain", "quick", "full", "fix", "apply"), children: []completionCommand{
 			{name: "explain", options: flags("json"), flagsAfterArguments: true, values: doctorCodes},
 		}},
