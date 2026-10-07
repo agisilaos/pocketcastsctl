@@ -1,9 +1,7 @@
 package har
 
 import (
-	"encoding/json"
 	"fmt"
-	"net/url"
 	"sort"
 	"strings"
 )
@@ -40,7 +38,8 @@ func GraphQLOpsFile(path string, opts GraphQLOpsOptions) (GraphQLOpsSummary, err
 }
 
 func GraphQLOps(f File, opts GraphQLOpsOptions) GraphQLOpsSummary {
-	endpoints := Summarize(f, SummarizeOptions{Host: opts.Host})
+	hostFilter := strings.TrimSpace(opts.Host)
+	matched := 0
 
 	type key struct {
 		op   string
@@ -50,50 +49,31 @@ func GraphQLOps(f File, opts GraphQLOpsOptions) GraphQLOpsSummary {
 	unknown := map[string]bool{}
 
 	for _, e := range f.Log.Entries {
-		raw := strings.TrimSpace(e.Request.URL)
-		if raw == "" {
+		r, ok := analyzeRequest(e.Request, hostFilter)
+		if !ok {
+			continue
+		}
+		matched++
+		switch r.graphql {
+		case notGraphQL:
+			continue
+		case unnamedGraphQL:
+			unknown[r.path] = true
 			continue
 		}
 
-		if opts.Host != "" && !strings.Contains(strings.ToLower(raw), strings.ToLower(opts.Host)) {
-			continue
-		}
-
-		if e.Request.PostData == nil {
-			continue
-		}
-		if !strings.Contains(strings.ToLower(e.Request.PostData.MimeType), "json") {
-			continue
-		}
-
-		var body map[string]any
-		if err := json.Unmarshal([]byte(e.Request.PostData.Text), &body); err != nil {
-			continue
-		}
-
-		opName, _ := body["operationName"].(string)
-		if opName == "" {
-			unknown[raw] = true
-			continue
-		}
-
-		varKeys := extractTopLevelKeys(body["variables"])
-		u, err := parseURL(raw)
-		if err != nil {
-			continue
-		}
-		k := key{op: opName, path: u.EscapedPath()}
+		k := key{op: r.operationName, path: r.path}
 		item := counts[k]
 		if item == nil {
 			item = &GraphQLOp{
-				OperationName: opName,
+				OperationName: r.operationName,
 				Path:          k.path,
-				VariableKeys:  varKeys,
+				VariableKeys:  r.variableKeys,
 			}
 			counts[k] = item
 		}
 		item.Count++
-		item.VariableKeys = unionKeys(item.VariableKeys, varKeys)
+		item.VariableKeys = unionKeys(item.VariableKeys, r.variableKeys)
 	}
 
 	out := make([]GraphQLOp, 0, len(counts))
@@ -109,19 +89,16 @@ func GraphQLOps(f File, opts GraphQLOpsOptions) GraphQLOpsSummary {
 	})
 
 	var unknownOut []GraphQLHit
-	for raw := range unknown {
-		u, err := parseURL(raw)
-		if err != nil {
-			continue
-		}
-		unknownOut = append(unknownOut, GraphQLHit{Path: u.EscapedPath()})
+	for path := range unknown {
+		unknownOut = append(unknownOut, GraphQLHit{Path: path})
 	}
+
 	sort.Slice(unknownOut, func(i, j int) bool { return unknownOut[i].Path < unknownOut[j].Path })
 
 	return GraphQLOpsSummary{
-		HostFilter: endpoints.HostFilter,
-		Total:      endpoints.Total,
-		Matched:    endpoints.Matched,
+		HostFilter: hostFilter,
+		Total:      len(f.Log.Entries),
+		Matched:    matched,
 		Ops:        out,
 		Unknown:    unknownOut,
 	}
@@ -137,9 +114,9 @@ func FormatGraphQLOpsText(s GraphQLOpsSummary) string {
 	}
 	if len(s.Ops) == 0 {
 		b.WriteString("\nNo GraphQL operations found (by operationName).\n")
-		return b.String()
+	} else {
+		b.WriteString("\nGraphQL operations:\n")
 	}
-	b.WriteString("\nGraphQL operations:\n")
 	for _, op := range s.Ops {
 		varKeys := ""
 		if len(op.VariableKeys) > 0 {
@@ -191,8 +168,4 @@ func unionKeys(a, b []string) []string {
 	}
 	sort.Strings(out)
 	return out
-}
-
-func parseURL(raw string) (*url.URL, error) {
-	return url.Parse(raw)
 }

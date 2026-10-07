@@ -335,6 +335,20 @@ Inspect the original capture before creating a copy that is safer to share:
 ./bin/pocketcastsctl har redact capture.har capture.redacted.har
 ```
 
+`har summarize` and `har graphql` default to `--host api.pocketcasts.com`.
+Both match the parsed hostname (case-insensitively), including its subdomains;
+hostnames appearing only in a URL's path or query do not match. Use `--host=` to
+include all hosts, or `--host pocketcasts.com` for that domain and its subdomains.
+Add `--json` before the file argument for machine-readable output. In both views,
+`total` counts all HAR entries and `matched` counts valid URLs with a hostname
+that pass the filter, including requests without GraphQL bodies.
+
+GraphQL analysis recognizes single JSON objects with a nonempty `operationName`
+or `query` string. Named operations include counts and top-level variable keys;
+queries without a name appear in `unknown` as distinct paths. Ordinary JSON,
+malformed bodies, and batch arrays are not reported as GraphQL operations.
+Summary hints use the same classification. Query text and variable values are never printed.
+
 `har redact` preserves endpoint metadata such as request method, origin/path,
 response status, and timings. It removes request and response header, cookie,
 query, form, and body values, along with browser-specific HAR extension fields.
