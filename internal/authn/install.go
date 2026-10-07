@@ -37,7 +37,7 @@ func Install(ctx context.Context, cfg config.Config, store Store, api *API, cand
 	pending := cfg
 	pending.Auth = metadataFor(key, candidate)
 	pending.APIHeaders = withoutAuthorization(cfg.APIHeaders)
-	if err := store.Save(ctx, key, candidate); err != nil {
+	if err := store.Save(ctx, key, candidate.credentials()); err != nil {
 		if previousKey != key {
 			_ = store.Delete(ctx, key)
 		}

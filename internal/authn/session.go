@@ -24,6 +24,10 @@ type Session struct {
 	Method       string
 }
 
+func (s Session) credentials() Credentials {
+	return Credentials{AccessToken: s.AccessToken, RefreshToken: s.RefreshToken}.normalized()
+}
+
 func (s Session) normalized() Session {
 	s.AccessToken = authutil.NormalizeToken(s.AccessToken)
 	s.RefreshToken = strings.TrimSpace(s.RefreshToken)

@@ -42,13 +42,13 @@ func TestUpNextProbeCancellationAndDeadlines(t *testing.T) {
 					close(entered)
 					<-ctx.Done()
 				}
-				store := probeStore{load: func(ctx context.Context) (authn.Session, error) {
+				store := probeStore{load: func(ctx context.Context) (authn.Credentials, error) {
 					loads++
 					if phase == "credential load" {
 						block(ctx)
-						return authn.Session{}, ctx.Err()
+						return authn.Credentials{}, ctx.Err()
 					}
-					return authn.Session{AccessToken: "token"}, nil
+					return authn.Credentials{AccessToken: "token"}, nil
 				}}
 				client := &http.Client{Transport: probeTransport(func(request *http.Request) (*http.Response, error) {
 					requests++
@@ -104,13 +104,13 @@ func TestNowProbeSharesDeadlineAcrossCredentialsAndRequests(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), parentTimeout)
 			defer cancel()
 			var loadDeadline time.Time
-			store := probeStore{load: func(ctx context.Context) (authn.Session, error) {
+			store := probeStore{load: func(ctx context.Context) (authn.Credentials, error) {
 				var ok bool
 				loadDeadline, ok = ctx.Deadline()
 				if !ok {
 					t.Fatal("credential load has no deadline")
 				}
-				return authn.Session{AccessToken: "token"}, nil
+				return authn.Credentials{AccessToken: "token"}, nil
 			}}
 			calls := 0
 			client := &http.Client{Transport: probeTransport(func(request *http.Request) (*http.Response, error) {

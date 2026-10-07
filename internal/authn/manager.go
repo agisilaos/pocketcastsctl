@@ -136,9 +136,9 @@ func (m *Manager) loadLocked(ctx context.Context) error {
 	}
 
 	if key := strings.TrimSpace(m.cfg.Auth.SessionKey); key != "" {
-		session, err := m.store.Load(ctx, key)
+		credentials, err := m.store.Load(ctx, key)
 		if err == nil {
-			m.session = mergeMetadata(session, m.cfg.Auth)
+			m.session = sessionFromCredentials(credentials, m.cfg.Auth)
 			m.source = SourceKeychain
 			return nil
 		}
@@ -176,7 +176,7 @@ func (m *Manager) refreshLocked(ctx context.Context) error {
 	if key == "" {
 		return errors.New("active API session has no credential-store key")
 	}
-	if err := m.store.Save(ctx, key, refreshed); err != nil {
+	if err := m.store.Save(ctx, key, refreshed.credentials()); err != nil {
 		return err
 	}
 	m.session = refreshed
@@ -191,19 +191,18 @@ func (m *Manager) refreshLocked(ctx context.Context) error {
 	return nil
 }
 
-func mergeMetadata(session Session, metadata config.AuthConfig) Session {
+func sessionFromCredentials(credentials Credentials, metadata config.AuthConfig) Session {
+	// Derive token metadata before filling gaps from saved configuration, matching
+	// the production Keychain load contract and preserving JWT identity precedence.
+	session := Session{AccessToken: credentials.AccessToken, RefreshToken: credentials.RefreshToken}.normalized()
 	if session.AccountID == "" {
 		session.AccountID = metadata.AccountID
 	}
 	if session.Email == "" {
 		session.Email = metadata.Email
 	}
-	if session.Method == "" {
-		session.Method = metadata.Method
-	}
-	if session.Scope == "" {
-		session.Scope = metadata.Scope
-	}
+	session.Method = metadata.Method
+	session.Scope = metadata.Scope
 	if session.ExpiresAt == 0 {
 		session.ExpiresAt = metadata.ExpiresAt
 	}

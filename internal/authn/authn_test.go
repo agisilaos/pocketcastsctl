@@ -19,16 +19,16 @@ import (
 )
 
 type memoryStore struct {
-	sessions  map[string]Session
-	saves     int
-	deletes   []string
-	loadErr   error
-	saveErr   error
-	deleteErr error
+	credentials map[string]Credentials
+	saves       int
+	deletes     []string
+	loadErr     error
+	saveErr     error
+	deleteErr   error
 }
 
 func newMemoryStore() *memoryStore {
-	return &memoryStore{sessions: map[string]Session{}}
+	return &memoryStore{credentials: map[string]Credentials{}}
 }
 
 func writeSavedAuthConfig(t *testing.T, path, apiBaseURL string, auth config.AuthConfig, headers map[string]string) {
@@ -53,22 +53,30 @@ func writeSavedAuthConfig(t *testing.T, path, apiBaseURL string, auth config.Aut
 	}
 }
 
-func (s *memoryStore) Load(_ context.Context, key string) (Session, error) {
+func (s *memoryStore) Load(_ context.Context, key string) (Credentials, error) {
 	if s.loadErr != nil {
-		return Session{}, s.loadErr
+		return Credentials{}, s.loadErr
 	}
-	session, ok := s.sessions[key]
+	credentials, ok := s.credentials[key]
 	if !ok {
-		return Session{}, ErrSessionNotFound
+		return Credentials{}, ErrSessionNotFound
 	}
-	return session, nil
+	credentials = credentials.normalized()
+	if credentials.AccessToken == "" {
+		return Credentials{}, errors.New("API session in Keychain has no access token")
+	}
+	return credentials, nil
 }
 
-func (s *memoryStore) Save(_ context.Context, key string, session Session) error {
+func (s *memoryStore) Save(_ context.Context, key string, credentials Credentials) error {
 	if s.saveErr != nil {
 		return s.saveErr
 	}
-	s.sessions[key] = session
+	credentials = credentials.normalized()
+	if credentials.AccessToken == "" {
+		return errors.New("cannot store an API session without an access token")
+	}
+	s.credentials[key] = credentials
 	s.saves++
 	return nil
 }
@@ -77,7 +85,7 @@ func (s *memoryStore) Delete(_ context.Context, key string) error {
 	if s.deleteErr != nil {
 		return s.deleteErr
 	}
-	delete(s.sessions, key)
+	delete(s.credentials, key)
 	s.deletes = append(s.deletes, key)
 	return nil
 }
@@ -100,7 +108,7 @@ func TestManagerDoesNotFallBackToPlaintextWhenKeychainSessionFails(t *testing.T)
 
 func TestManagerCredentialPrecedence(t *testing.T) {
 	store := newMemoryStore()
-	store.sessions["active"] = Session{AccessToken: "keychain-token"}
+	store.credentials["active"] = Credentials{AccessToken: "keychain-token"}
 	cfg := config.Default()
 	cfg.Auth.SessionKey = "active"
 	cfg.APIHeaders["Authorization"] = "Bearer legacy-token"
@@ -190,15 +198,13 @@ func TestManagerProactivelyRefreshesAndPersistsRotation(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "config.json")
 	t.Setenv(config.EnvConfigPath, configPath)
 	store := newMemoryStore()
-	store.sessions["active"] = Session{
+	store.credentials["active"] = Credentials{
 		AccessToken:  "old-access",
 		RefreshToken: "old-refresh",
-		Scope:        ScopeWebPlayer,
-		ExpiresAt:    time.Now().Add(30 * time.Second).Unix(),
 	}
 	cfg := config.Default()
 	cfg.APIBaseURL = server.URL
-	cfg.Auth.SessionKey = "active"
+	cfg.Auth = config.AuthConfig{SessionKey: "active", Scope: ScopeWebPlayer, ExpiresAt: time.Now().Add(30 * time.Second).Unix()}
 	writeSavedAuthConfig(t, configPath, server.URL, cfg.Auth, map[string]string{})
 	manager := NewManager(cfg, ManagerOptions{Store: store, HTTP: server.Client()})
 
@@ -209,7 +215,7 @@ func TestManagerProactivelyRefreshesAndPersistsRotation(t *testing.T) {
 	if token != "new-access" || refreshCalls != 1 {
 		t.Fatalf("token = %q, refresh calls = %d", token, refreshCalls)
 	}
-	if got := store.sessions["active"].RefreshToken; got != "new-refresh" {
+	if got := store.credentials["active"].RefreshToken; got != "new-refresh" {
 		t.Fatalf("stored refresh token = %q", got)
 	}
 	if _, err := os.Stat(configPath); err != nil {
@@ -233,11 +239,8 @@ func TestManagerRefusesRefreshAgainstTemporaryAPIBase(t *testing.T) {
 		t.Fatal(err)
 	}
 	store := newMemoryStore()
-	store.sessions["active"] = Session{
-		AccessToken:  "old-access",
-		RefreshToken: "old-refresh",
-		ExpiresAt:    time.Now().Add(-time.Minute).Unix(),
-	}
+	store.credentials["active"] = Credentials{AccessToken: "old-access", RefreshToken: "old-refresh"}
+	cfg.Auth.ExpiresAt = time.Now().Add(-time.Minute).Unix()
 	manager := NewManager(cfg, ManagerOptions{Store: store, HTTP: server.Client()})
 
 	if _, err := manager.AccessToken(context.Background()); !errors.Is(err, config.ErrAPIBaseURLOverride) {
@@ -315,7 +318,7 @@ func TestAPIValidateDoesNotRefreshAfterServerFailure(t *testing.T) {
 
 func TestInstallValidatesBeforeReplacingActiveSession(t *testing.T) {
 	store := newMemoryStore()
-	store.sessions["old"] = Session{AccessToken: "old-access"}
+	store.credentials["old"] = Credentials{AccessToken: "old-access"}
 	cfg := config.Default()
 	cfg.Auth.SessionKey = "old"
 	cfg.APIHeaders["Authorization"] = "Bearer legacy"
@@ -346,11 +349,19 @@ func TestInstallValidatesBeforeReplacingActiveSession(t *testing.T) {
 	if updated.Auth.SessionKey == "" || updated.Auth.SessionKey == "old" {
 		t.Fatalf("new session key = %q", updated.Auth.SessionKey)
 	}
-	if _, ok := store.sessions["old"]; ok {
+	if _, ok := store.credentials["old"]; ok {
 		t.Fatal("old session was not removed after replacement")
 	}
 	if _, ok := updated.APIHeaders["Authorization"]; ok {
 		t.Fatal("legacy Authorization header survived successful install")
+	}
+	saved, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	reloaded, source, err := NewManager(saved, ManagerOptions{Store: store}).Snapshot(context.Background())
+	if err != nil || source != SourceKeychain || reloaded.AccessToken != "candidate" || reloaded.RefreshToken != "refresh" || reloaded.Email != "person@example.com" || reloaded.Method != "password" || reloaded.Scope != ScopeWebPlayer {
+		t.Fatal("installed session could not be reconstructed in a new process")
 	}
 }
 
@@ -376,7 +387,7 @@ func TestInstallMetadataFailureKeepsSameAccountCredentialUsable(t *testing.T) {
 	candidate := Session{AccessToken: "new-access", AccountID: "account-1", Scope: ScopeWebPlayer}
 	key := sessionKey(server.URL, candidate)
 	store := newMemoryStore()
-	store.sessions[key] = Session{AccessToken: "old-access"}
+	store.credentials[key] = Credentials{AccessToken: "old-access"}
 	cfg := config.Default()
 	cfg.APIBaseURL = server.URL
 	cfg.Auth = config.AuthConfig{SessionKey: key, AccountID: "account-1", Scope: ScopeWebPlayer}
@@ -393,7 +404,7 @@ func TestInstallMetadataFailureKeepsSameAccountCredentialUsable(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "session installed") {
 		t.Fatalf("updated=%+v error=%v", updated.Auth, err)
 	}
-	if got := store.sessions[key].AccessToken; got != "new-access" {
+	if got := store.credentials[key].AccessToken; got != "new-access" {
 		t.Fatalf("stored access token=%q, want validated replacement", got)
 	}
 	if len(store.deletes) != 0 {
@@ -403,7 +414,7 @@ func TestInstallMetadataFailureKeepsSameAccountCredentialUsable(t *testing.T) {
 
 func TestInstallFailurePreservesActiveSession(t *testing.T) {
 	store := newMemoryStore()
-	store.sessions["old"] = Session{AccessToken: "old-access"}
+	store.credentials["old"] = Credentials{AccessToken: "old-access"}
 	cfg := config.Default()
 	cfg.Auth.SessionKey = "old"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -420,7 +431,7 @@ func TestInstallFailurePreservesActiveSession(t *testing.T) {
 	if err == nil {
 		t.Fatal("Install succeeded with a rejected token")
 	}
-	if got := store.sessions["old"].AccessToken; got != "old-access" {
+	if got := store.credentials["old"].AccessToken; got != "old-access" {
 		t.Fatalf("old token = %q", got)
 	}
 	if store.saves != 0 || len(store.deletes) != 0 {
@@ -430,7 +441,7 @@ func TestInstallFailurePreservesActiveSession(t *testing.T) {
 
 func TestLogoutDisablesConfigBeforeDeletingKeychainSession(t *testing.T) {
 	store := newMemoryStore()
-	store.sessions["old"] = Session{AccessToken: "old-access"}
+	store.credentials["old"] = Credentials{AccessToken: "old-access"}
 	cfg := config.Default()
 	cfg.Auth.SessionKey = "old"
 	cfg.APIHeaders["Authorization"] = "Bearer legacy"
@@ -440,7 +451,7 @@ func TestLogoutDisablesConfigBeforeDeletingKeychainSession(t *testing.T) {
 	if _, err := Logout(context.Background(), cfg, store); err == nil {
 		t.Fatal("Logout succeeded despite config save failure")
 	}
-	if _, ok := store.sessions["old"]; !ok {
+	if _, ok := store.credentials["old"]; !ok {
 		t.Fatal("Keychain session was deleted before config was safely disabled")
 	}
 	if len(store.deletes) != 0 {
@@ -458,12 +469,12 @@ func TestLogoutClearsSavedSessionUnderTemporaryAPIBase(t *testing.T) {
 		t.Fatal(err)
 	}
 	store := newMemoryStore()
-	store.sessions["old"] = Session{AccessToken: "old-access"}
+	store.credentials["old"] = Credentials{AccessToken: "old-access"}
 
 	if _, err := Logout(context.Background(), cfg, store); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := store.sessions["old"]; ok {
+	if _, ok := store.credentials["old"]; ok {
 		t.Fatal("logout retained the saved Keychain session")
 	}
 	b, err := os.ReadFile(configPath)
