@@ -3,6 +3,8 @@ package main
 import (
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -71,13 +73,19 @@ func TestHelpParentOrdering(t *testing.T) {
 }
 
 func TestHelpSetupAliases(t *testing.T) {
+	want, err := os.ReadFile(filepath.Join("..", "..", "docs", "help", "start.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, topic := range []string{"setup", "start", "getting-started"} {
 		t.Run(topic, func(t *testing.T) {
 			code, stdout, stderr := runForTest(t, []string{"help", topic}, "")
 			if code != 0 || stderr != "" {
 				t.Fatalf("code=%d stderr=%q", code, stderr)
 			}
-			assertGolden(t, "help_start.golden", stdout)
+			if stdout != string(want) {
+				t.Fatalf("alias %q differs from canonical start help; run scripts/update-help.sh", topic)
+			}
 		})
 	}
 }

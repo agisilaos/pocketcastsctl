@@ -82,15 +82,15 @@ func TestNowProbeRetryBudget(t *testing.T) {
 }
 
 type probeStore struct {
-	load func(context.Context) (authn.Session, error)
-	save func(context.Context, authn.Session) error
+	load func(context.Context) (authn.Credentials, error)
+	save func(context.Context, authn.Credentials) error
 }
 
-func (store probeStore) Load(ctx context.Context, _ string) (authn.Session, error) {
+func (store probeStore) Load(ctx context.Context, _ string) (authn.Credentials, error) {
 	return store.load(ctx)
 }
 
-func (store probeStore) Save(ctx context.Context, _ string, session authn.Session) error {
+func (store probeStore) Save(ctx context.Context, _ string, session authn.Credentials) error {
 	return store.save(ctx, session)
 }
 
@@ -122,12 +122,12 @@ func TestNowProbeUsesOneManagerThroughRefresh(t *testing.T) {
 				}
 				loads, saves, refreshes, requests := 0, 0, 0, 0
 				store := probeStore{
-					load: func(context.Context) (authn.Session, error) {
+					load: func(context.Context) (authn.Credentials, error) {
 						loads++
 						// Match Keychain: it returns tokens, not configuration metadata.
-						return authn.Session{AccessToken: "old-access", RefreshToken: "old-refresh"}, nil
+						return authn.Credentials{AccessToken: "old-access", RefreshToken: "old-refresh"}, nil
 					},
-					save: func(_ context.Context, session authn.Session) error {
+					save: func(_ context.Context, session authn.Credentials) error {
 						saves++
 						if session.AccessToken != "fresh-access" || session.RefreshToken != "fresh-refresh" {
 							t.Fatalf("unexpected saved rotation")
@@ -175,19 +175,21 @@ func TestNowProbeUsesOneManagerThroughRefresh(t *testing.T) {
 
 func TestNowProbeCredentialLoadFailureDoesNotFallBack(t *testing.T) {
 	t.Setenv(config.EnvAccessToken, "")
-	loads, requests := 0, 0
-	store := probeStore{load: func(context.Context) (authn.Session, error) {
-		loads++
-		return authn.Session{}, errors.New("Keychain unavailable")
-	}}
-	client := &http.Client{Transport: probeTransport(func(*http.Request) (*http.Response, error) {
-		requests++
-		return probeResponse(200, `{"episodes":[]}`), nil
-	})}
-	cfg := config.Config{Auth: config.AuthConfig{SessionKey: "active"}, APIHeaders: map[string]string{"Authorization": "Bearer legacy-token"}}
-	auth, queue := collectNowAPIStatus(context.Background(), cfg, NowOptions{VerifyAuth: true}, authn.ManagerOptions{Store: store, HTTP: client})
-	if loads != 1 || requests != 0 || auth.Status != "missing" || auth.AuthorizationExists || queue.Status != "unavailable" || auth.Error == "" {
-		t.Fatalf("loads=%d requests=%d auth=%+v queue=%+v", loads, requests, auth, queue)
+	for _, loadErr := range []error{errors.New("Keychain unavailable"), nil} {
+		loads, requests := 0, 0
+		store := probeStore{load: func(context.Context) (authn.Credentials, error) {
+			loads++
+			return authn.Credentials{}, loadErr
+		}}
+		client := &http.Client{Transport: probeTransport(func(*http.Request) (*http.Response, error) {
+			requests++
+			return probeResponse(200, `{"episodes":[]}`), nil
+		})}
+		cfg := config.Config{Auth: config.AuthConfig{SessionKey: "active"}, APIHeaders: map[string]string{"Authorization": "Bearer legacy-token"}}
+		auth, queue := collectNowAPIStatus(context.Background(), cfg, NowOptions{VerifyAuth: true}, authn.ManagerOptions{Store: store, HTTP: client})
+		if loads != 1 || requests != 0 || auth.Status != "missing" || auth.AuthorizationExists || queue.Status != "unavailable" || auth.Error == "" {
+			t.Fatalf("loads=%d requests=%d auth=%+v queue=%+v", loads, requests, auth, queue)
+		}
 	}
 }
 
@@ -205,9 +207,9 @@ func TestNowProbeRefreshFailuresKeepStructuredClassification(t *testing.T) {
 				t.Fatal(err)
 			}
 			loads, refreshes, requests := 0, 0, 0
-			store := probeStore{load: func(context.Context) (authn.Session, error) {
+			store := probeStore{load: func(context.Context) (authn.Credentials, error) {
 				loads++
-				return authn.Session{AccessToken: "old-access", RefreshToken: "old-refresh"}, nil
+				return authn.Credentials{AccessToken: "old-access", RefreshToken: "old-refresh"}, nil
 			}}
 			client := &http.Client{Transport: probeTransport(func(request *http.Request) (*http.Response, error) {
 				if request.URL.Path == "/user/token" {

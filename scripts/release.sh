@@ -136,14 +136,9 @@ if [[ -z "$VERSION" ]]; then
   err "usage: ./scripts/release.sh [--dry-run] vX.Y.Z"
 fi
 
-if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-  err "invalid VERSION '$VERSION' (expected vX.Y.Z)"
-fi
+./scripts/release-check.sh "$VERSION"
 
-if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-  err "must run inside a git repository"
-fi
-
+# Publishing is restricted to main; readiness and dry-runs also support branches.
 current_branch="$(git symbolic-ref --quiet --short HEAD 2>/dev/null || true)"
 if [[ "$current_branch" != "$DEFAULT_BRANCH" ]]; then
   if [[ "$DRY_RUN" -eq 1 ]]; then
@@ -153,13 +148,7 @@ if [[ "$current_branch" != "$DEFAULT_BRANCH" ]]; then
   fi
 fi
 
-if [[ -n "$(git status --porcelain --untracked-files=all)" ]]; then
-  err "working tree is not clean (tracked, staged, or untracked changes present)"
-fi
-
-./scripts/release-check.sh "$VERSION"
-
-for cmd in go git gh tar python3; do
+for cmd in gh tar; do
   if ! command -v "$cmd" >/dev/null 2>&1; then
     err "required command not found: $cmd"
   fi
@@ -171,10 +160,6 @@ mkdir -p "$dist_dir"
 
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "$tmp_dir"' EXIT
-
-if ! git rev-parse -q --verify HEAD >/dev/null 2>&1; then
-  err "repository has no commits yet; create an initial commit before running release scripts"
-fi
 
 build_pkg="${DEFAULT_BUILD_PKG}"
 if [[ -z "$build_pkg" ]]; then

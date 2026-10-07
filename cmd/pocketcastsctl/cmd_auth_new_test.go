@@ -13,38 +13,49 @@ import (
 	"testing"
 
 	"pocketcastsctl/internal/authn"
+	"pocketcastsctl/internal/authutil"
 	"pocketcastsctl/internal/config"
 )
 
 type commandMemoryStore struct {
-	sessions map[string]authn.Session
-	loads    int
-	saves    int
-	deletes  int
+	credentials map[string]authn.Credentials
+	loads       int
+	saves       int
+	deletes     int
 }
 
 func newCommandMemoryStore() *commandMemoryStore {
-	return &commandMemoryStore{sessions: map[string]authn.Session{}}
+	return &commandMemoryStore{credentials: map[string]authn.Credentials{}}
 }
 
-func (s *commandMemoryStore) Load(_ context.Context, key string) (authn.Session, error) {
+func (s *commandMemoryStore) Load(_ context.Context, key string) (authn.Credentials, error) {
 	s.loads++
-	session, ok := s.sessions[key]
+	credentials, ok := s.credentials[key]
 	if !ok {
-		return authn.Session{}, authn.ErrSessionNotFound
+		return authn.Credentials{}, authn.ErrSessionNotFound
 	}
-	return session, nil
+	credentials.AccessToken = authutil.NormalizeToken(credentials.AccessToken)
+	credentials.RefreshToken = strings.TrimSpace(credentials.RefreshToken)
+	if credentials.AccessToken == "" {
+		return authn.Credentials{}, errors.New("API session in Keychain has no access token")
+	}
+	return credentials, nil
 }
 
-func (s *commandMemoryStore) Save(_ context.Context, key string, session authn.Session) error {
+func (s *commandMemoryStore) Save(_ context.Context, key string, credentials authn.Credentials) error {
+	credentials.AccessToken = authutil.NormalizeToken(credentials.AccessToken)
+	credentials.RefreshToken = strings.TrimSpace(credentials.RefreshToken)
+	if credentials.AccessToken == "" {
+		return errors.New("cannot store an API session without an access token")
+	}
 	s.saves++
-	s.sessions[key] = session
+	s.credentials[key] = credentials
 	return nil
 }
 
 func (s *commandMemoryStore) Delete(_ context.Context, key string) error {
 	s.deletes++
-	delete(s.sessions, key)
+	delete(s.credentials, key)
 	return nil
 }
 
@@ -96,8 +107,8 @@ func TestAuthLoginUsesTerminalExchangeAndDoesNotLeakSecrets(t *testing.T) {
 			t.Fatalf("secret %q leaked in output", secret)
 		}
 	}
-	if len(store.sessions) != 1 {
-		t.Fatalf("stored sessions = %d, want 1", len(store.sessions))
+	if len(store.credentials) != 1 {
+		t.Fatalf("stored credentials = %d, want 1", len(store.credentials))
 	}
 	rawConfig, err := os.ReadFile(config.Path())
 	if err != nil {
@@ -165,8 +176,8 @@ func TestAuthImportBrowserIsExplicitAndDoesNotLeakCookie(t *testing.T) {
 	if strings.Contains(stdout+stderr, "cookie-secret") {
 		t.Fatal("browser credential leaked in command output")
 	}
-	if len(store.sessions) != 1 {
-		t.Fatalf("stored sessions = %d, want 1", len(store.sessions))
+	if len(store.credentials) != 1 {
+		t.Fatalf("stored credentials = %d, want 1", len(store.credentials))
 	}
 }
 
@@ -198,7 +209,7 @@ func TestAuthImportBrowserRequiresProfileWhenSeveralAreValidNonInteractive(t *te
 func TestAuthLogoutRemovesKeychainAndLegacyCredential(t *testing.T) {
 	store := useCommandMemoryStore(t)
 	t.Setenv(config.EnvConfigPath, filepath.Join(t.TempDir(), "config.json"))
-	store.sessions["active"] = authn.Session{AccessToken: "secret-access"}
+	store.credentials["active"] = authn.Credentials{AccessToken: "secret-access"}
 	cfg := config.Default()
 	cfg.Auth = config.AuthConfig{SessionKey: "active", Method: "password"}
 	cfg.APIHeaders["Authorization"] = "Bearer legacy-secret"
@@ -208,8 +219,8 @@ func TestAuthLogoutRemovesKeychainAndLegacyCredential(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit code = %d; stdout=%q stderr=%q", code, stdout, stderr)
 	}
-	if len(store.sessions) != 0 {
-		t.Fatalf("%d session(s) remain after logout", len(store.sessions))
+	if len(store.credentials) != 0 {
+		t.Fatalf("%d session(s) remain after logout", len(store.credentials))
 	}
 	updated, err := config.Load()
 	if err != nil {
@@ -226,14 +237,7 @@ func TestAuthLogoutRemovesKeychainAndLegacyCredential(t *testing.T) {
 func TestAuthStatusReportsAccountMethodScopeAndExpiry(t *testing.T) {
 	store := useCommandMemoryStore(t)
 	t.Setenv(config.EnvConfigPath, filepath.Join(t.TempDir(), "config.json"))
-	store.sessions["active"] = authn.Session{
-		AccessToken: "access",
-		AccountID:   "account-1",
-		Email:       "person@example.com",
-		Method:      "password",
-		Scope:       authn.ScopeWebPlayer,
-		ExpiresAt:   4102444800,
-	}
+	store.credentials["active"] = authn.Credentials{AccessToken: "access"}
 	cfg := config.Default()
 	cfg.Auth = config.AuthConfig{
 		SessionKey: "active",
@@ -265,5 +269,139 @@ func TestAuthLogoutReportsEnvironmentOverride(t *testing.T) {
 	}
 	if !strings.Contains(stdout, config.EnvAccessToken) || strings.Contains(stdout, "process-only-token") {
 		t.Fatalf("logout warning missing or leaked token: %s", stdout)
+	}
+}
+
+// A malformed Store implementation must not make an empty successful load
+// appear configured to any observation caller.
+type emptySuccessfulCommandStore struct{ authn.Store }
+
+func (emptySuccessfulCommandStore) Load(context.Context, string) (authn.Credentials, error) {
+	return authn.Credentials{RefreshToken: "hidden-refresh"}, nil
+}
+
+func TestEmptyStoredCredentialsReportMissingAcrossAuthCallers(t *testing.T) {
+	t.Setenv(config.EnvAccessToken, "")
+	store := useCommandMemoryStore(t)
+	credentialStoreFactory = func() authn.Store { return emptySuccessfulCommandStore{Store: store} }
+	cfg := config.Default()
+	cfg.Auth = config.AuthConfig{SessionKey: "active", Email: "saved@example.com", Method: "password"}
+	cfg.APIHeaders["Authorization"] = "Bearer hidden-legacy"
+	t.Setenv(config.EnvConfigPath, filepath.Join(t.TempDir(), "config.json"))
+	raw, err := json.Marshal(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(config.Path(), raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, mode := range []string{"--json", "--plain", ""} {
+		args := []string{"auth", "status"}
+		if mode != "" {
+			args = append(args, mode)
+		}
+		code, stdout, stderr := runForTest(t, args, "")
+		if code != 0 || !strings.Contains(stdout, "active Keychain session is unavailable") {
+			t.Fatalf("mode=%q code=%d stdout=%q stderr=%q", mode, code, stdout, stderr)
+		}
+		if mode == "--json" {
+			var status map[string]any
+			if err := json.Unmarshal([]byte(stdout), &status); err != nil {
+				t.Fatal(err)
+			}
+			if status["authorization_present"] != false || status["source"] != "none" || status["token_expiry_known"] != false {
+				t.Fatalf("status=%v", status)
+			}
+		}
+		for _, secret := range []string{"hidden-refresh", "hidden-legacy", "saved@example.com"} {
+			if strings.Contains(stdout+stderr, secret) {
+				t.Fatalf("failed observation leaked %q", secret)
+			}
+		}
+	}
+	if setupAuthConfigured(cfg) {
+		t.Fatal("setup treated empty credentials as configured")
+	}
+	if _, err := sessionReplacementPreflight(cfg); !errors.Is(err, authn.ErrCredentialUnavailable) {
+		t.Fatalf("replacement error=%v", err)
+	}
+	foundSession := false
+	for _, check := range collectDoctorChecks(cfg, false) {
+		if check.ID == "api_session" {
+			foundSession = true
+		}
+		if check.ID == "api_session" && (check.Status != "warn" || check.Code != "doctor.auth.session_missing" || !strings.Contains(check.Message, "active Keychain session is unavailable")) {
+			t.Fatalf("doctor check=%+v", check)
+		}
+	}
+	if !foundSession {
+		t.Fatal("doctor omitted API session diagnostic")
+	}
+}
+
+func TestAuthRefreshOutputsUpdatedMetadataWithoutCredentials(t *testing.T) {
+	t.Setenv(config.EnvAccessToken, "")
+	t.Setenv(config.EnvAPIBaseURL, "")
+	for _, mode := range []string{"--json", "--plain", ""} {
+		t.Run(mode, func(t *testing.T) {
+			store := useCommandMemoryStore(t)
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != "/user/token" {
+					t.Errorf("unexpected path %s", r.URL.Path)
+					w.WriteHeader(404)
+					return
+				}
+				var body map[string]any
+				if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+					t.Error(err)
+				}
+				if body["refresh_token"] != "old-refresh-secret" {
+					t.Error("refresh credential was not used")
+				}
+				_, _ = w.Write([]byte(`{"accessToken":"new-access-secret","refreshToken":"new-refresh-secret","email":"refreshed@example.com","expiresIn":3600}`))
+			}))
+			defer server.Close()
+			t.Setenv(config.EnvConfigPath, filepath.Join(t.TempDir(), "config.json"))
+			cfg := config.Default()
+			cfg.APIBaseURL = server.URL
+			cfg.Auth = config.AuthConfig{SessionKey: "active", Email: "old@example.com", Method: "password", Scope: authn.ScopeWebPlayer}
+			writeEffectiveConfigForTest(t, cfg)
+			store.credentials["active"] = authn.Credentials{AccessToken: "old-access-secret", RefreshToken: "old-refresh-secret"}
+			args := []string{"auth", "refresh"}
+			if mode != "" {
+				args = append(args, mode)
+			}
+			code, stdout, stderr := runForTest(t, args, "")
+			if code != 0 || stderr != "" {
+				t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout, stderr)
+			}
+			for _, secret := range []string{"old-access-secret", "old-refresh-secret", "new-access-secret", "new-refresh-secret"} {
+				if strings.Contains(stdout+stderr, secret) {
+					t.Fatalf("rendered credentials: %q", stdout+stderr)
+				}
+			}
+			saved, err := config.Load()
+			if err != nil || saved.Auth.Email != "refreshed@example.com" || saved.Auth.ExpiresAt <= 0 || store.credentials["active"].AccessToken != "new-access-secret" {
+				t.Fatalf("refresh state=%+v err=%v", saved.Auth, err)
+			}
+			switch mode {
+			case "--json":
+				var result map[string]any
+				if err := json.Unmarshal([]byte(stdout), &result); err != nil {
+					t.Fatal(err)
+				}
+				if len(result) != 6 || result["status"] != "ok" || result["command"] != "auth refresh" || result["email"] != saved.Auth.Email || result["expires_at"] != float64(saved.Auth.ExpiresAt) || result["method"] != "password" || result["scope"] != authn.ScopeWebPlayer {
+					t.Fatalf("JSON=%v", result)
+				}
+			case "--plain":
+				if stdout != "status\tok\ncommand\tauth refresh\nmethod\tpassword\nscope\twebplayer\n" {
+					t.Fatalf("plain=%q", stdout)
+				}
+			default:
+				if stdout != "auth refresh: OK\nsession: password (webplayer)\n" {
+					t.Fatalf("human=%q", stdout)
+				}
+			}
+		})
 	}
 }
