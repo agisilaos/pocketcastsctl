@@ -157,6 +157,11 @@ func usageHelp(topic string) func() {
 }
 
 func runHelp(args []string) int {
+	for _, arg := range args {
+		if arg == "" || strings.Contains(arg, " ") {
+			return unknownHelpTopic(args)
+		}
+	}
 	render, ok := helpTopics[strings.Join(args, " ")]
 	if !ok {
 		return unknownHelpTopic(args)

@@ -90,16 +90,20 @@ func TestHelpRejectsExtraWordsAndMissingTopicsWithoutConfig(t *testing.T) {
 			topics = append(topics, topic+" unexpected", topic+" unexpected more")
 		}
 	}
+	arguments := [][]string{{""}, {"auth login"}, {"queue api", "rm"}, {"config init"}, {"auth", " login"}, {"auth", "login "}}
 	for _, topic := range topics {
-		t.Run(topic, func(t *testing.T) {
+		arguments = append(arguments, strings.Fields(topic))
+	}
+	for _, args := range arguments {
+		t.Run(fmt.Sprintf("%q", args), func(t *testing.T) {
 			loads := 0
-			code, stdout, stderr := runForTestWithRunner(t, append([]string{"help"}, strings.Fields(topic)...), "", func(args []string) int {
+			code, stdout, stderr := runForTestWithRunner(t, append([]string{"help"}, args...), "", func(args []string) int {
 				return runWithConfigLoader(args, func() (config.Config, error) {
 					loads++
 					return config.Config{}, errors.New("malformed config")
 				})
 			})
-			wantErr := "unknown help topic: " + topic + "\n\n"
+			wantErr := "unknown help topic: " + strings.Join(args, " ") + "\n\n"
 			if code != 2 || stdout != root || stderr != wantErr || loads != 0 {
 				t.Fatalf("code=%d loads=%d stdout=%q stderr=%q", code, loads, stdout, stderr)
 			}
