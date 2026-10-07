@@ -147,7 +147,7 @@ func runSetup(args []string, cfg config.Config, loadConfig configLoader) int {
 
 func setupStepCheck(cfg config.Config, report *setupReport) int {
 	fmt.Fprintln(os.Stderr, "setup step 1/4: run quick environment checks")
-	checks := collectDoctorChecks(cfg, false)
+	checks, _ := collectDoctorChecks(cfg, false)
 	_, warnCount, failCount := summarizeDoctorChecks(checks)
 	if failCount > 0 {
 		report.Status = "fail"
