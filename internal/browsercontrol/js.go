@@ -2,20 +2,22 @@ package browsercontrol
 
 import "fmt"
 
-func jsForAction(action Action) string {
+// actionLabels is also the supported-action boundary. Toggle prefers Pause
+// before Play, using the same aliases as the explicit actions.
+func actionLabels(action Action) []string {
 	switch action {
 	case ActionPlay:
-		return jsClickByAriaLabels([]string{"Play", "Resume", "Play episode"})
+		return []string{"Play", "Resume", "Play episode"}
 	case ActionPause:
-		return jsClickByAriaLabels([]string{"Pause", "Pause episode"})
+		return []string{"Pause", "Pause episode"}
 	case ActionToggle:
-		return jsToggle()
+		return append(actionLabels(ActionPause), actionLabels(ActionPlay)...)
 	case ActionNext:
-		return jsClickByAriaLabels([]string{"Next", "Next episode", "Skip", "Skip forward"})
+		return []string{"Next", "Next episode", "Skip", "Skip forward"}
 	case ActionPrev:
-		return jsClickByAriaLabels([]string{"Previous", "Previous episode", "Back", "Skip back"})
+		return []string{"Previous", "Previous episode", "Back", "Skip back"}
 	default:
-		return fmt.Sprintf(`JSON.stringify({clicked:false, clickedLabel:"", error:"unknown action: %s"})`, action)
+		return nil
 	}
 }
 
@@ -36,10 +38,6 @@ func jsClickByAriaLabels(labels []string) string {
   }
   return JSON.stringify(clickByLabels(` + toJSArray(labels) + `));
 })()`
-}
-
-func jsToggle() string {
-	return jsClickByAriaLabels([]string{"Pause", "Pause episode", "Play", "Resume", "Play episode"})
 }
 
 func jsStatus() string {

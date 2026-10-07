@@ -82,13 +82,6 @@ func TestNormalizeAndToJSArray(t *testing.T) {
 	}
 }
 
-func TestJSForActionUnknown(t *testing.T) {
-	js := jsForAction(Action("mystery"))
-	if !strings.Contains(js, "unknown action: mystery") {
-		t.Fatalf("jsForAction unknown output mismatch: %q", js)
-	}
-}
-
 func TestPlaybackActionApplied(t *testing.T) {
 	tests := []struct {
 		name   string

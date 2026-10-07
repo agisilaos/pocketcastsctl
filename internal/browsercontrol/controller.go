@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"slices"
 	"strings"
 	"time"
 )
@@ -43,8 +44,16 @@ func New(opts Options) (*Controller, error) {
 	return &Controller{browser: b, urlContains: urlContains}, nil
 }
 
+// ActionResult identifies the requested action and the control used for it.
+// A successful control invocation does not prove continued or audible playback.
 type ActionResult struct {
-	Clicked      bool   `json:"clicked"`
+	Action Action
+	Label  string
+}
+
+// actionWireResult is the private response from the page's control lookup.
+type actionWireResult struct {
+	Clicked      *bool  `json:"clicked"`
 	ClickedLabel string `json:"clickedLabel"`
 }
 
@@ -88,6 +97,11 @@ type QueueItem struct {
 }
 
 func (c *Controller) Do(ctx context.Context, action Action) (ActionResult, error) {
+	labels := actionLabels(action)
+	if len(labels) == 0 {
+		return ActionResult{}, fmt.Errorf("unsupported browser action: %q", action)
+	}
+
 	before := PlaybackStateUnknown
 	verify := c.browser.kind == kindDia && isPlaybackStateAction(action)
 	if verify {
@@ -96,21 +110,25 @@ func (c *Controller) Do(ctx context.Context, action Action) (ActionResult, error
 		}
 	}
 
-	js := jsForAction(action)
+	js := jsClickByAriaLabels(labels)
 	out, err := c.runJS(ctx, js)
 	if err != nil {
 		return ActionResult{}, err
 	}
 
-	var res ActionResult
-	if err := json.Unmarshal([]byte(out), &res); err != nil {
+	var wire actionWireResult
+	if err := json.Unmarshal([]byte(out), &wire); err != nil {
 		return ActionResult{}, fmt.Errorf("unexpected JS result: %q", out)
 	}
-	if !res.Clicked {
-		return res, fmt.Errorf("no matching control found in page (action=%s)", action)
+	if wire.Clicked == nil || (*wire.Clicked && !slices.Contains(labels, wire.ClickedLabel)) || (!*wire.Clicked && wire.ClickedLabel != "") {
+		return ActionResult{}, fmt.Errorf("unexpected JS result: %q", out)
 	}
+	if !*wire.Clicked {
+		return ActionResult{}, fmt.Errorf("no matching control found in page (action=%s)", action)
+	}
+	res := ActionResult{Action: action, Label: wire.ClickedLabel}
 	if verify {
-		if err := c.verifyPlaybackAction(ctx, action, before, res.ClickedLabel); err != nil {
+		if err := c.verifyPlaybackAction(ctx, action, before, res.Label); err != nil {
 			return res, err
 		}
 	}
