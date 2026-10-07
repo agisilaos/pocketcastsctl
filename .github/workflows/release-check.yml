@@ -2,9 +2,6 @@ name: release-check
 
 on:
   workflow_dispatch:
-  pull_request:
-  push:
-    branches: [main, master]
 
 jobs:
   release-check:
@@ -16,7 +13,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          # Use the release toolchain; compatibility stays in each repo's normal CI.
+          # Match the automatic validation toolchain.
           go-version: "1.26.x"
 
       # Intentionally no extra dependency install step (brew/apt).

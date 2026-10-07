@@ -35,10 +35,13 @@ make bench-local  # benchmarks local snapshot hot paths
 make test-scripts  # runs script failure-path tests
 make test-scripts-cover  # runs scripts package coverage
 make check-help-docs
+make release-check-ci  # runs the complete validation gate from a clean checkout
 make release-check VERSION=vX.Y.Z
 make release-dry-run VERSION=vX.Y.Z
 make release VERSION=vX.Y.Z
 ```
+
+Automatic PR and push validation runs `make release-check-ci` once, including all package and script tests, vet, docs/help, module metadata, formatting, changelog checks, and a version-stamped build. CI also runs the focused lifecycle race tests and snapshot benchmarks. The `release-check` workflow provides the same validation gate on manual dispatch. Use `make test-scripts` for focused script iteration; it is already included in the complete gate.
 
 ## Usage
 
