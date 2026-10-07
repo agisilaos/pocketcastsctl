@@ -89,5 +89,5 @@ func runAuthLogin(args []string, cfg config.Config) int {
 	if _, err := installSession(ctx, cfg, api, candidate); err != nil {
 		return renderAuthCommandError("auth login", "auth.session.install_failed", err, mode, 1)
 	}
-	return renderAuthSuccess("auth login", candidate, "", "", mode)
+	return renderAuthSuccess("auth login", candidate.Metadata(), "", "", mode)
 }

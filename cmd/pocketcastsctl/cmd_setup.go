@@ -237,8 +237,8 @@ func setupStepAuth(cfg config.Config, opts setupOptions, report *setupReport) in
 func setupAuthConfigured(cfg config.Config) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	session, _, err := newAuthManager(cfg).Snapshot(ctx)
-	return err == nil && strings.TrimSpace(session.AccessToken) != ""
+	_, err := newAuthManager(cfg).Snapshot(ctx)
+	return err == nil
 }
 
 func setupStepVerify(cfg config.Config, report *setupReport) int {

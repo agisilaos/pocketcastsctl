@@ -42,9 +42,9 @@ func runAuthStatus(args []string, cfg config.Config) int {
 	}
 	manager := newAuthManager(cfg)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	session, source, loadErr := manager.Snapshot(ctx)
+	session, loadErr := manager.Snapshot(ctx)
 	cancel()
-	authHeader := loadErr == nil && strings.TrimSpace(session.AccessToken) != ""
+	authHeader := loadErr == nil
 
 	status := map[string]any{
 		"config_path":            redactUserPath(config.Path()),
@@ -54,7 +54,7 @@ func runAuthStatus(args []string, cfg config.Config) int {
 		"token_expiry_known":     false,
 		"browser":                cfg.Browser,
 		"url_contains":           cfg.URLContains,
-		"source":                 string(source),
+		"source":                 string(session.Source),
 	}
 	if session.Method != "" {
 		status["method"] = session.Method
@@ -127,7 +127,7 @@ func runAuthStatus(args []string, cfg config.Config) int {
 	if authHeader {
 		fmt.Println("auth status:", overall)
 		fmt.Println("[OK] authorization: configured")
-		fmt.Printf("[OK] credential_source: %s\n", source)
+		fmt.Printf("[OK] credential_source: %s\n", session.Source)
 		if session.Method != "" {
 			fmt.Printf("[OK] method: %s\n", session.Method)
 		}
