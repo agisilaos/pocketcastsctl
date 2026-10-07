@@ -53,6 +53,10 @@ Show build metadata:
 ./bin/pocketcastsctl help queue api
 ```
 
+`help` topics must match a complete command topic, such as `help auth login`
+or `help queue api rm`. Unknown topics and extra trailing words return exit
+status 2, with a diagnostic on stderr and root help on stdout.
+
 Recommended first-run flow:
 
 ```bash
@@ -73,6 +77,11 @@ Setup modes:
 ./bin/pocketcastsctl setup auth --no-input # prints exact auth follow-up commands
 ./bin/pocketcastsctl setup verify --json   # verify-only machine output
 ```
+
+Setup reports use `warn` if any step warns or authentication is skipped, and
+`fail` if a step fails. Warnings and skipped authentication still exit successfully;
+blocking checks, verification failures, and config reload failures exit with code 1.
+Authentication failures retain their underlying command's exit code.
 
 Doctor modes:
 
@@ -277,6 +286,10 @@ For a recognized empty queue, `queue api ls --json` prints `[]`, the plain listi
 ./bin/pocketcastsctl doctor explain doctor.auth.session_missing --json
 ```
 
+Transient API or network warnings suggest retrying verification or inspecting the API response; they do not imply that the API session is invalid. A rejected session suggests login or browser session import. Legacy plaintext credentials retain migration guidance to a saved API session.
+
+`doctor --fix` only prints guidance. Adding `--apply` can create a missing default config with `config init`; it does not log in, import credentials, change browsers, or install tools. Check statuses describe the state before repairs; applied repair failures also make the command exit unsuccessfully. Rerun Doctor to check the resulting state.
+
 Deprecated short aliases (still work for now, but print warnings):
 
 ```bash
@@ -334,6 +347,20 @@ Inspect the original capture before creating a copy that is safer to share:
 ./bin/pocketcastsctl har graphql capture.har
 ./bin/pocketcastsctl har redact capture.har capture.redacted.har
 ```
+
+`har summarize` and `har graphql` default to `--host api.pocketcasts.com`.
+Both match the parsed hostname (case-insensitively), including its subdomains;
+hostnames appearing only in a URL's path or query do not match. Use `--host=` to
+include all hosts, or `--host pocketcasts.com` for that domain and its subdomains.
+Add `--json` before the file argument for machine-readable output. In both views,
+`total` counts all HAR entries and `matched` counts valid URLs with a hostname
+that pass the filter, including requests without GraphQL bodies.
+
+GraphQL analysis recognizes single JSON objects with a nonempty `operationName`
+or `query` string. Named operations include counts and top-level variable keys;
+queries without a name appear in `unknown` as distinct paths. Ordinary JSON,
+malformed bodies, and batch arrays are not reported as GraphQL operations.
+Summary hints use the same classification. Query text and variable values are never printed.
 
 `har redact` preserves endpoint metadata such as request method, origin/path,
 response status, and timings. It removes request and response header, cookie,
@@ -443,13 +470,30 @@ make release VERSION=vX.Y.Z
 
 Every new changelog bullet links to its pull request or direct commit. The approved changelog section becomes the GitHub Release notes. The dry run builds both macOS archives and checksums and renders the Homebrew formula without remote writes.
 
+Dry-run and publish start with the shared `scripts/release-check.sh` readiness gate. Publish requires `main`; dry-run permits other branches with a warning. Both recheck tag conflicts after building. CI uses `make release-check-ci` to validate the top changelog version even when its tag already exists.
+
 See `RELEASING.md` for the agent authoring policy and full runbook. Release scripts are `scripts/changelog-context.sh`, `scripts/release-check.sh`, and `scripts/release.sh`. Homebrew tap updates use configurable HTTPS through `HOMEBREW_TAP_URL`.
 
 ## Docs
 
-- CLI help snapshots: `docs/cli-help/help-root.txt`, `docs/cli-help/help-start.txt`
+- CLI help snapshots: `docs/help/root.txt`, `docs/help/start.txt`
 - Product roadmap: `ROADMAP.md`
 - Release history: `CHANGELOG.md`
+
+The registry in `scripts/help-snapshots.txt` maps each snapshot filename to its
+CLI help command. Go golden tests and documentation checks use the same files.
+From the repository root, check, regenerate after a help change, then check again:
+
+```bash
+make check-help
+scripts/update-help.sh
+make check-help
+```
+
+Checks fail for stale, missing, or unregistered files. Add new snapshot commands
+to the registry; remove obsolete files from `docs/help` when removing an entry.
+Use `scripts/update-help.sh --help` for options, including `--out-dir <path>` to
+generate or check snapshots in a scratch directory.
 
 ## Roadmap
 

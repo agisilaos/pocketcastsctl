@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+
+	"pocketcastsctl/internal/authutil"
 )
 
 const (
@@ -17,9 +19,24 @@ const (
 
 var ErrSessionNotFound = errors.New("API session not found in credential store")
 
+// Credentials contains only the secret material persisted by Store.
+// Non-secret session metadata belongs to configuration.
+type Credentials struct {
+	AccessToken  string
+	RefreshToken string
+}
+
+func (c Credentials) normalized() Credentials {
+	c.AccessToken = authutil.NormalizeToken(c.AccessToken)
+	c.RefreshToken = strings.TrimSpace(c.RefreshToken)
+	return c
+}
+
+// Store persists credentials only. Load requires an access token; a missing
+// refresh token is valid for sessions that cannot be refreshed.
 type Store interface {
-	Load(context.Context, string) (Session, error)
-	Save(context.Context, string, Session) error
+	Load(context.Context, string) (Credentials, error)
+	Save(context.Context, string, Credentials) error
 	Delete(context.Context, string) error
 }
 
@@ -32,45 +49,45 @@ func NewKeyringStore() Store {
 	return KeyringStore{}
 }
 
-func (KeyringStore) Load(ctx context.Context, key string) (Session, error) {
+func (KeyringStore) Load(ctx context.Context, key string) (Credentials, error) {
 	if err := validateCredentialKey(key); err != nil {
-		return Session{}, err
+		return Credentials{}, err
 	}
 	accessToken, err := keychainRead(ctx, keychainAccessService, key)
 	if err != nil {
-		return Session{}, fmt.Errorf("read access token from Keychain: %w", err)
+		return Credentials{}, fmt.Errorf("read access token from Keychain: %w", err)
 	}
 	refreshToken, err := keychainRead(ctx, keychainRefreshService, key)
 	if err != nil && !errors.Is(err, ErrSessionNotFound) {
-		return Session{}, fmt.Errorf("read refresh token from Keychain: %w", err)
+		return Credentials{}, fmt.Errorf("read refresh token from Keychain: %w", err)
 	}
-	session := Session{AccessToken: accessToken, RefreshToken: refreshToken}.normalized()
-	if session.AccessToken == "" {
-		return Session{}, errors.New("API session in Keychain has no access token")
+	credentials := Credentials{AccessToken: accessToken, RefreshToken: refreshToken}.normalized()
+	if credentials.AccessToken == "" {
+		return Credentials{}, errors.New("API session in Keychain has no access token")
 	}
-	return session, nil
+	return credentials, nil
 }
 
-func (KeyringStore) Save(ctx context.Context, key string, session Session) error {
+func (KeyringStore) Save(ctx context.Context, key string, credentials Credentials) error {
 	if err := validateCredentialKey(key); err != nil {
 		return err
 	}
-	session = session.normalized()
-	if session.AccessToken == "" {
+	credentials = credentials.normalized()
+	if credentials.AccessToken == "" {
 		return errors.New("cannot store an API session without an access token")
 	}
 
 	// Refresh tokens rotate. Persist the replacement before the access token so
 	// an interrupted write never leaves a new access token with an invalidated
 	// old refresh token.
-	if session.RefreshToken == "" {
+	if credentials.RefreshToken == "" {
 		if err := keychainDelete(ctx, keychainRefreshService, key); err != nil {
 			return fmt.Errorf("clear refresh token from Keychain: %w", err)
 		}
-	} else if err := keychainWrite(ctx, keychainRefreshService, key, session.RefreshToken); err != nil {
+	} else if err := keychainWrite(ctx, keychainRefreshService, key, credentials.RefreshToken); err != nil {
 		return fmt.Errorf("save refresh token to Keychain: %w", err)
 	}
-	if err := keychainWrite(ctx, keychainAccessService, key, session.AccessToken); err != nil {
+	if err := keychainWrite(ctx, keychainAccessService, key, credentials.AccessToken); err != nil {
 		return fmt.Errorf("save access token to Keychain: %w", err)
 	}
 	return nil

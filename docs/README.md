@@ -10,8 +10,11 @@
 
 ## Help Snapshots
 
-- Root command help: `cli-help/help-root.txt`
-- Setup help: `cli-help/help-start.txt`
+- Root command help: `help/root.txt`
+- Setup help: `help/start.txt`
+
+Snapshot registry: `../scripts/help-snapshots.txt`. Generation and checks use
+`../scripts/update-help.sh`; see `../README.md#docs` for the check/update workflow.
 
 ## CLI Command Layout
 

@@ -32,9 +32,9 @@ func runAuthRefresh(args []string, cfg config.Config) int {
 	if _, err := manager.ForceRefresh(ctx); err != nil {
 		return renderAuthCommandError("auth refresh", "auth.refresh.failed", err, mode, 1)
 	}
-	session, _, err := manager.Snapshot(ctx)
+	session, err := manager.Snapshot(ctx)
 	if err != nil {
 		return renderAuthCommandError("auth refresh", "auth.status.failed", err, mode, 1)
 	}
-	return renderAuthSuccess("auth refresh", session, "", "", mode)
+	return renderAuthSuccess("auth refresh", session.SessionMetadata, "", "", mode)
 }

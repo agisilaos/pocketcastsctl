@@ -89,191 +89,84 @@ func isHelpArg(s string) bool {
 	}
 }
 
+// helpTopics is private to explicit help routing; command dispatch and aliases
+// retain their own compatibility and parser rules.
+var helpTopics = map[string]func(){
+	"":                    printRootHelp,
+	"config":              printConfigHelp,
+	"auth":                printAuthHelp,
+	"web":                 printWebHelp,
+	"queue":               printQueueHelp,
+	"queue api":           printQueueAPIHelp,
+	"local":               printLocalHelp,
+	"har":                 printHARHelp,
+	"completion":          printCompletionHelp,
+	"doctor":              printDoctorHelp,
+	"setup":               printSetupHelp,
+	"start":               printSetupHelp,
+	"getting-started":     printSetupHelp,
+	"now":                 printNowHelp,
+	"config init":         usageHelp("config init"),
+	"config path":         usageHelp("config path"),
+	"config show":         usageHelp("config show"),
+	"config set":          usageHelp("config set"),
+	"auth login":          usageHelp("auth login"),
+	"auth import-browser": usageHelp("auth import-browser"),
+	"auth refresh":        usageHelp("auth refresh"),
+	"auth sync":           usageHelp("auth sync"),
+	"auth tabs":           usageHelp("auth tabs"),
+	"auth status":         usageHelp("auth status"),
+	"auth verify":         usageHelp("auth verify"),
+	"auth clear":          usageHelp("auth clear"),
+	"auth logout":         usageHelp("auth logout"),
+	"web login":           usageHelp("web login"),
+	"web tabs":            usageHelp("web tabs"),
+	"web play":            usageHelp("web play"),
+	"web pause":           usageHelp("web pause"),
+	"web toggle":          usageHelp("web toggle"),
+	"web next":            usageHelp("web next"),
+	"web prev":            usageHelp("web prev"),
+	"web status":          usageHelp("web status"),
+	"queue ls":            usageHelp("queue ls"),
+	"queue api ls":        usageHelp("queue api ls"),
+	"queue api add":       usageHelp("queue api add"),
+	"queue api rm":        usageHelp("queue api rm"),
+	"queue api play":      usageHelp("queue api play"),
+	"queue api pick":      usageHelp("queue api pick"),
+	"queue api bump":      usageHelp("queue api bump"),
+	"queue api move":      usageHelp("queue api move"),
+	"queue api dedupe":    usageHelp("queue api dedupe"),
+	"local pick":          usageHelp("local pick"),
+	"local play":          usageHelp("local play"),
+	"local pause":         usageHelp("local pause"),
+	"local resume":        usageHelp("local resume"),
+	"local stop":          usageHelp("local stop"),
+	"local status":        usageHelp("local status"),
+	"har summarize":       usageHelp("har summarize"),
+	"har graphql":         usageHelp("har graphql"),
+	"har redact":          usageHelp("har redact"),
+	"doctor explain":      usageHelp("doctor explain"),
+	"setup run":           usageHelp("setup run"),
+	"setup check":         usageHelp("setup check"),
+	"setup auth":          usageHelp("setup auth"),
+	"setup verify":        usageHelp("setup verify"),
+}
+
+func usageHelp(topic string) func() {
+	return func() { printUsage(topic) }
+}
+
 func runHelp(args []string) int {
-	if len(args) == 0 {
-		printRootHelp()
-		return 0
+	for _, arg := range args {
+		if arg == "" || strings.Contains(arg, " ") {
+			return unknownHelpTopic(args)
+		}
 	}
-	switch args[0] {
-	case "config":
-		if len(args) == 1 {
-			printConfigHelp()
-			return 0
-		}
-		switch args[1] {
-		case "init":
-			printConfigInitHelp()
-		case "path":
-			printConfigPathHelp()
-		case "show":
-			printConfigShowHelp()
-		case "set":
-			printConfigSetHelp()
-		default:
-			return unknownHelpTopic(args)
-		}
-	case "auth":
-		if len(args) == 1 {
-			printAuthHelp()
-			return 0
-		}
-		switch args[1] {
-		case "login":
-			printAuthLoginHelp()
-		case "import-browser":
-			printAuthImportBrowserHelp()
-		case "refresh":
-			printAuthRefreshHelp()
-		case "sync":
-			printAuthSyncHelp()
-		case "tabs":
-			printAuthTabsHelp()
-		case "status":
-			printAuthStatusHelp()
-		case "verify":
-			printAuthVerifyHelp()
-		case "clear":
-			printAuthClearHelp()
-		case "logout":
-			printAuthLogoutHelp()
-		default:
-			return unknownHelpTopic(args)
-		}
-	case "web":
-		if len(args) == 1 {
-			printWebHelp()
-			return 0
-		}
-		switch args[1] {
-		case "login":
-			printWebLoginHelp()
-		case "tabs":
-			printWebTabsHelp()
-		case "play":
-			printWebPlayHelp()
-		case "pause":
-			printWebPauseHelp()
-		case "toggle":
-			printWebToggleHelp()
-		case "next":
-			printWebNextHelp()
-		case "prev":
-			printWebPrevHelp()
-		case "status":
-			printWebStatusHelp()
-		default:
-			return unknownHelpTopic(args)
-		}
-	case "queue":
-		if len(args) == 1 {
-			printQueueHelp()
-			return 0
-		}
-		if args[1] == "ls" {
-			printQueueLSHelp()
-			return 0
-		}
-		if args[1] == "api" && len(args) == 2 {
-			printQueueAPIHelp()
-			return 0
-		}
-		if args[1] == "api" && len(args) > 2 {
-			switch args[2] {
-			case "ls":
-				printQueueAPILSHelp()
-			case "add":
-				printQueueAPIAddHelp()
-			case "rm":
-				printQueueAPIRMHelp()
-			case "play":
-				printQueueAPIPlayHelp()
-			case "pick":
-				printQueueAPIPickHelp()
-			case "bump":
-				printQueueAPIBumpHelp()
-			case "move":
-				printQueueAPIMoveHelp()
-			case "dedupe":
-				printQueueAPIDedupeHelp()
-			default:
-				return unknownHelpTopic(args)
-			}
-			return 0
-		}
-		return unknownHelpTopic(args)
-	case "local":
-		if len(args) == 1 {
-			printLocalHelp()
-			return 0
-		}
-		switch args[1] {
-		case "pick":
-			printLocalPickHelp()
-		case "play":
-			printLocalPlayHelp()
-		case "pause":
-			printLocalPauseHelp()
-		case "resume":
-			printLocalResumeHelp()
-		case "stop":
-			printLocalStopHelp()
-		case "status":
-			printLocalStatusHelp()
-		default:
-			return unknownHelpTopic(args)
-		}
-	case "har":
-		if len(args) == 1 {
-			printHARHelp()
-			return 0
-		}
-		switch args[1] {
-		case "summarize":
-			printHARSummarizeHelp()
-		case "graphql":
-			printHARGraphQLHelp()
-		case "redact":
-			printHARRedactHelp()
-		default:
-			return unknownHelpTopic(args)
-		}
-	case "completion":
-		printCompletionHelp()
-	case "doctor":
-		if len(args) == 1 {
-			printDoctorHelp()
-			return 0
-		}
-		switch args[1] {
-		case "explain":
-			printDoctorExplainHelp()
-		default:
-			return unknownHelpTopic(args)
-		}
-	case "setup":
-		if len(args) == 1 {
-			printSetupHelp()
-			return 0
-		}
-		switch args[1] {
-		case "run":
-			printUsage("setup run")
-		case "check":
-			printUsage("setup check")
-		case "auth":
-			printUsage("setup auth")
-		case "verify":
-			printUsage("setup verify")
-		default:
-			return unknownHelpTopic(args)
-		}
-	case "start", "getting-started":
-		printSetupHelp()
-	case "now":
-		printNowHelp()
-	default:
+	render, ok := helpTopics[strings.Join(args, " ")]
+	if !ok {
 		return unknownHelpTopic(args)
 	}
+	render()
 	return 0
 }
 
@@ -436,51 +329,6 @@ Examples:
 
 func printConfigHelp() {
 	printUsageList("config init", "config path", "config show", "config set")
-}
-
-func printConfigInitHelp()        { printUsage("config init") }
-func printConfigPathHelp()        { printUsage("config path") }
-func printConfigShowHelp()        { printUsage("config show") }
-func printConfigSetHelp()         { printUsage("config set") }
-func printAuthLoginHelp()         { printUsage("auth login") }
-func printAuthImportBrowserHelp() { printUsage("auth import-browser") }
-func printAuthRefreshHelp()       { printUsage("auth refresh") }
-func printAuthSyncHelp()          { printUsage("auth sync") }
-func printAuthTabsHelp()          { printUsage("auth tabs") }
-func printAuthStatusHelp()        { printUsage("auth status") }
-func printAuthVerifyHelp()        { printUsage("auth verify") }
-func printAuthClearHelp()         { printUsage("auth clear") }
-func printAuthLogoutHelp()        { printUsage("auth logout") }
-func printWebLoginHelp()          { printUsage("web login") }
-func printWebTabsHelp()           { printUsage("web tabs") }
-func printWebPlayHelp()           { printUsage("web play") }
-func printWebPauseHelp()          { printUsage("web pause") }
-func printWebToggleHelp()         { printUsage("web toggle") }
-func printWebNextHelp()           { printUsage("web next") }
-func printWebPrevHelp()           { printUsage("web prev") }
-func printWebStatusHelp()         { printUsage("web status") }
-func printQueueLSHelp()           { printUsage("queue ls") }
-func printQueueAPILSHelp()        { printUsage("queue api ls") }
-func printQueueAPIAddHelp()       { printUsage("queue api add") }
-func printQueueAPIRMHelp()        { printUsage("queue api rm") }
-func printQueueAPIPlayHelp() {
-	printUsage("queue api play")
-}
-func printQueueAPIPickHelp()   { printUsage("queue api pick") }
-func printQueueAPIBumpHelp()   { printUsage("queue api bump") }
-func printQueueAPIMoveHelp()   { printUsage("queue api move") }
-func printQueueAPIDedupeHelp() { printUsage("queue api dedupe") }
-func printLocalPickHelp()      { printUsage("local pick") }
-func printLocalPlayHelp()      { printUsage("local play") }
-func printLocalPauseHelp()     { printUsage("local pause") }
-func printLocalResumeHelp()    { printUsage("local resume") }
-func printLocalStopHelp()      { printUsage("local stop") }
-func printLocalStatusHelp()    { printUsage("local status") }
-func printHARSummarizeHelp()   { printUsage("har summarize") }
-func printHARGraphQLHelp()     { printUsage("har graphql") }
-func printHARRedactHelp()      { printUsage("har redact") }
-func printDoctorExplainHelp() {
-	printUsage("doctor explain")
 }
 
 func printAuthHelp() {

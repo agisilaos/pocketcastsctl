@@ -74,7 +74,7 @@ func completionTree() completionCommand {
 	reorder := flags("dry-run", "json", "raw")
 	picker := []completionOption{value("search"), value("limit"), {name: "recent"}, {name: "unplayed"}, {name: "in-progress"}}
 	var doctorCodes []string
-	for code := range doctorCodeCatalog() {
+	for code := range doctorCodeCatalog("") {
 		doctorCodes = append(doctorCodes, code)
 	}
 	sort.Strings(doctorCodes)

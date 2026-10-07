@@ -24,6 +24,27 @@ type Session struct {
 	Method       string
 }
 
+// SessionMetadata is safe to use in status and diagnostic output.
+type SessionMetadata struct {
+	Scope     string
+	ExpiresAt int64
+	AccountID string
+	Email     string
+	Method    string
+}
+
+// Metadata returns the non-secret metadata of this session.
+func (s Session) Metadata() SessionMetadata {
+	return SessionMetadata{
+		Scope: s.Scope, ExpiresAt: s.ExpiresAt, AccountID: s.AccountID,
+		Email: s.Email, Method: s.Method,
+	}
+}
+
+func (s Session) credentials() Credentials {
+	return Credentials{AccessToken: s.AccessToken, RefreshToken: s.RefreshToken}.normalized()
+}
+
 func (s Session) normalized() Session {
 	s.AccessToken = authutil.NormalizeToken(s.AccessToken)
 	s.RefreshToken = strings.TrimSpace(s.RefreshToken)

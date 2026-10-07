@@ -35,9 +35,9 @@ func probeUpNext(ctx context.Context, cfg config.Config, opts authn.ManagerOptio
 		return result
 	}
 	client, manager := authn.NewPocketCastsClient(cfg, opts)
-	session, source, loadErr := manager.Snapshot(ctx)
+	session, loadErr := manager.Snapshot(ctx)
 	if loadErr != nil {
-		result.auth = authStatusFromSession(session, source, loadErr)
+		result.auth = authStatusFromSession(session, loadErr)
 		if ctx.Err() != nil {
 			loadErr = ctx.Err()
 		}
@@ -50,8 +50,8 @@ func probeUpNext(ctx context.Context, cfg config.Config, opts authn.ManagerOptio
 	result.err = classifyUpNextError(err)
 	// AccessToken or a 401 replay may have rotated the session. Snapshot reads
 	// the same manager's cached state, without another credential-store lookup.
-	session, source, loadErr = manager.Snapshot(ctx)
-	result.auth = authStatusFromSession(session, source, loadErr)
+	session, loadErr = manager.Snapshot(ctx)
+	result.auth = authStatusFromSession(session, loadErr)
 	return result
 }
 
@@ -69,17 +69,17 @@ func (result upNextProbeResult) verificationError() error {
 	return Wrap(KindOf(result.err), "auth verify", result.err)
 }
 
-func authStatusFromSession(session authn.Session, source authn.Source, err error) NowAuthStatus {
+func authStatusFromSession(session authn.ResolvedSession, err error) NowAuthStatus {
 	auth := NowAuthStatus{Status: "missing"}
-	if err != nil || session.AccessToken == "" {
-		if err != nil && !errors.Is(err, authn.ErrNotConfigured) {
+	if err != nil {
+		if !errors.Is(err, authn.ErrNotConfigured) {
 			auth.Error = err.Error()
 		}
 		return auth
 	}
 	auth.Status = "configured"
 	auth.AuthorizationExists = true
-	auth.Source = string(source)
+	auth.Source = string(session.Source)
 	auth.Method = session.Method
 	if session.ExpiresAt > 0 {
 		auth.TokenExpiryKnown = true

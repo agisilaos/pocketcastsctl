@@ -99,7 +99,7 @@ func runAuthImportBrowserWithOptions(cfg config.Config, options authImportBrowse
 	if _, err := installSession(ctx, cfg, api, selected.Session); err != nil {
 		return renderAuthCommandError("auth import-browser", "auth.session.install_failed", err, options.outputMode, 1)
 	}
-	return renderAuthSuccess("auth import-browser", selected.Session, selected.Browser, authn.BrowserProfileName(selected.Profile), options.outputMode)
+	return renderAuthSuccess("auth import-browser", selected.Session.Metadata(), selected.Browser, authn.BrowserProfileName(selected.Profile), options.outputMode)
 }
 
 func selectBrowserCandidate(candidates []authn.BrowserCandidate, interactive bool) (authn.BrowserCandidate, error) {
