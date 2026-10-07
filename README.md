@@ -74,6 +74,11 @@ Setup modes:
 ./bin/pocketcastsctl setup verify --json   # verify-only machine output
 ```
 
+Setup reports use `warn` if any step warns or authentication is skipped, and
+`fail` if a step fails. Warnings and skipped authentication still exit successfully;
+blocking checks, verification failures, and config reload failures exit with code 1.
+Authentication failures retain their underlying command's exit code.
+
 Doctor modes:
 
 ```bash
