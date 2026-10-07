@@ -424,6 +424,47 @@ the intended endpoint in the config file before changing a saved session.
 `web login` saves only browser flags supplied explicitly. With no browser flags,
 it launches using the effective runtime settings without changing the file.
 
+### Shell completion
+
+Generate completions with `pocketcastsctl completion bash`, `zsh`, or `fish`.
+Completions use the exact command path, including nested `queue api` commands,
+and suggest browser values where supported. Free-form values such as profile
+names, titles, URLs, and numbers are entered normally. Flags must precede
+positional arguments for most commands; `doctor explain` also accepts `--json`
+after its code.
+
+Bash (including the macOS system Bash; add the `source` line to `~/.bashrc`
+for future interactive shells):
+
+```bash
+mkdir -p ~/.config/pocketcastsctl
+pocketcastsctl completion bash > ~/.config/pocketcastsctl/completion.bash
+source ~/.config/pocketcastsctl/completion.bash
+```
+
+Zsh (add the `fpath` and `compinit` lines to `~/.zshrc`, with `fpath` before
+any existing `compinit` invocation):
+
+```zsh
+mkdir -p ~/.zsh/completions
+pocketcastsctl completion zsh > ~/.zsh/completions/_pocketcastsctl
+fpath=(~/.zsh/completions $fpath)
+autoload -Uz compinit && compinit
+```
+
+Fish (loaded automatically in subsequent shells):
+
+```fish
+mkdir -p ~/.config/fish/completions
+pocketcastsctl completion fish > ~/.config/fish/completions/pocketcastsctl.fish
+source ~/.config/fish/completions/pocketcastsctl.fish
+```
+
+Try completing `pocketcastsctl queue api add --`,
+`pocketcastsctl config show --`, or `pocketcastsctl web login --browser c`.
+An unsupported shell exits with code 2 and lists the supported shells on stderr;
+rerun generation with one of those names.
+
 ## Release
 
 Ask an agent to prepare the changelog from commit and PR evidence, review and commit it, then validate and publish:

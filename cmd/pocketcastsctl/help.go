@@ -376,14 +376,20 @@ func printCompletionHelp() {
 Install (zsh):
   mkdir -p ~/.zsh/completions
   pocketcastsctl completion zsh > ~/.zsh/completions/_pocketcastsctl
-  echo 'fpath=(~/.zsh/completions $fpath)' >> ~/.zshrc
+  fpath=(~/.zsh/completions $fpath)
   autoload -Uz compinit && compinit
+  # Add the fpath and compinit lines to ~/.zshrc (fpath before compinit).
 
 Install (bash):
-  pocketcastsctl completion bash > /usr/local/etc/bash_completion.d/pocketcastsctl
+  mkdir -p ~/.config/pocketcastsctl
+  pocketcastsctl completion bash > ~/.config/pocketcastsctl/completion.bash
+  source ~/.config/pocketcastsctl/completion.bash
+  # Add the source line to ~/.bashrc.
 
 Install (fish):
+  mkdir -p ~/.config/fish/completions
   pocketcastsctl completion fish > ~/.config/fish/completions/pocketcastsctl.fish
+  source ~/.config/fish/completions/pocketcastsctl.fish
 `)
 }
 
