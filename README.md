@@ -53,6 +53,10 @@ Show build metadata:
 ./bin/pocketcastsctl help queue api
 ```
 
+`help` topics must match a complete command topic, such as `help auth login`
+or `help queue api rm`. Unknown topics and extra trailing words return exit
+status 2, with a diagnostic on stderr and root help on stdout.
+
 Recommended first-run flow:
 
 ```bash
