@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 )
 
@@ -72,12 +73,17 @@ func completionTree() completionCommand {
 	tabs := []completionOption{value("browser", browsers...), value("browser-app"), {name: "json"}, {name: "plain"}}
 	reorder := flags("dry-run", "json", "raw")
 	picker := []completionOption{value("search"), value("limit"), {name: "recent"}, {name: "unplayed"}, {name: "in-progress"}}
+	var doctorCodes []string
+	for code := range doctorCodeCatalog() {
+		doctorCodes = append(doctorCodes, code)
+	}
+	sort.Strings(doctorCodes)
 	return completionCommand{children: []completionCommand{
 		{name: "help"}, {name: "version"},
 		{name: "completion", values: []string{"bash", "zsh", "fish"}},
 		leaf("now", append(flags("json", "plain", "watch", "interactive", "verify-auth"), value("interval"), value("max-updates"))...),
 		{name: "doctor", options: flags("json", "plain", "quick", "full", "fix", "apply"), children: []completionCommand{
-			{name: "explain", options: flags("json"), flagsAfterArguments: true, values: []string{"doctor.auth.invalid", "doctor.auth.unverified", "doctor.auth.session_missing", "doctor.auth.legacy_config", "doctor.auth.network.timeout", "doctor.auth.network.unreachable", "doctor.auth.api.unavailable"}},
+			{name: "explain", options: flags("json"), flagsAfterArguments: true, values: doctorCodes},
 		}},
 		{name: "setup", options: onboarding, children: []completionCommand{leaf("run", onboarding...), leaf("check", onboarding...), leaf("auth", onboarding...), leaf("verify", onboarding...)}},
 		leaf("start", onboarding...),
@@ -375,10 +381,13 @@ func completionScripts() map[string]string {
 complete -F _pocketcastsctl_completions pocketcastsctl
 `,
 		"zsh": "#compdef pocketcastsctl\n" + resolver + `_pocketcastsctl_completions() {
+  local output
   local -a candidates prior
   if (( CURRENT > 2 )); then prior=("${words[@]:1:$((CURRENT-2))}"); fi
-  candidates=("${(@f)$(_pocketcastsctl_candidates "${words[CURRENT]}" "${prior[@]}")}")
-  (( ${#candidates} )) && compadd -a candidates
+  output="$(_pocketcastsctl_candidates "${words[CURRENT]}" "${prior[@]}")"
+  [[ -n "$output" ]] || return 0
+  candidates=("${(@f)output}")
+  compadd -a candidates
 }
 _pocketcastsctl_completions "$@"
 `,

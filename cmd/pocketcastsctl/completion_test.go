@@ -70,8 +70,9 @@ func shellCandidates(t *testing.T, executable, script, shell, cur string, prior 
 		cmd = exec.Command(executable, append([]string{"--noprofile", "--norc", "-c", `source "$1"; shift; COMP_WORDS=(pocketcastsctl "$@"); COMP_CWORD=$((${#COMP_WORDS[@]}-1)); _pocketcastsctl_completions; printf '%s\n' "${COMPREPLY[@]}"`, "_", script}, append(prior, cur)...)...)
 	case "zsh":
 		// compadd requires an interactive completion context. Capture its array
-		// here to exercise the real adapter; the consumer review tests it on a PTY.
-		cmd = exec.Command(executable, append([]string{"-f", "-c", `compadd() { print -rl -- "${(@P)2}"; }; script="$1"; shift; words=(pocketcastsctl "$@"); CURRENT=${#words[@]}; source "$script"`, "_", script}, append(prior, cur)...)...)
+		// here to exercise the real adapter and reject empty matches; the
+		// consumer review tests it on a PTY.
+		cmd = exec.Command(executable, append([]string{"-f", "-c", `compadd() { local candidate; local -a matches; matches=("${(@P)2}"); for candidate in "${matches[@]}"; do [[ -n "$candidate" ]] || { print -u2 "empty completion match"; return 1; }; done; print -rl -- "${matches[@]}"; }; script="$1"; shift; words=(pocketcastsctl "$@"); CURRENT=${#words[@]}; source "$script"`, "_", script}, append(prior, cur)...)...)
 	case "fish":
 		var words []string
 		for _, word := range prior {
@@ -143,11 +144,18 @@ func TestCompletionValuesAndScope(t *testing.T) {
 		{"import sources", []string{"auth", "import-browser", "--browser"}, "", []string{"chrome", "dia", "safari"}},
 		{"inline browser", []string{"web", "login"}, "--browser=c", []string{"--browser=chrome"}},
 		{"config browser", []string{"config", "set", "browser"}, "sa", []string{"safari"}},
+		{"url value", []string{"web", "login", "--url", "https://play.pocketcasts.com", "--browser"}, "c", []string{"chrome"}},
+		{"timestamp value", []string{"queue", "api", "add", "--published", "2024-05-01T10:00:00Z"}, "--r", []string{"--raw"}},
 		{"quoted option value", []string{"web", "login", "--browser-app", "Google Chrome"}, "--u", []string{"--url"}},
 		{"empty option value", []string{"web", "login", "--browser-app", ""}, "--u", []string{"--url"}},
 		{"value looks like command", []string{"queue", "api", "add", "--title", "play"}, "--d", nil},
 		{"value with metacharacters", []string{"queue", "api", "add", "--title", "a' b; $(false)"}, "--r", []string{"--raw"}},
 		{"unknown path", []string{"queue", "unknown"}, "", nil},
+		{"doctor browser codes", []string{"doctor", "explain"}, "doctor.browser.", []string{"doctor.browser.app_missing", "doctor.browser.dia_javascript_disabled", "doctor.browser.dia_not_running", "doctor.browser.invalid_config"}},
+		{"doctor config code", []string{"doctor", "explain"}, "doctor.config.", []string{"doctor.config.missing"}},
+		{"doctor local code", []string{"doctor", "explain"}, "doctor.local_", []string{"doctor.local_player.missing"}},
+		{"doctor automation code", []string{"doctor", "explain"}, "doctor.macos.", []string{"doctor.macos.automation.missing"}},
+		{"doctor picker code", []string{"doctor", "explain"}, "doctor.picker.", []string{"doctor.picker.fzf_missing"}},
 		{"doctor flags after code", []string{"doctor", "explain", "doctor.auth.invalid"}, "--", []string{"--json"}},
 		{"stop after positional", []string{"queue", "api", "play", "1"}, "--", nil},
 		{"stop after separator", []string{"web", "status", "--"}, "", nil},
