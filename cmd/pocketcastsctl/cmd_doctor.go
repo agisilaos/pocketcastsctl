@@ -638,7 +638,7 @@ func classifyAuthValidationError(err error) (code, message string) {
 	}
 	s := strings.ToLower(strings.TrimSpace(err.Error()))
 	switch {
-	case strings.Contains(s, "timeout"):
+	case errors.Is(err, context.DeadlineExceeded), strings.Contains(s, "timeout"):
 		return "doctor.auth.network.timeout", "auth validation timed out"
 	case strings.Contains(s, "connection refused"), strings.Contains(s, "no such host"), strings.Contains(s, "network is unreachable"), strings.Contains(s, "connection reset"):
 		return "doctor.auth.network.unreachable", "auth validation failed due to network/connectivity"

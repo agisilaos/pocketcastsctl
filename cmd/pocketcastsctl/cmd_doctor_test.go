@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -28,6 +29,7 @@ func TestClassifyAuthValidationError(t *testing.T) {
 		wantCode string
 	}{
 		{name: "nil", err: nil, wantCode: "doctor.auth.unverified"},
+		{name: "wrapped deadline", err: fmt.Errorf("auth verify: %w", context.DeadlineExceeded), wantCode: "doctor.auth.network.timeout"},
 		{name: "timeout", err: errors.New("context deadline exceeded timeout"), wantCode: "doctor.auth.network.timeout"},
 		{name: "unreachable", err: errors.New("dial tcp: no such host"), wantCode: "doctor.auth.network.unreachable"},
 		{name: "api unavailable", err: errors.New("http 503: unavailable"), wantCode: "doctor.auth.api.unavailable"},
