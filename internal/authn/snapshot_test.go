@@ -77,6 +77,20 @@ func (transport snapshotNoNetwork) RoundTrip(*http.Request) (*http.Response, err
 	return nil, errors.New("unexpected network operation")
 }
 
+// Return raw credentials to exercise Manager's invariant even when a Store
+// violates its contract by successfully loading an empty access token.
+type snapshotCredentialStore struct {
+	Store
+	credentials Credentials
+	loadErr     error
+	loads       int
+}
+
+func (store *snapshotCredentialStore) Load(context.Context, string) (Credentials, error) {
+	store.loads++
+	return store.credentials, store.loadErr
+}
+
 func TestSnapshotFailsClosedWithoutCredentials(t *testing.T) {
 	t.Setenv(config.EnvAccessToken, "")
 	for _, test := range []struct {
@@ -94,12 +108,10 @@ func TestSnapshotFailsClosedWithoutCredentials(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			cfg := config.Default()
-			store := newMemoryStore()
-			store.loadErr = test.loadErr
+			store := &snapshotCredentialStore{Store: newMemoryStore(), credentials: test.credentials, loadErr: test.loadErr}
 			if test.saved {
 				cfg.Auth = config.AuthConfig{SessionKey: "active", Email: "saved@example.com"}
 				cfg.APIHeaders["Authorization"] = "Bearer dormant-legacy-secret"
-				store.credentials["active"] = test.credentials
 			}
 			manager := NewManager(cfg, ManagerOptions{Store: store})
 			for attempt := 0; attempt < 2; attempt++ {
@@ -111,6 +123,13 @@ func TestSnapshotFailsClosedWithoutCredentials(t *testing.T) {
 				if token != "" || !errors.Is(err, test.want) {
 					t.Fatalf("token source returned credentials after snapshot failure: %v", err)
 				}
+			}
+			wantLoads := 0
+			if test.saved {
+				wantLoads = 1
+			}
+			if store.loads != wantLoads {
+				t.Fatalf("credential loads=%d, want %d", store.loads, wantLoads)
 			}
 		})
 	}
