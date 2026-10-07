@@ -67,7 +67,12 @@ func shellCandidates(t *testing.T, executable, script, shell, cur string, prior 
 	var cmd *exec.Cmd
 	switch shell {
 	case "bash":
-		cmd = exec.Command(executable, append([]string{"--noprofile", "--norc", "-c", `source "$1"; shift; COMP_WORDS=(pocketcastsctl "$@"); COMP_CWORD=$((${#COMP_WORDS[@]}-1)); _pocketcastsctl_completions; printf '%s\n' "${COMPREPLY[@]}"`, "_", script}, append(prior, cur)...)...)
+		var words []string
+		for _, word := range prior {
+			words = append(words, completionQuote(word))
+		}
+		line := "pocketcastsctl " + strings.Join(words, " ") + " " + cur
+		cmd = exec.Command(executable, append([]string{"--noprofile", "--norc", "-c", `source "$1"; COMP_LINE="$2"; LC_ALL=C; COMP_POINT=${#COMP_LINE}; shift 2; COMP_WORDS=(pocketcastsctl "$@"); COMP_CWORD=$((${#COMP_WORDS[@]}-1)); _pocketcastsctl_completions; printf '%s\n' "${COMPREPLY[@]}"`, "_", script, line}, append(prior, cur)...)...)
 	case "zsh":
 		// compadd requires an interactive completion context. Capture its array
 		// here to exercise the real adapter and reject empty matches; the
@@ -190,21 +195,6 @@ func TestCompletionScriptsDeterministic(t *testing.T) {
 	}
 }
 
-func TestCompletionBashWordBreaks(t *testing.T) {
-	executable, script := completionShell(t, "bash")
-	for _, tc := range []struct {
-		prior []string
-		cur   string
-		want  []string
-	}{
-		{[]string{"web", "login", "--browser", "="}, "c", []string{"chrome"}},
-		{[]string{"web", "login", "--browser"}, "=", []string{"safari", "chrome", "dia", "arc", "brave", "edge"}},
-		{[]string{"web", "login", "--browser", "=", "chrome"}, "--u", []string{"--url"}},
-	} {
-		assertCandidates(t, shellCandidates(t, executable, script, "bash", tc.cur, tc.prior), tc.want)
-	}
-}
-
 func TestCompletionQuotesLiteralWords(t *testing.T) {
 	words := []string{"Profile 1", "a'b", "$(false); * \" \\"}
 	for _, shell := range []string{"bash", "zsh", "fish"} {
@@ -230,11 +220,47 @@ func TestCompletionQuotesLiteralWords(t *testing.T) {
 
 func TestCompletionBashAssignmentWithoutWordBreak(t *testing.T) {
 	executable, script := completionShell(t, "bash")
-	output, err := exec.Command(executable, "--noprofile", "--norc", "-c", `source "$1"; COMP_WORDBREAKS=${COMP_WORDBREAKS//=/}; COMP_WORDS=(pocketcastsctl web login --browser=c); COMP_CWORD=3; _pocketcastsctl_completions; printf '%s\n' "${COMPREPLY[@]}"`, "_", script).CombinedOutput()
+	output, err := exec.Command(executable, "--noprofile", "--norc", "-c", `source "$1"; COMP_LINE="pocketcastsctl web login --browser=c"; LC_ALL=C; COMP_POINT=${#COMP_LINE}; COMP_WORDBREAKS=${COMP_WORDBREAKS//=/}; COMP_WORDS=(pocketcastsctl web login --browser=c); COMP_CWORD=3; _pocketcastsctl_completions; printf '%s\n' "${COMPREPLY[@]}"`, "_", script).CombinedOutput()
 	if err != nil {
 		t.Fatalf("bash assignment completion: %v: %s", err, output)
 	}
 	if string(output) != "--browser=chrome\n" {
 		t.Fatalf("completion without '=' word break: %q", output)
+	}
+}
+
+func TestCompletionBashWordBreakBoundaries(t *testing.T) {
+	executable, script := completionShell(t, "bash")
+	cases := []struct {
+		name, line  string
+		words, want []string
+	}{
+		{"split assignment", "pocketcastsctl web login --browser=c", []string{"web", "login", "--browser", "=", "c"}, []string{"chrome"}},
+		{"empty assignment", "pocketcastsctl web login --browser=", []string{"web", "login", "--browser", "="}, []string{"safari", "chrome", "dia", "arc", "brave", "edge"}},
+		{"empty assignment fragment", "pocketcastsctl web login --browser=", []string{"web", "login", "--browser", "=", ""}, []string{"safari", "chrome", "dia", "arc", "brave", "edge"}},
+		{"completed assignment", "pocketcastsctl web login --browser=chrome --u", []string{"web", "login", "--browser", "=", "chrome", "--u"}, []string{"--url"}},
+		{"url", "pocketcastsctl web login --url https://x --browser c", []string{"web", "login", "--url", "https", ":", "//x", "--browser", "c"}, []string{"chrome"}},
+		{"timestamp", "pocketcastsctl queue api add --published 2024-05-01T10:00:00Z --r", []string{"queue", "api", "add", "--published", "2024-05-01T10", ":", "00", ":", "00Z", "--r"}, []string{"--raw"}},
+		{"inline url", "pocketcastsctl web login --url=https://x --browser c", []string{"web", "login", "--url", "=", "https", ":", "//x", "--browser", "c"}, []string{"chrome"}},
+		{"spaced colon stays positional", "pocketcastsctl queue api add --title foo : bar --r", []string{"queue", "api", "add", "--title", "foo", ":", "bar", "--r"}, nil},
+		{"spaced equals stays value", "pocketcastsctl web login --browser = c", []string{"web", "login", "--browser", "=", "c"}, nil},
+		{"preceding command", "echo pocketcastsctl; pocketcastsctl web login --url https://x --browser c", []string{"web", "login", "--url", "https", ":", "//x", "--browser", "c"}, []string{"chrome"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			args := []string{"--noprofile", "--norc", "-c", `source "$1"; COMP_LINE="$2"; LC_ALL=C; COMP_POINT=${#COMP_LINE}; shift 2; COMP_WORDS=(pocketcastsctl "$@"); COMP_CWORD=$((${#COMP_WORDS[@]}-1)); _pocketcastsctl_completions; printf '%s\n' "${COMPREPLY[@]}"`, "_", script, tc.line}
+			output, err := exec.Command(executable, append(args, tc.words...)...).CombinedOutput()
+			if err != nil {
+				t.Fatalf("bash completion: %v: %s", err, output)
+			}
+			var got []string
+			for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+				if line != "" {
+					got = append(got, line)
+				}
+			}
+			sort.Strings(got)
+			assertCandidates(t, got, tc.want)
+		})
 	}
 }

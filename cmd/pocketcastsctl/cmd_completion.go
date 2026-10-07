@@ -349,27 +349,42 @@ func completionScripts() map[string]string {
 	resolver := renderArrayCompletion(tree)
 	return map[string]string{
 		"bash": "#!/usr/bin/env bash\n" + resolver + `_pocketcastsctl_completions() {
-  local candidate cur="${COMP_WORDS[COMP_CWORD]}" i word
-  local -a prior
-  # Bash treats '=' as a word break. Rejoin only assignment fragments, so
-  # --browser=c and completed --browser=chrome behave like unsplit tokens.
-  for ((i=1; i<COMP_CWORD; i++)); do
+  local LC_ALL=C
+  local candidate cur i word text="$COMP_LINE" prefix start end
+  local -a prior starts ends
+  # Bash versions differ in whether COMP_WORDS splits on readline word breaks.
+  # Locate fragments in the original line, then join only adjacent fragments.
+  # Work backwards to keep repeated words and preceding commands unambiguous.
+  for ((i=${#COMP_WORDS[@]}-1; i>=0; i--)); do
     word="${COMP_WORDS[i]}"
-    if [[ "$word" == = && ${#prior[@]} -gt 0 ]]; then
-      prior[${#prior[@]}-1]+='='
-    elif [[ ${#prior[@]} -gt 0 && "${prior[${#prior[@]}-1]}" == --*= ]]; then
+    starts[i]=-1
+    ends[i]=-1
+    if [[ -n "$word" && "$text" == *"$word"* ]]; then
+      prefix="${text%"$word"*}"
+      starts[i]=${#prefix}
+      ends[i]=$((${#prefix}+${#word}))
+      text="$prefix"
+    fi
+  done
+  if [[ -z "${COMP_WORDS[COMP_CWORD]}" ]]; then
+    starts[COMP_CWORD]=$COMP_POINT
+    ends[COMP_CWORD]=$COMP_POINT
+  fi
+  for ((i=1; i<=COMP_CWORD; i++)); do
+    word="${COMP_WORDS[i]}"
+    start=${starts[i]}
+    end=${ends[i]}
+    if (( i == COMP_CWORD && start >= 0 && COMP_POINT >= start && COMP_POINT < end )); then
+      word="${word:0:COMP_POINT-start}"
+    fi
+    if (( i > 1 && start >= 0 && start == ends[i-1] )); then
       prior[${#prior[@]}-1]+="$word"
     else
       prior+=("$word")
     fi
   done
-  if [[ ${#prior[@]} -gt 0 && "${prior[${#prior[@]}-1]}" == --*= ]]; then
-    cur="${prior[${#prior[@]}-1]}$cur"
-    unset 'prior[${#prior[@]}-1]'
-  elif [[ "$cur" == = && ${#prior[@]} -gt 0 ]]; then
-    cur="${prior[${#prior[@]}-1]}="
-    unset 'prior[${#prior[@]}-1]'
-  fi
+  cur="${prior[${#prior[@]}-1]}"
+  unset 'prior[${#prior[@]}-1]'
   COMPREPLY=()
   while IFS= read -r candidate; do
     if [[ "$cur" == --*=* && "$COMP_WORDBREAKS" == *"="* ]]; then candidate="${candidate#*=}"; fi
