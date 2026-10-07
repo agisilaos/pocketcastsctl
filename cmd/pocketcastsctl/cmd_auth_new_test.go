@@ -13,38 +13,49 @@ import (
 	"testing"
 
 	"pocketcastsctl/internal/authn"
+	"pocketcastsctl/internal/authutil"
 	"pocketcastsctl/internal/config"
 )
 
 type commandMemoryStore struct {
-	sessions map[string]authn.Session
-	loads    int
-	saves    int
-	deletes  int
+	credentials map[string]authn.Credentials
+	loads       int
+	saves       int
+	deletes     int
 }
 
 func newCommandMemoryStore() *commandMemoryStore {
-	return &commandMemoryStore{sessions: map[string]authn.Session{}}
+	return &commandMemoryStore{credentials: map[string]authn.Credentials{}}
 }
 
-func (s *commandMemoryStore) Load(_ context.Context, key string) (authn.Session, error) {
+func (s *commandMemoryStore) Load(_ context.Context, key string) (authn.Credentials, error) {
 	s.loads++
-	session, ok := s.sessions[key]
+	credentials, ok := s.credentials[key]
 	if !ok {
-		return authn.Session{}, authn.ErrSessionNotFound
+		return authn.Credentials{}, authn.ErrSessionNotFound
 	}
-	return session, nil
+	credentials.AccessToken = authutil.NormalizeToken(credentials.AccessToken)
+	credentials.RefreshToken = strings.TrimSpace(credentials.RefreshToken)
+	if credentials.AccessToken == "" {
+		return authn.Credentials{}, errors.New("API session in Keychain has no access token")
+	}
+	return credentials, nil
 }
 
-func (s *commandMemoryStore) Save(_ context.Context, key string, session authn.Session) error {
+func (s *commandMemoryStore) Save(_ context.Context, key string, credentials authn.Credentials) error {
+	credentials.AccessToken = authutil.NormalizeToken(credentials.AccessToken)
+	credentials.RefreshToken = strings.TrimSpace(credentials.RefreshToken)
+	if credentials.AccessToken == "" {
+		return errors.New("cannot store an API session without an access token")
+	}
 	s.saves++
-	s.sessions[key] = session
+	s.credentials[key] = credentials
 	return nil
 }
 
 func (s *commandMemoryStore) Delete(_ context.Context, key string) error {
 	s.deletes++
-	delete(s.sessions, key)
+	delete(s.credentials, key)
 	return nil
 }
 
@@ -96,8 +107,8 @@ func TestAuthLoginUsesTerminalExchangeAndDoesNotLeakSecrets(t *testing.T) {
 			t.Fatalf("secret %q leaked in output", secret)
 		}
 	}
-	if len(store.sessions) != 1 {
-		t.Fatalf("stored sessions = %d, want 1", len(store.sessions))
+	if len(store.credentials) != 1 {
+		t.Fatalf("stored credentials = %d, want 1", len(store.credentials))
 	}
 	rawConfig, err := os.ReadFile(config.Path())
 	if err != nil {
@@ -165,8 +176,8 @@ func TestAuthImportBrowserIsExplicitAndDoesNotLeakCookie(t *testing.T) {
 	if strings.Contains(stdout+stderr, "cookie-secret") {
 		t.Fatal("browser credential leaked in command output")
 	}
-	if len(store.sessions) != 1 {
-		t.Fatalf("stored sessions = %d, want 1", len(store.sessions))
+	if len(store.credentials) != 1 {
+		t.Fatalf("stored credentials = %d, want 1", len(store.credentials))
 	}
 }
 
@@ -198,7 +209,7 @@ func TestAuthImportBrowserRequiresProfileWhenSeveralAreValidNonInteractive(t *te
 func TestAuthLogoutRemovesKeychainAndLegacyCredential(t *testing.T) {
 	store := useCommandMemoryStore(t)
 	t.Setenv(config.EnvConfigPath, filepath.Join(t.TempDir(), "config.json"))
-	store.sessions["active"] = authn.Session{AccessToken: "secret-access"}
+	store.credentials["active"] = authn.Credentials{AccessToken: "secret-access"}
 	cfg := config.Default()
 	cfg.Auth = config.AuthConfig{SessionKey: "active", Method: "password"}
 	cfg.APIHeaders["Authorization"] = "Bearer legacy-secret"
@@ -208,8 +219,8 @@ func TestAuthLogoutRemovesKeychainAndLegacyCredential(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit code = %d; stdout=%q stderr=%q", code, stdout, stderr)
 	}
-	if len(store.sessions) != 0 {
-		t.Fatalf("%d session(s) remain after logout", len(store.sessions))
+	if len(store.credentials) != 0 {
+		t.Fatalf("%d session(s) remain after logout", len(store.credentials))
 	}
 	updated, err := config.Load()
 	if err != nil {
@@ -226,14 +237,7 @@ func TestAuthLogoutRemovesKeychainAndLegacyCredential(t *testing.T) {
 func TestAuthStatusReportsAccountMethodScopeAndExpiry(t *testing.T) {
 	store := useCommandMemoryStore(t)
 	t.Setenv(config.EnvConfigPath, filepath.Join(t.TempDir(), "config.json"))
-	store.sessions["active"] = authn.Session{
-		AccessToken: "access",
-		AccountID:   "account-1",
-		Email:       "person@example.com",
-		Method:      "password",
-		Scope:       authn.ScopeWebPlayer,
-		ExpiresAt:   4102444800,
-	}
+	store.credentials["active"] = authn.Credentials{AccessToken: "access"}
 	cfg := config.Default()
 	cfg.Auth = config.AuthConfig{
 		SessionKey: "active",
