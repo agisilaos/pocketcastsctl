@@ -402,6 +402,8 @@ make release VERSION=vX.Y.Z
 
 Every new changelog bullet links to its pull request or direct commit. The approved changelog section becomes the GitHub Release notes. The dry run builds both macOS archives and checksums and renders the Homebrew formula without remote writes.
 
+Dry-run and publish start with the shared `scripts/release-check.sh` readiness gate. Publish requires `main`; dry-run permits other branches with a warning. Both recheck tag conflicts after building. CI uses `make release-check-ci` to validate the top changelog version even when its tag already exists.
+
 See `RELEASING.md` for the agent authoring policy and full runbook. Release scripts are `scripts/changelog-context.sh`, `scripts/release-check.sh`, and `scripts/release.sh`. Homebrew tap updates use configurable HTTPS through `HOMEBREW_TAP_URL`.
 
 ## Docs

@@ -33,6 +33,10 @@ make release VERSION=vX.Y.Z
 
 `release-check` validates the clean worktree, version, changelog, tests, documentation, module metadata, formatting, and version-stamped binary. `release-dry-run` builds both macOS archives and checksums, extracts the approved changelog section as release notes, and renders the Homebrew formula without remote writes.
 
+Both dry-run and publish invoke `scripts/release-check.sh` first, after argument parsing, as the shared readiness gate. Publish then requires `main`; dry-run permits other branches with a warning. The execution script rechecks tag conflicts after building, before creating a tag or reporting the dry-run plan.
+
+For CI validation, use `make release-check-ci` (or `scripts/release-check.sh --ci`). It validates the top changelog version even when that tag exists; release mode additionally requires a new tag and traceable changelog bullets.
+
 The final command creates and pushes the tag, publishes the GitHub Release with the approved changelog section, and updates the configured Homebrew tap.
 
 ## Changelog policy
