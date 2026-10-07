@@ -2,6 +2,7 @@ package browsercontrol
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -313,7 +314,7 @@ func TestControllerDoAndErrors(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Do error: %v", err)
 	}
-	if !res.Clicked || res.ClickedLabel != "Play" {
+	if res.Action != ActionPlay || res.Label != "Play" {
 		t.Fatalf("unexpected result: %+v", res)
 	}
 
@@ -358,7 +359,7 @@ var document = {querySelector: function(selector) {
 	if err != nil {
 		t.Fatalf("Do toggle error: %v", err)
 	}
-	if !result.Clicked || result.ClickedLabel != "Pause" {
+	if result.Action != ActionToggle || result.Label != "Pause" {
 		t.Fatalf("unexpected toggle result: %+v", result)
 	}
 }
@@ -391,5 +392,164 @@ func TestControllerSetTabURLAndTabURLs(t *testing.T) {
 	_, err = c.TabURLs(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "unexpected JS result") {
 		t.Fatalf("error = %v, want parse error", err)
+	}
+}
+
+func TestControllerRejectsUnsupportedActionsBeforeBrowserExecution(t *testing.T) {
+	dir := t.TempDir()
+	marker := filepath.Join(dir, "browser-called")
+	if err := os.WriteFile(filepath.Join(dir, "osascript"), []byte("#!/bin/sh\ntouch \"$BROWSER_MARKER\"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("BROWSER_MARKER", marker)
+	for _, kind := range []browserKind{kindChromium, kindSafari, kindDia} {
+		c := testController()
+		c.browser.kind = kind
+		for _, action := range []Action{"", "mystery", "Play", `play\";alert(1)`} {
+			result, err := c.Do(context.Background(), action)
+			if err == nil || !strings.Contains(err.Error(), "unsupported browser action") {
+				t.Fatalf("Do(%q) = %v, want unsupported action", action, err)
+			}
+			if result != (ActionResult{}) {
+				t.Fatalf("unsupported action returned a result: %+v", result)
+			}
+		}
+	}
+	if _, err := os.Stat(marker); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("unsupported action executed browser command: %v", err)
+	}
+}
+
+func TestControllerRejectsMalformedActionWireResults(t *testing.T) {
+	setupFakeOsa(t)
+	for _, output := range []string{
+		`not-json`, `null`, `{}`, `[]`,
+		`{"clicked":"true","clickedLabel":"Play"}`,
+		`{"clicked":null,"clickedLabel":"Play"}`,
+		`{"clicked":true}`, `{"clicked":true,"clickedLabel":null}`,
+		`{"clicked":true,"clickedLabel":"Pause"}`,
+		`{"clicked":false,"clickedLabel":"Play"}`,
+	} {
+		t.Run(output, func(t *testing.T) {
+			t.Setenv("OSASCRIPT_OUT", output)
+			result, err := testController().Do(context.Background(), ActionPlay)
+			if err == nil || !strings.Contains(err.Error(), "unexpected JS result") {
+				t.Fatalf("Do = %+v, %v, want malformed wire failure", result, err)
+			}
+			if result != (ActionResult{}) {
+				t.Fatalf("malformed wire returned a result: %+v", result)
+			}
+		})
+	}
+	t.Setenv("OSASCRIPT_OUT", `"{\"clicked\":true,\"clickedLabel\":\"Resume\"}"`)
+	result, err := testController().Do(context.Background(), ActionPlay)
+	if err != nil || result != (ActionResult{Action: ActionPlay, Label: "Resume"}) {
+		t.Fatalf("wrapped wire result = %+v, %v", result, err)
+	}
+}
+
+func TestControllerActionsUsePersistentPlayerAliases(t *testing.T) {
+	setupJXAFakeOsa(t)
+	tests := []struct {
+		action Action
+		labels []string
+	}{
+		{ActionPlay, []string{"Play", "Resume", "Play episode"}},
+		{ActionPause, []string{"Pause", "Pause episode"}},
+		{ActionNext, []string{"Next", "Next episode", "Skip", "Skip forward"}},
+		{ActionPrev, []string{"Previous", "Previous episode", "Back", "Skip back"}},
+		{ActionToggle, []string{"Pause", "Pause episode", "Play", "Resume", "Play episode"}},
+	}
+	for _, tt := range tests {
+		for _, label := range tt.labels {
+			t.Run(string(tt.action)+"/"+label, func(t *testing.T) {
+				t.Setenv("MOCK_BROWSER_JS", `
+var clicked = false;
+var document = {querySelector: function(selector) {
+  if (selector === '.player-controls button[aria-label="`+label+`"]') {
+    return {click: function() { clicked = true; }};
+  }
+  if (selector.indexOf('.player-controls ') !== 0) throw new Error("unscoped selector");
+  return null;
+}};
+// Check that the actual click occurs, rather than merely finding a control.
+var originalStringify = JSON.stringify;
+JSON.stringify = function(value) {
+  if (value.clicked !== clicked) throw new Error("incorrect click result");
+  return originalStringify(value);
+};`)
+				result, err := testController().Do(context.Background(), tt.action)
+				if err != nil || result != (ActionResult{Action: tt.action, Label: label}) {
+					t.Fatalf("Do = %+v, %v", result, err)
+				}
+			})
+		}
+	}
+}
+
+func TestControllerDiaVerifiesActionAndPreservesTypedFailure(t *testing.T) {
+	dir := t.TempDir()
+	script := `#!/bin/sh
+case "$5" in
+  *'const snapshot = '*)
+    if [ -f "$DIA_CALLS" ]; then
+      state="$DIA_AFTER"
+      printf 'after\n' >> "$DIA_CALLS"
+    else
+      state="$DIA_BEFORE"
+      printf 'before\n' > "$DIA_CALLS"
+    fi
+    printf '{"state":"%s"}' "$state"
+    ;;
+  *)
+    printf 'action\n' >> "$DIA_CALLS"
+    printf '{"clicked":true,"clickedLabel":"%s"}' "$DIA_LABEL"
+    ;;
+esac
+`
+	if err := os.WriteFile(filepath.Join(dir, "osascript"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	tests := []struct {
+		name, label   string
+		action        Action
+		before, after PlaybackState
+		ignored       bool
+	}{
+		{"play applied", "Play", ActionPlay, PlaybackStatePaused, PlaybackStatePlaying, false},
+		{"pause applied", "Pause", ActionPause, PlaybackStatePlaying, PlaybackStatePaused, false},
+		{"toggle applied", "Resume", ActionToggle, PlaybackStatePaused, PlaybackStateLoading, false},
+		{"play ignored", "Play", ActionPlay, PlaybackStatePaused, PlaybackStatePaused, true},
+		{"pause ignored", "Pause", ActionPause, PlaybackStatePlaying, PlaybackStatePlaying, true},
+		{"toggle ignored", "Pause", ActionToggle, PlaybackStatePlaying, PlaybackStatePlaying, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			calls := filepath.Join(t.TempDir(), "calls")
+			t.Setenv("DIA_CALLS", calls)
+			t.Setenv("DIA_BEFORE", string(tt.before))
+			t.Setenv("DIA_AFTER", string(tt.after))
+			t.Setenv("DIA_LABEL", tt.label)
+			c := testController()
+			c.browser = browser{kind: kindDia, appName: "Dia"}
+			result, err := c.Do(context.Background(), tt.action)
+			if result != (ActionResult{Action: tt.action, Label: tt.label}) {
+				t.Fatalf("action result = %+v", result)
+			}
+			if tt.ignored {
+				var ignored *ActionNotAppliedError
+				if !errors.As(err, &ignored) || ignored.Application != "Dia" || ignored.Label != tt.label || ignored.State != tt.after {
+					t.Fatalf("error = %v, want typed action-not-applied failure", err)
+				}
+			} else if err != nil {
+				t.Fatalf("applied action failed: %v", err)
+			}
+			got, readErr := os.ReadFile(calls)
+			if readErr != nil || string(got) != "before\naction\nafter\n" {
+				t.Fatalf("verification sequence = %q, %v", got, readErr)
+			}
+		})
 	}
 }

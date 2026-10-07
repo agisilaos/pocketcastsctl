@@ -170,8 +170,8 @@ func runWebAction(ctx context.Context, controller *browsercontrol.Controller, ac
 		target.printFailure(string(action), err)
 		return 1
 	}
-	if res.ClickedLabel != "" {
-		fmt.Println(res.ClickedLabel)
+	if res.Label != "" {
+		fmt.Println(res.Label)
 		return 0
 	}
 	fmt.Println("ok")
