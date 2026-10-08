@@ -16,6 +16,7 @@ type flagHelpProbeState struct {
 var activeFlagHelpProbe *flagHelpProbeState
 
 func parseCommandFlags(fs *flag.FlagSet, args []string) error {
+	args = interspersedFlagArgs(fs, args)
 	if activeFlagHelpProbe == nil {
 		return fs.Parse(args)
 	}
@@ -26,6 +27,42 @@ func parseCommandFlags(fs *flag.FlagSet, args []string) error {
 	// reached. The caller uses requested to distinguish help from invalid or
 	// positional input without executing the command against default config.
 	return flag.ErrHelp
+}
+
+// The CLI documents flags after selectors. Move flags ahead of operands before
+// using Go's parser, retaining flag values and an explicit -- boundary.
+func interspersedFlagArgs(fs *flag.FlagSet, args []string) []string {
+	flags := make([]string, 0, len(args))
+	operands := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			operands = append(operands, args[i+1:]...)
+			break
+		}
+		if len(arg) < 2 || arg[0] != '-' {
+			operands = append(operands, arg)
+			continue
+		}
+		flags = append(flags, arg)
+		name := strings.TrimPrefix(strings.TrimPrefix(arg, "-"), "-")
+		if strings.Contains(name, "=") {
+			continue
+		}
+		f := fs.Lookup(name)
+		if f == nil {
+			continue // Let flag.Parse report unknown flags and handle help.
+		}
+		if value, ok := f.Value.(interface{ IsBoolFlag() bool }); ok && value.IsBoolFlag() {
+			continue
+		}
+		if i+1 == len(args) {
+			return flags // Preserve Parse's missing-value error, not an operand as its value.
+		}
+		i++
+		flags = append(flags, args[i])
+	}
+	return append(append(flags, "--"), operands...)
 }
 
 func commandErrorWriter() io.Writer {

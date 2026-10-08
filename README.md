@@ -60,6 +60,10 @@ Show build metadata:
 or `help queue api rm`. Unknown topics and extra trailing words return exit
 status 2, with a diagnostic on stderr and root help on stdout.
 
+Command flags may appear before or after positional arguments, including safety
+flags such as `queue api rm <episode-uuid> --dry-run`. Use `--` to end flag
+parsing when an argument begins with a dash.
+
 Recommended first-run flow:
 
 ```bash

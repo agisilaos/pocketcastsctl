@@ -909,6 +909,7 @@ func TestNestedHelpBypassesMalformedConfig(t *testing.T) {
 		{"queue", "api", "help"},
 		{"queue", "api", "ls", "--help"},
 		{"queue", "api", "remove", "--help"},
+		{"queue", "api", "play", "1", "--help"},
 		{"setup", "--no-input", "--help"},
 		{"web", "login", "--url=https://example.com", "--help"},
 	} {
@@ -928,7 +929,6 @@ func TestNestedHelpBypassesMalformedConfig(t *testing.T) {
 		{"now", "--interval=bogus", "--help"},
 		{"auth", "login", "--no-input=bogus", "--help"},
 		{"web", "login", "--", "--help"},
-		{"queue", "api", "play", "1", "--help"},
 	} {
 		code, _, stderr := runForTest(t, args, "")
 		if code != 1 || !strings.Contains(stderr, "failed to load config") {

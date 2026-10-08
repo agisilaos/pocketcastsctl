@@ -176,7 +176,7 @@ func TestWebLeavesRejectUsageBeforeRuntimeSetup(t *testing.T) {
 		{name: "next wrong flag", args: []string{"web", "next", "--url", "https://example.com"}, wantStderr: "flag provided but not defined"},
 		{name: "prev extra argument", args: []string{"web", "prev", "extra"}, wantStderr: "usage: pocketcastsctl web prev"},
 		{name: "prev wrong flag", args: []string{"web", "prev", "--bogus"}, wantStderr: "flag provided but not defined"},
-		{name: "action positional stops parsing", args: []string{"web", "play", "extra", "--bogus"}, wantStderr: "usage: pocketcastsctl web play"},
+		{name: "action trailing unknown flag", args: []string{"web", "play", "extra", "--bogus"}, wantStderr: "flag provided but not defined"},
 		{name: "status extra argument", args: []string{"web", "status", "extra"}, wantStderr: "usage: pocketcastsctl web status"},
 		{name: "status conflicting output", args: []string{"web", "status", "--json", "--plain"}, wantStderr: "web status: use only one of --json or --plain"},
 		{name: "status wrong flag", args: []string{"web", "status", "--url", "https://example.com"}, wantStderr: "flag provided but not defined"},
