@@ -117,6 +117,7 @@ func UpdateAuth(apiBaseURL string, auth AuthConfig) (Config, error) {
 		if err := validateAuthUpdate(doc, apiBaseURL); err != nil {
 			return err
 		}
+		deleteDocumentField(doc, "auth")
 		if err := setDocumentValue(doc, "auth", auth); err != nil {
 			return err
 		}
@@ -129,9 +130,17 @@ func UpdateAuth(apiBaseURL string, auth AuthConfig) (Config, error) {
 // fields so older binaries cannot leave a newer saved session active.
 func ClearAuth() (Config, error) {
 	return updateDocument(func(doc document) error {
-		delete(doc, "auth")
+		deleteDocumentField(doc, "auth")
 		return removeAuthorizationHeader(doc)
 	})
+}
+
+func deleteDocumentField(doc document, name string) {
+	for key := range doc {
+		if strings.EqualFold(key, name) {
+			delete(doc, key)
+		}
+	}
 }
 
 func decodeKnown(doc document, target any) error {
@@ -234,14 +243,6 @@ func validateAuthUpdate(doc document, apiBaseURL string) error {
 }
 
 func unknownAuthFields(doc document) ([]string, error) {
-	raw, ok := doc["auth"]
-	if !ok || string(raw) == "null" {
-		return nil, nil
-	}
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &fields); err != nil {
-		return nil, fmt.Errorf("parse %s auth: %w", Path(), err)
-	}
 	known := map[string]bool{
 		"session_key": true,
 		"account_id":  true,
@@ -251,9 +252,18 @@ func unknownAuthFields(doc document) ([]string, error) {
 		"expires_at":  true,
 	}
 	var unknown []string
-	for key := range fields {
-		if !known[key] {
-			unknown = append(unknown, key)
+	for name, raw := range doc {
+		if !strings.EqualFold(name, "auth") {
+			continue
+		}
+		var fields map[string]json.RawMessage
+		if err := json.Unmarshal(raw, &fields); err != nil {
+			return nil, fmt.Errorf("parse %s auth: %w", Path(), err)
+		}
+		for key := range fields {
+			if !known[strings.ToLower(key)] {
+				unknown = append(unknown, key)
+			}
 		}
 	}
 	sort.Strings(unknown)
@@ -261,20 +271,24 @@ func unknownAuthFields(doc document) ([]string, error) {
 }
 
 func removeAuthorizationHeader(doc document) error {
-	raw, ok := doc["api_headers"]
-	if !ok || string(raw) == "null" {
-		return nil
-	}
-	var headers map[string]string
-	if err := json.Unmarshal(raw, &headers); err != nil {
-		return fmt.Errorf("parse %s api_headers: %w", Path(), err)
-	}
-	for key := range headers {
-		if strings.EqualFold(strings.TrimSpace(key), "Authorization") {
-			delete(headers, key)
+	for name, raw := range doc {
+		if !strings.EqualFold(name, "api_headers") || string(raw) == "null" {
+			continue
+		}
+		var headers map[string]string
+		if err := json.Unmarshal(raw, &headers); err != nil {
+			return fmt.Errorf("parse %s api_headers: %w", Path(), err)
+		}
+		for key := range headers {
+			if strings.EqualFold(strings.TrimSpace(key), "Authorization") {
+				delete(headers, key)
+			}
+		}
+		if err := setDocumentValue(doc, name, headers); err != nil {
+			return err
 		}
 	}
-	return setDocumentValue(doc, "api_headers", headers)
+	return nil
 }
 
 func writeDocument(doc document) error {
