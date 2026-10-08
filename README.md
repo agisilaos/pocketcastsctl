@@ -435,6 +435,8 @@ the intended endpoint in the config file before changing a saved session.
 
 `web login` saves only browser flags supplied explicitly. With no browser flags,
 it launches using the effective runtime settings without changing the file.
+An explicit `--browser` clears an inherited browser-application override for
+both this launch and saved settings, unless `--browser-app` is also supplied.
 
 ## Release
 

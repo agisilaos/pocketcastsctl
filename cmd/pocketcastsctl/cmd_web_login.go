@@ -33,6 +33,9 @@ func runWebLogin(args []string, cfg config.Config) int {
 			explicitBrowserApp = true
 		}
 	})
+	if explicitBrowser && !explicitBrowserApp {
+		*browserApp = ""
+	}
 	target := newBrowserTarget(*browser, *browserApp, cfg.URLContains)
 	if err := target.applicationError(); err != nil {
 		target.printFailure("web login", err)
