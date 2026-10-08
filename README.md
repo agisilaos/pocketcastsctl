@@ -277,9 +277,13 @@ Access tokens refresh proactively near expiry and once after a `401`. A process-
 
 Concurrent authentication commands serialize credential and session-metadata
 writes. A refresh that finishes after logout or session replacement refuses to
-save its stale result.
+save its stale result. See
+[the auth persistence decision](docs/adr/0005-serialize-saved-api-session-writes.md)
+for lock ownership and partial-success behavior.
 
-`auth sync`, `auth tabs`, and `auth clear` remain as deprecated compatibility commands for one release. Use `auth import-browser`, `web tabs`, and `auth logout` respectively.
+`auth sync`, `auth tabs`, and `auth clear` remain as deprecated compatibility
+commands, with removal planned for `v0.3.0`. Use `auth import-browser`, `web tabs`,
+and `auth logout` respectively.
 
 ### Queue (API, best effort)
 
@@ -402,7 +406,11 @@ original HAR as sensitive and review redacted files before sharing them.
 
 ## Config + environment
 
-Show the config path and non-secret settings. `api_headers.Authorization` is read only for one-release migration compatibility and is redacted by default:
+Show the config path and non-secret settings. Legacy `api_headers.Authorization`
+is still read for migration compatibility when no environment override or saved
+Keychain session takes precedence, and is redacted by default. Migrate it with
+`auth login` or `auth import-browser`; no removal release is currently specified
+for this legacy config field:
 
 ```bash
 ./bin/pocketcastsctl config path

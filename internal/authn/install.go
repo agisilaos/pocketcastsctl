@@ -9,9 +9,11 @@ import (
 	"pocketcastsctl/internal/config"
 )
 
-// Install validates a candidate before making it the saved API session. The old
-// session is kept addressable until both the new Keychain item and config pointer
-// exist.
+// Install validates a candidate, then serializes credential and metadata writes
+// after rechecking the saved session key. A different previous Keychain item is
+// retained until the new item and config pointer are saved. Reusing the same key
+// replaces its credentials first, so metadata failure can return partial success
+// without restoring the previous credentials.
 func Install(ctx context.Context, cfg config.Config, store Store, api *API, candidate Session) (config.Config, error) {
 	if store == nil {
 		store = NewKeyringStore()

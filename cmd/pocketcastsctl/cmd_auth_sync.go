@@ -9,9 +9,9 @@ import (
 	"pocketcastsctl/internal/config"
 )
 
-// runAuthSync keeps the deprecated command name for one release, but routes
-// it through the Keychain-backed browser importer. It must never recreate the
-// old plaintext Authorization-header behavior.
+// runAuthSync routes the deprecated command name through the Keychain-backed
+// browser importer until its planned removal in v0.3.0. It must never recreate
+// the old plaintext Authorization-header behavior.
 func runAuthSync(args []string, cfg config.Config) int {
 	fmt.Fprintln(commandErrorWriter(), "warning: `auth sync` is deprecated; use `pocketcastsctl auth import-browser --browser <chrome|dia|safari>` (planned removal: v0.3.0)")
 	fs := flag.NewFlagSet("auth sync", flag.ContinueOnError)

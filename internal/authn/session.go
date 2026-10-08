@@ -11,8 +11,10 @@ import (
 
 const ScopeWebPlayer = "webplayer"
 
-// Session is a validated Pocket Casts API session. AccessToken and
-// RefreshToken are secret and must never be serialized to the user config.
+// Session carries Pocket Casts API credentials and metadata. Constructing or
+// loading it does not imply API verification; Install validates candidates
+// before saving them. AccessToken and RefreshToken are secret and must never
+// be serialized to the user config.
 type Session struct {
 	AccessToken  string
 	RefreshToken string

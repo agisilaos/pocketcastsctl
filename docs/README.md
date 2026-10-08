@@ -29,6 +29,7 @@ Snapshot registry: `../scripts/help-snapshots.txt`. Generation and checks use
 - Web-player launch and interactive picker helpers: `../cmd/pocketcastsctl/cmd_picker_webplay.go`
 - Auth handlers: `../cmd/pocketcastsctl/cmd_auth.go`, `../cmd/pocketcastsctl/cmd_auth_login.go`, `../cmd/pocketcastsctl/cmd_auth_import_browser.go`, `../cmd/pocketcastsctl/cmd_auth_logout.go`, `../cmd/pocketcastsctl/cmd_auth_status_verify.go`, and `../cmd/pocketcastsctl/cmd_auth_refresh.go`
 - API-session lifecycle, Keychain storage, and browser-cookie import: `../internal/authn/`
+- Auth persistence ownership and partial-success semantics: `adr/0005-serialize-saved-api-session-writes.md`
 - Queue handlers: `../cmd/pocketcastsctl/cmd_queue_dispatch.go`, `../cmd/pocketcastsctl/cmd_queue_api_ls.go`, `../cmd/pocketcastsctl/cmd_queue_api_mutations.go`, `../cmd/pocketcastsctl/cmd_queue_api_play_pick.go`, `../cmd/pocketcastsctl/cmd_queue_helpers.go`, `../cmd/pocketcastsctl/cmd_queue_fetch.go`
 - Shared retry/auth-recovery helpers: `../cmd/pocketcastsctl/cmd_retry.go`
 - App-owned Up Next probe, auth/queue classification, and private retry policy: `../internal/app/upnext_probe.go`
@@ -54,6 +55,8 @@ Snapshot registry: `../scripts/help-snapshots.txt`. Generation and checks use
 - Browser AppleScript execution/parsing tests with a fake `osascript` binary live in: `../internal/browsercontrol/controller_exec_test.go`
 - App-layer queue/auth status tests live in: `../internal/app/now_queue_test.go`, `../internal/app/auth_verify_test.go`
 - Shared-request, credential-rotation, deadline, and retry regressions: `../internal/app/now_probe_test.go`, `../internal/app/upnext_probe_test.go`, `../internal/app/upnext_probe_context_test.go`
+- Auth session rechecks and cross-process persistence regressions: `../internal/authn/session_concurrency_test.go`, `../internal/authn/session_persistence_process_test.go`
+- Auth credential/metadata failure behavior: `../internal/authn/authn_test.go`, `../internal/authn/credentials_test.go`
 - Opt-in, non-persisting browser smoke test: `POCKETCASTS_LIVE_BROWSER=dia go test ./internal/authn -run TestLiveBrowserSession -count=1`
 - Script harness coverage command: `make test-scripts-cover`
 
