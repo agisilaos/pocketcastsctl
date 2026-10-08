@@ -318,6 +318,9 @@ Deprecated short aliases (still work for now, but print warnings):
 
 The interactive picker uses `fzf` when available (nice arrow-key selector). If `fzf` is unavailable or fails, it falls back to a simple numbered prompt. Pressing Escape or Ctrl-C in `fzf` cancels the command without opening the fallback prompt.
 
+With `queue api pick --no-play`, stdout contains only the selected UUID; the
+fallback menu and prompt go to stderr.
+
 Time spent choosing an episode or confirming removal does not consume the
 following operation's 15-second budget.
 

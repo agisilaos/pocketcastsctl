@@ -111,8 +111,11 @@ func assertPromptSelection(t *testing.T, chosen queueOccurrence, err error, stdo
 	if chosen.QueueIndex != 1 || chosen.Episode.UUID != "second-uuid" {
 		t.Fatalf("pickEpisodeInteractive() occurrence = %+v, want second queue occurrence", chosen)
 	}
-	if !strings.Contains(stdout, " 2. Second episode") {
-		t.Fatalf("stdout = %q, want numbered prompt options", stdout)
+	if stdout != "" {
+		t.Fatalf("stdout = %q, picker UI must use stderr", stdout)
+	}
+	if !strings.Contains(stderr, " 2. Second episode") {
+		t.Fatalf("stderr = %q, want numbered prompt options", stderr)
 	}
 	if !strings.Contains(stderr, "Pick number (or blank to cancel):") {
 		t.Fatalf("stderr = %q, want prompt", stderr)

@@ -129,7 +129,7 @@ func pickWithFZF(fzfPath string, candidates []queueOccurrence) (queueOccurrence,
 }
 
 func pickWithPrompt(candidates []queueOccurrence) (queueOccurrence, error) {
-	return pickWithPromptIO(candidates, os.Stdin, os.Stdout, os.Stderr)
+	return pickWithPromptIO(candidates, os.Stdin, os.Stderr, os.Stderr)
 }
 
 func pickWithPromptIO(candidates []queueOccurrence, input io.Reader, output, prompt io.Writer) (queueOccurrence, error) {
