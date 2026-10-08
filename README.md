@@ -64,6 +64,8 @@ Command flags may appear before or after positional arguments, including safety
 flags such as `queue api rm <episode-uuid> --dry-run`. Use `--` to end flag
 parsing when an argument begins with a dash.
 
+Help and invalid arguments do not perform local playback actions.
+
 Recommended first-run flow:
 
 ```bash

@@ -27,17 +27,32 @@ func runLocal(args []string, cfg config.Config) int {
 		return runLocalPick(args[1:], cfg)
 	case "play":
 		return runLocalPlay(args[1:], cfg)
-	case "pause":
-		return runLocalPause()
-	case "resume":
-		return runLocalResume()
-	case "stop":
-		return runLocalStop()
+	case "pause", "resume", "stop":
+		return runLocalLifecycle(args[0], args[1:])
 	case "status":
 		return runLocalStatus(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown local subcommand: %s\n", args[0])
 		return 2
+	}
+}
+
+func runLocalLifecycle(action string, args []string) int {
+	fs := flag.NewFlagSet("local "+action, flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	if ok, code := parseFlagsOrExit(fs, args); !ok {
+		return code
+	}
+	if ok, code := requireNoPositionalArgsOrExit(fs, "usage: pocketcastsctl local "+action); !ok {
+		return code
+	}
+	switch action {
+	case "pause":
+		return runLocalPause()
+	case "resume":
+		return runLocalResume()
+	default:
+		return runLocalStop()
 	}
 }
 
