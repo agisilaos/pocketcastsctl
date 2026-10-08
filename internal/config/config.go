@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -83,7 +84,14 @@ func Load() (Config, error) {
 // NormalizeAPIBaseURL is the canonical issuer identity used by config guards
 // and credential-store keys.
 func NormalizeAPIBaseURL(value string) string {
-	return strings.TrimRight(strings.ToLower(strings.TrimSpace(value)), "/")
+	value = strings.TrimRight(strings.TrimSpace(value), "/")
+	parsed, err := url.Parse(value)
+	if err != nil {
+		return value
+	}
+	parsed.Scheme = strings.ToLower(parsed.Scheme)
+	parsed.Host = strings.ToLower(parsed.Host)
+	return parsed.String()
 }
 
 func applyEnvironment(cfg *Config) {

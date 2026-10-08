@@ -435,6 +435,8 @@ runtime-only and are never copied into the config file by another update. An
 API session cannot be installed, imported, or refreshed while
 `POCKETCASTS_API_BASE_URL` differs from the saved or default API base; persist
 the intended endpoint in the config file before changing a saved session.
+Endpoint comparisons ignore scheme and hostname case but preserve path and query
+case.
 
 `web login` saves only browser flags supplied explicitly. With no browser flags,
 it launches using the effective runtime settings without changing the file.
