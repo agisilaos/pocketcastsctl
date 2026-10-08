@@ -147,6 +147,96 @@ func TestReleaseExecution(t *testing.T) {
 	}
 }
 
+func TestReleasePublishesToConfiguredTapBranch(t *testing.T) {
+	for _, divergent := range []bool{false, true} {
+		name := "target behind default branch"
+		if divergent {
+			name = "target diverged from default branch"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
+			t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+			t.Setenv("GIT_AUTHOR_NAME", "Release Fixture")
+			t.Setenv("GIT_AUTHOR_EMAIL", "release@example.invalid")
+			t.Setenv("GIT_COMMITTER_NAME", "Release Fixture")
+			t.Setenv("GIT_COMMITTER_EMAIL", "release@example.invalid")
+
+			repo := setupReleaseCheckRepo(t)
+			mustRun(t, repo, "git", "checkout", "-B", "main")
+			mustCopyFile(t, repoRootPath(t, "scripts/release.sh"), filepath.Join(repo, "scripts/release.sh"))
+			// The public readiness command and external build/release tools are
+			// controlled to exercise publication using only local Git remotes.
+			mustWriteFile(t, filepath.Join(repo, "scripts/release-check.sh"), "#!/bin/sh\nexit 0\n")
+			mustWriteFile(t, filepath.Join(repo, "CHANGELOG.md"), "# Changelog\n\n## [v0.1.1] - 2026-10-08\n\n- Fixture.\n")
+			mustRun(t, repo, "git", "add", ".")
+			mustRun(t, repo, "git", "commit", "-m", "prepare publication fixture")
+			projectRemote := t.TempDir()
+			mustRun(t, projectRemote, "git", "init", "--bare")
+			mustRun(t, repo, "git", "remote", "add", "origin", projectRemote)
+
+			seed := t.TempDir()
+			mustRun(t, seed, "git", "init", "-b", "main")
+			mustWriteFile(t, filepath.Join(seed, "README.md"), "tap baseline\n")
+			mustRun(t, seed, "git", "add", ".")
+			mustRun(t, seed, "git", "commit", "-m", "tap baseline")
+			mustRun(t, seed, "git", "checkout", "-b", "stable")
+			if divergent {
+				mustWriteFile(t, filepath.Join(seed, "stable-only.txt"), "keep target branch content\n")
+				mustRun(t, seed, "git", "add", ".")
+				mustRun(t, seed, "git", "commit", "-m", "stable branch content")
+			}
+			stableBefore, err := runCmd(seed, "git", "rev-parse", "stable")
+			if err != nil {
+				t.Fatal(err)
+			}
+			mustRun(t, seed, "git", "checkout", "main")
+			mustWriteFile(t, filepath.Join(seed, "main-only.txt"), "do not publish to stable\n")
+			mustRun(t, seed, "git", "add", ".")
+			mustRun(t, seed, "git", "commit", "-m", "main branch content")
+			mainBefore, err := runCmd(seed, "git", "rev-parse", "main")
+			if err != nil {
+				t.Fatal(err)
+			}
+			tapRemote := filepath.Join(t.TempDir(), "tap.git")
+			mustRun(t, seed, "git", "clone", "--bare", seed, tapRemote)
+
+			bin := t.TempDir()
+			mustWriteFile(t, filepath.Join(bin, "go"), `#!/bin/sh
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = "-o" ]; then
+    printf 'fixture binary\n' > "$2"
+    exit 0
+  fi
+  shift
+done
+exit 1
+`)
+			mustWriteFile(t, filepath.Join(bin, "gh"), "#!/bin/sh\nexit 0\n")
+			t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+			t.Setenv("GITHUB_REPO", "example/release-fixture")
+			t.Setenv("HOMEBREW_TAP_URL", tapRemote)
+			t.Setenv("HOMEBREW_TAP_BRANCH", "stable")
+			t.Setenv("HOMEBREW_FORMULA_PATH", "Formula/pocketcastsctl.rb")
+
+			if out, err := runCmd(repo, "bash", "scripts/release.sh", "v0.1.1"); err != nil {
+				t.Fatalf("release to configured tap branch failed: %v\n%s", err, out)
+			}
+			if parent, err := runCmd(tapRemote, "git", "rev-parse", "stable^"); err != nil || parent != stableBefore {
+				t.Fatalf("release must append its formula commit directly to the target branch: parent=%q want=%q err=%v", parent, stableBefore, err)
+			}
+			if after, err := runCmd(tapRemote, "git", "rev-parse", "main"); err != nil || after != mainBefore {
+				t.Fatalf("release changed the default tap branch: before=%q after=%q err=%v", mainBefore, after, err)
+			}
+			if formula, err := runCmd(tapRemote, "git", "show", "stable:Formula/pocketcastsctl.rb"); err != nil || !strings.Contains(formula, `version "0.1.1"`) {
+				t.Fatalf("configured tap branch lacks the released formula: %v\n%s", err, formula)
+			}
+			if _, err := runCmd(tapRemote, "git", "cat-file", "-e", "stable:main-only.txt"); err == nil {
+				t.Fatal("release brought unrelated default-branch content into the target branch")
+			}
+		})
+	}
+}
+
 func setupReleaseExecutionRepo(t *testing.T) (string, string) {
 	t.Helper()
 	repo := setupReleaseCheckRepo(t)

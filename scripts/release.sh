@@ -256,7 +256,7 @@ gh release create "$VERSION" \
 tap_dir="$(mktemp -d)"
 trap 'rm -rf "$tmp_dir" "$tap_dir"' EXIT
 
-git clone "$tap_url" "$tap_dir"
+git clone --branch "$tap_branch" "$tap_url" "$tap_dir"
 render_formula "$tap_dir/$formula_path"
 validate_formula "$tap_dir/$formula_path"
 

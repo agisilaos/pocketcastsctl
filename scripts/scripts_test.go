@@ -61,14 +61,11 @@ func TestChangelogTraceability(t *testing.T) {
 	}
 }
 
-func TestReleaseUsesConfigurableHTTPSHomebrewTapRemote(t *testing.T) {
+func TestReleaseDefaultsToHTTPSHomebrewTapRemote(t *testing.T) {
 	releaseScript := mustReadFile(t, repoRootPath(t, "scripts/release.sh"))
 
 	if !strings.Contains(releaseScript, `tap_url="${HOMEBREW_TAP_URL:-https://github.com/${tap_repo}.git}"`) {
 		t.Fatal("release.sh must default the Homebrew tap URL to HTTPS and allow an override")
-	}
-	if !strings.Contains(releaseScript, `git clone "$tap_url" "$tap_dir"`) {
-		t.Fatal("release.sh must clone the configured Homebrew tap URL")
 	}
 	if strings.Contains(releaseScript, "git@github.com:${tap_repo}.git") {
 		t.Fatal("release.sh must not require SSH access to clone the Homebrew tap")

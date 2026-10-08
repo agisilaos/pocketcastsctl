@@ -41,6 +41,8 @@ The automatic `ci` workflow owns PR and push validation: it runs this gate once,
 
 The final command creates and pushes the tag, publishes the GitHub Release with the approved changelog section, and updates the configured Homebrew tap.
 
+`HOMEBREW_TAP_BRANCH` selects the existing tap branch to check out and update (default: `main`). The formula commit is based on that branch, even when the tap's default branch differs.
+
 ## Changelog policy
 
 - Keep concrete release headings in the form `## [vX.Y.Z] - YYYY-MM-DD`.
