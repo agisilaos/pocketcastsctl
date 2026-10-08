@@ -9,8 +9,8 @@ import (
 
 var uuidLike = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
-// ErrUnknownUpNextShape means valid JSON contained neither a recognized empty
-// queue nor recoverable episode metadata.
+// ErrUnknownUpNextShape means valid JSON did not supply a readable queue.
+// A malformed recognized queue cannot be replaced by unrelated episode metadata.
 var ErrUnknownUpNextShape = errors.New("unknown Up Next response shape")
 
 func parseUpNextSnapshot(raw []byte) UpNextSnapshot {
@@ -27,10 +27,10 @@ func parseUpNextSnapshot(raw []byte) UpNextSnapshot {
 
 // extractUpNextEpisodes tolerates schema changes and only requires uuid+title.
 func extractUpNextEpisodes(v any) ([]UpNextEpisode, error) {
-	// A known empty queue takes precedence over episode metadata elsewhere in
-	// the response, including episodeSync. Arbitrary empty arrays prove nothing.
-	if isEmptyUpNextQueue(v) {
-		return []UpNextEpisode{}, nil
+	// A recognized queue owns membership and order, even when metadata elsewhere
+	// contains more episodes. Malformed queues must not fall back to metadata.
+	if entries, recognized := recognizedUpNextQueue(v); recognized {
+		return extractRecognizedQueue(entries)
 	}
 
 	if eps, ok := extractFromBestArray(v); ok {
@@ -94,21 +94,49 @@ func extractUpNextEpisodes(v any) ([]UpNextEpisode, error) {
 	return out, nil
 }
 
-func isEmptyUpNextQueue(root any) bool {
+func recognizedUpNextQueue(root any) (any, bool) {
 	if entries, ok := root.([]any); ok {
-		return len(entries) == 0
+		return entries, true
 	}
 	object, ok := root.(map[string]any)
 	if !ok {
-		return false
+		return nil, false
 	}
-	if queue, ok := object["up_next"].(map[string]any); ok {
-		if entries, ok := queue["episodes"].([]any); ok {
-			return len(entries) == 0
+	if value, exists := object["up_next"]; exists {
+		queue, ok := value.(map[string]any)
+		if !ok {
+			return nil, true
 		}
+		return queue["episodes"], true
 	}
-	entries, ok := object["episodes"].([]any)
-	return ok && len(entries) == 0
+	entries, exists := object["episodes"]
+	return entries, exists
+}
+
+func extractRecognizedQueue(value any) ([]UpNextEpisode, error) {
+	entries, ok := value.([]any)
+	if !ok {
+		return nil, ErrUnknownUpNextShape
+	}
+	out := make([]UpNextEpisode, 0, len(entries))
+	for _, entry := range entries {
+		object, ok := entry.(map[string]any)
+		if !ok {
+			return nil, ErrUnknownUpNextShape
+		}
+		uuid := firstString(object, "uuid", "episodeUuid", "episode_uuid")
+		title := firstString(object, "title", "episodeTitle", "episode_title")
+		if !isUUID(uuid) || strings.TrimSpace(title) == "" {
+			return nil, ErrUnknownUpNextShape
+		}
+		out = append(out, UpNextEpisode{
+			UUID: uuid, Title: title,
+			Podcast:   firstString(object, "podcast", "podcastUuid", "podcast_uuid"),
+			Published: firstString(object, "published", "publishedAt", "published_at"),
+			URL:       firstString(object, "url", "audioUrl", "audio_url"),
+		})
+	}
+	return out, nil
 }
 
 func extractFromBestArray(root any) ([]UpNextEpisode, bool) {

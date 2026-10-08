@@ -292,6 +292,10 @@ Numeric selectors address a specific queue occurrence. If the same episode UUID 
 
 For a recognized empty queue, `queue api ls --json` prints `[]`, the plain listing prints no items, and `now` reports the queue as empty. An unknown response shape is not treated as empty: playback and reorder commands report a parse failure, while the listing keeps its response fallback for inspection. Use `queue api ls --raw` to print the original response, even when its shape or JSON cannot be parsed.
 
+A recognized queue array determines membership and order. Episode metadata
+elsewhere in the response cannot replace that array; malformed queue entries
+produce a parse failure.
+
 `doctor explain <code>` explains specific doctor failure/warning codes and the fastest fix:
 
 ```bash
