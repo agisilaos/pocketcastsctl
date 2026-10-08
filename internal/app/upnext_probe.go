@@ -124,10 +124,12 @@ func (result upNextProbeResult) queueStatus() NowQueueStatus {
 		return NowQueueStatus{Status: "empty"}
 	}
 	inProgress := 0
-	for _, progress := range result.snapshot.Progress {
-		if progress > 0 {
+	seen := make(map[string]bool, len(result.snapshot.Episodes))
+	for _, episode := range result.snapshot.Episodes {
+		if !seen[episode.UUID] && result.snapshot.Progress[episode.UUID] > 0 {
 			inProgress++
 		}
+		seen[episode.UUID] = true
 	}
 	return NowQueueStatus{
 		Status:          "ready",
