@@ -490,4 +490,5 @@ generate or check snapshots in a scratch directory.
 
 ## Roadmap
 
-See `ROADMAP.md` for the `v0.1.6` delivery baseline and Rich Now Playing acceptance criteria.
+See `ROADMAP.md` for shipped milestones, outstanding live browser verification,
+and ongoing reliability and delivery work.

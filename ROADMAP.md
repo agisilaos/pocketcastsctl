@@ -1,45 +1,52 @@
 # Roadmap
 
-The immediate goal is to restore a green delivery runway, ship the accumulated post-`v0.1.5` work as `v0.1.6`, and then deepen the terminal playback experience with Rich Now Playing.
+The delivery baseline and Rich Now Playing features have shipped. Current work
+focuses on reliability and completing live browser verification before claiming
+full playback-state parity.
 
-## v0.1.6 Delivery Baseline
+## Shipped: v0.1.6 Delivery Baseline
 
-### Scope
+Released on 2026-08-24. See `CHANGELOG.md` for the release history.
 
-- Ship applied doctor fixes and queue reorder/cleanup commands already on `main`.
+- Applied doctor fixes and queue reorder/cleanup commands.
+- Browserless API authentication and Keychain-backed session storage.
+- Portable release checks with version/changelog agreement before tagging.
+
+## Shipped: Rich Now Playing in v0.1.7
+
+Released on 2026-09-01. Implementation and synthetic test coverage do not replace
+the outstanding live browser checks below.
+
+- Web Player playback snapshots with available episode, podcast, position,
+  duration, and progress details.
+- Rich snapshots in `web status --json` and every `now` output mode.
+- `web status --details` with the existing one-token default preserved.
+- Successful partial snapshots and state-only fallback when metadata is missing.
+- Concurrent collection of independent `now` sources and watch refreshes without
+  overlapping cycles.
+
+## Remaining: Live Browser Verification
+
+The dated observations in
+`docs/research/web-player-playback-snapshot-2026-08-22.md` record partial Safari
+verification, a Chrome JavaScript-permission blocker, and Dia action limitations.
+
+- Enable JavaScript from Apple Events and verify Chrome snapshots across playing,
+  paused, loading, transition, and no-episode states.
+- Verify episode-transition and no-episode states live in Safari as well as Chrome.
+- Confirm partial/unsupported metadata degrades to unknown or omitted details in
+  those live flows, and record the browser versions and observations.
+
+## Ongoing: Reliability and Delivery
+
 - Keep CLI help, docs, completion, and structured-output contracts synchronized.
-- Run macOS CI with a Go toolchain compatible with current GitHub runners.
-- Exercise release checks in CI without weakening the stricter checks used for a real versioned release.
-- Keep every release shell script portable on a stock macOS runner.
-
-### Done when
-
-- CI and release-check workflows are green on the current macOS runner.
-- `make release-check VERSION=v0.1.6` passes from a clean tree.
-- `CHANGELOG.md`, generated help, and release notes agree on `v0.1.6`.
-- The `v0.1.6` tag and release artifacts are published from `main`.
-
-## Next: Rich Now Playing
-
-### Scope
-
-- Introduce a Web Player playback snapshot containing state plus available episode, podcast, position, duration, and progress details.
-- Enrich `web status --json` and every `now` output mode additively.
-- Add `web status --details` for rich human and plain output while preserving the existing one-token default.
-- Keep partial metadata successful and preserve state-only behavior as the fallback.
-- Validate metadata extraction in Chrome and Safari before locking browser-specific selectors.
-- Collect independent `now` sources concurrently so slow auth or queue checks cannot starve Web Player details.
-
-### Done when
-
-- Existing human, plain, and JSON consumers continue to work without changes.
-- Chrome and Safari expose a trustworthy snapshot across playing, paused, loading, transition, and no-episode states.
-- Unsupported or incomplete browser metadata degrades to explicit unknown/omitted details without command failure.
-- `now --watch` shows observed progress without overlapping refresh cycles.
-- Focused contract tests, full unit tests, vet, formatting, docs, and help snapshot checks pass.
+- Run focused regression tests, full unit tests, vet, formatting, docs, and help
+  snapshot checks before landing changes.
+- Keep macOS CI and portable release-check workflows green; use the stricter
+  versioned release gate when preparing the next release.
 
 ## Working style
 
 - Land small, reviewable commits on `main`.
 - Run targeted tests first, then `go test ./...`.
-- Ship only behavior verified locally or in CI.
+- Distinguish local/CI contract coverage from live browser verification.
