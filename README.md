@@ -19,11 +19,18 @@ go build -o ./bin/pocketcastsctl ./cmd/pocketcastsctl
 ./bin/pocketcastsctl help
 ```
 
+To install the CLI on your command path from this source checkout:
+
+```bash
+go install ./cmd/pocketcastsctl
+```
+
+Go installs the binary into `GOBIN`, or `$(go env GOPATH)/bin` when `GOBIN` is unset. Add that directory to your `PATH`.
+
 After a tagged release:
 
 - Homebrew tap (macOS): `brew tap agisilaos/tap && brew install pocketcastsctl`
 - Prebuilt tarballs: download from GitHub Releases (`pocketcastsctl_<ver>_darwin_<arch>.tar.gz`)
-- Go install: `go install github.com/agisilaos/pocketcastsctl/cmd/pocketcastsctl@latest`
 
 For local iteration:
 
