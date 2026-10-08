@@ -37,6 +37,8 @@ Both dry-run and publish invoke `scripts/release-check.sh` first, after argument
 
 For CI validation, use `make release-check-ci` (or `scripts/release-check.sh --ci`). It validates the top changelog version even when that tag exists; release mode additionally requires a new tag and traceable changelog bullets.
 
+The automatic `ci` workflow owns PR and push validation: it runs this gate once, followed by the focused lifecycle race tests and snapshot benchmarks. The separate `release-check` workflow runs only on manual dispatch. The gate's full package test run includes script tests; `make test-scripts` remains available for focused local iteration.
+
 The final command creates and pushes the tag, publishes the GitHub Release with the approved changelog section, and updates the configured Homebrew tap.
 
 ## Changelog policy

@@ -78,9 +78,6 @@ go test ./...
 echo "[release-check] running vet"
 go vet ./...
 
-echo "[release-check] running script tests"
-go test ./scripts -run 'TestReleaseCheckModes|TestChangelogTraceability|TestHelpSnapshots|TestReleaseUsesConfigurableHTTPSHomebrewTapRemote'
-
 echo "[release-check] running docs check"
 ./scripts/docs-check.sh
 

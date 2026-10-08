@@ -17,7 +17,7 @@ bench-local-ci:
 	go test ./internal/localplayback -run '^$$' -bench 'BenchmarkSnapshot' -benchmem -benchtime=100x
 
 test-scripts:
-	go test ./scripts -run 'TestReleaseCheckModes|TestChangelogTraceability|TestHelpSnapshots|TestReleaseUsesConfigurableHTTPSHomebrewTapRemote'
+	go test ./scripts
 
 test-scripts-cover:
 	go test -cover ./scripts
