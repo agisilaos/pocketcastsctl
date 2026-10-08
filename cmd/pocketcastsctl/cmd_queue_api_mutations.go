@@ -100,7 +100,9 @@ func runQueueAPIRemove(args []string, client *pocketcasts.Client, ctx context.Co
 		}
 	}
 
-	body, err := client.UpNextRemove(ctx, uuids, serverModified)
+	mutationCtx, cancel := context.WithTimeout(ctx, queueAPIOperationTimeout)
+	defer cancel()
+	body, err := client.UpNextRemove(mutationCtx, uuids, serverModified)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "queue api rm failed: %v\n", err)
 		return 1

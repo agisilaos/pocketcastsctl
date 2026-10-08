@@ -88,7 +88,9 @@ func runQueueAPIPick(args []string, cfg config.Config, client *pocketcasts.Clien
 		return 2
 	}
 
-	snapshot, err := fetchUpNextWithRetry(ctx, client, "0")
+	fetchCtx, fetchCancel := context.WithTimeout(ctx, queueAPIOperationTimeout)
+	snapshot, err := fetchUpNextWithRetry(fetchCtx, client, "0")
+	fetchCancel()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "queue api pick: failed to fetch queue: %v\n", err)
 		if authutil.IsUnauthorizedError(err) {
@@ -120,5 +122,7 @@ func runQueueAPIPick(args []string, cfg config.Config, client *pocketcasts.Clien
 		fmt.Println(chosen.Episode.UUID)
 		return 0
 	}
-	return playEpisodeInWebPlayer(ctx, *browser, *browserApp, *urlContains, *webBase, chosen.Episode)
+	playCtx, playCancel := context.WithTimeout(ctx, queueAPIOperationTimeout)
+	defer playCancel()
+	return playEpisodeInWebPlayer(playCtx, *browser, *browserApp, *urlContains, *webBase, chosen.Episode)
 }

@@ -14,6 +14,8 @@ import (
 	"pocketcastsctl/internal/config"
 )
 
+const queueAPIOperationTimeout = 15 * time.Second
+
 func runQueue(args []string, cfg config.Config) int {
 	if len(args) == 0 || isHelpArg(args[0]) {
 		printQueueHelp()
@@ -115,8 +117,14 @@ func runQueueAPI(args []string, cfg config.Config) int {
 
 	serverModified := strconv.FormatInt(time.Now().UnixMilli(), 10)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
+	// Interactive commands bound each operation separately so human input does
+	// not consume the subsequent request or playback deadline.
+	ctx := context.Background()
+	if args[0] != "pick" && args[0] != "rm" && args[0] != "remove" {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, queueAPIOperationTimeout)
+		defer cancel()
+	}
 
 	switch args[0] {
 	case "ls":
