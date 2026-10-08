@@ -32,6 +32,23 @@ func Install(ctx context.Context, cfg config.Config, store Store, api *API, cand
 	}
 	candidate = validated
 
+	unlock, err := acquirePersistenceLock(ctx)
+	if err != nil {
+		return cfg, err
+	}
+	defer unlock()
+	current, err := config.Load()
+	if err != nil {
+		return cfg, err
+	}
+	if strings.TrimSpace(current.Auth.SessionKey) != strings.TrimSpace(cfg.Auth.SessionKey) {
+		return current, ErrSessionChanged
+	}
+	cfg = current
+	if err := config.ValidateAuthUpdate(api.BaseURL); err != nil {
+		return cfg, err
+	}
+
 	key := sessionKey(api.BaseURL, candidate)
 	previousKey := strings.TrimSpace(cfg.Auth.SessionKey)
 	pending := cfg
@@ -68,6 +85,16 @@ func Logout(ctx context.Context, cfg config.Config, store Store) (config.Config,
 	if store == nil {
 		store = NewKeyringStore()
 	}
+	unlock, err := acquirePersistenceLock(ctx)
+	if err != nil {
+		return cfg, err
+	}
+	defer unlock()
+	current, err := config.Load()
+	if err != nil {
+		return cfg, err
+	}
+	cfg = current
 	updated, err := config.ClearAuth()
 	if err != nil {
 		if errors.Is(err, config.ErrDurabilityUncertain) {

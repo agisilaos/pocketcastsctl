@@ -162,7 +162,9 @@ func TestNowProbeUsesOneManagerThroughRefresh(t *testing.T) {
 				if proactive {
 					wantRequests = 1
 				}
-				if loads != 1 || saves != 1 || refreshes != 1 || requests != wantRequests || auth.Status != wantAuth || queue.Status != "empty" {
+				// One initial load and one recheck before persisting the refresh.
+				// Both probes still share one manager and one token exchange.
+				if loads != 2 || saves != 1 || refreshes != 1 || requests != wantRequests || auth.Status != wantAuth || queue.Status != "empty" {
 					t.Fatalf("loads=%d saves=%d refreshes=%d requests=%d auth=%+v queue=%+v", loads, saves, refreshes, requests, auth, queue)
 				}
 				if auth.Source != "keychain" || auth.Method != "password" || !auth.TokenExpiryKnown || auth.TokenExpiryUnix != now.Add(2*time.Hour).Unix() {

@@ -27,6 +27,7 @@ const (
 var (
 	ErrNotConfigured         = errors.New("API authentication is not configured")
 	ErrCredentialUnavailable = errors.New("active Keychain session is unavailable")
+	ErrSessionChanged        = errors.New("the saved API session changed while this command was running; retry the command")
 )
 
 type ManagerOptions struct {
@@ -186,6 +187,31 @@ func (m *Manager) refreshLocked(ctx context.Context) error {
 	key := strings.TrimSpace(m.cfg.Auth.SessionKey)
 	if key == "" {
 		return errors.New("active API session has no credential-store key")
+	}
+	unlock, err := acquirePersistenceLock(ctx)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	current, err := config.Load()
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(current.Auth.SessionKey) != key {
+		return ErrSessionChanged
+	}
+	credentials, err := m.store.Load(ctx, key)
+	if errors.Is(err, ErrSessionNotFound) {
+		return ErrSessionChanged
+	}
+	if err != nil {
+		return err
+	}
+	if credentials.normalized() != m.session.credentials() {
+		return ErrSessionChanged
+	}
+	if err := config.ValidateAuthUpdate(m.api.BaseURL); err != nil {
+		return err
 	}
 	if err := m.store.Save(ctx, key, refreshed.credentials()); err != nil {
 		return err

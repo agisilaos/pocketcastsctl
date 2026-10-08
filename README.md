@@ -268,6 +268,10 @@ Terminal login and browser import resolve the active credential source before co
 
 Access tokens refresh proactively near expiry and once after a `401`. A process-only `POCKETCASTS_ACCESS_TOKEN` overrides Keychain and legacy credentials; it is never stored or refreshed. While that override is present, terminal login and browser import refuse to save a replacement—even with `--force`—because the replacement could not become active; unset the variable first. The dormant saved session and legacy credential remain unchanged on refusal. If the configured Keychain session is unavailable, the command fails explicitly instead of silently falling back to a plaintext legacy token.
 
+Concurrent authentication commands serialize credential and session-metadata
+writes. A refresh that finishes after logout or session replacement refuses to
+save its stale result.
+
 `auth sync`, `auth tabs`, and `auth clear` remain as deprecated compatibility commands for one release. Use `auth import-browser`, `web tabs`, and `auth logout` respectively.
 
 ### Queue (API, best effort)
