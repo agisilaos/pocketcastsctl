@@ -35,7 +35,7 @@ func runNow(args []string, cfg config.Config) int {
 		return 2
 	}
 	if fs.NArg() != 0 {
-		fmt.Fprintln(os.Stderr, "usage: pocketcastsctl now [--watch] [--interactive] [--interval 5s] [--verify-auth] [--json|--plain]")
+		fmt.Fprintln(os.Stderr, "usage: pocketcastsctl now [--watch] [--interactive] [--interval 5s] [--max-updates N] [--verify-auth] [--json|--plain]")
 		return 2
 	}
 	if *interval <= 0 {

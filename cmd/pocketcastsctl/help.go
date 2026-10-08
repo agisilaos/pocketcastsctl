@@ -18,7 +18,7 @@ var usageText = map[string]string{
 	"auth tabs":           "pocketcastsctl auth tabs [--browser <name>] [--browser-app <app>] [--json|--plain]",
 	"auth status":         "pocketcastsctl auth status [--json|--plain]",
 	"auth verify":         "pocketcastsctl auth verify [--json|--plain]",
-	"auth clear":          "pocketcastsctl auth clear",
+	"auth clear":          "pocketcastsctl auth clear [--json|--plain]",
 	"auth logout":         "pocketcastsctl auth logout [--json|--plain]",
 	"web login":           "pocketcastsctl web login [--browser <name>] [--browser-app <app>] [--url url]",
 	"web tabs":            "pocketcastsctl web tabs [--browser <name>] [--browser-app <app>] [--json|--plain]",
@@ -37,7 +37,7 @@ var usageText = map[string]string{
 	"queue api bump":      "pocketcastsctl queue api bump <index|uuid> [--dry-run] [--json|--raw]",
 	"queue api move":      "pocketcastsctl queue api move <index|uuid> <to-index> [--dry-run] [--json|--raw]",
 	"queue api dedupe":    "pocketcastsctl queue api dedupe [--dry-run] [--json|--raw]",
-	"local pick":          "pocketcastsctl local pick [--search q] [--limit N] [--recent] [--unplayed|--in-progress]",
+	"local pick":          "pocketcastsctl local pick [--search q] [--limit N] [--recent] [--unplayed|--in-progress] [--from-start]",
 	"local play":          "pocketcastsctl local play [--from-start] [--dry-run] <index|uuid>",
 	"local pause":         "pocketcastsctl local pause",
 	"local resume":        "pocketcastsctl local resume",
@@ -49,11 +49,11 @@ var usageText = map[string]string{
 	"doctor explain":      "pocketcastsctl doctor explain <code> [--json]",
 	"setup":               "pocketcastsctl setup [run|check|auth|verify] [--json|--plain] [--no-input]",
 	"setup run":           "pocketcastsctl setup run [--json|--plain] [--no-input]",
-	"setup check":         "pocketcastsctl setup check [--json|--plain]",
+	"setup check":         "pocketcastsctl setup check [--json|--plain] [--no-input]",
 	"setup auth":          "pocketcastsctl setup auth [--json|--plain] [--no-input]",
-	"setup verify":        "pocketcastsctl setup verify [--json|--plain]",
+	"setup verify":        "pocketcastsctl setup verify [--json|--plain] [--no-input]",
 	"start":               "pocketcastsctl start [--json|--plain] [--no-input]",
-	"now":                 "pocketcastsctl now [--watch] [--interactive] [--interval 5s] [--verify-auth] [--json|--plain]",
+	"now":                 "pocketcastsctl now [--watch] [--interactive] [--interval 5s] [--max-updates N] [--verify-auth] [--json|--plain]",
 	"completion":          "pocketcastsctl completion [zsh|bash|fish]",
 	"doctor":              "pocketcastsctl doctor [--json|--plain] [--quick|--full] [--fix [--apply]]",
 	"auth":                "pocketcastsctl auth <login|import-browser|refresh|status|verify|logout>",
@@ -253,7 +253,7 @@ Common tasks:
 Command reference:
   pocketcastsctl --version
   pocketcastsctl version
-  pocketcastsctl now [--watch] [--interactive] [--interval 5s] [--verify-auth] [--json|--plain]
+  pocketcastsctl now [--watch] [--interactive] [--interval 5s] [--max-updates N] [--verify-auth] [--json|--plain]
   pocketcastsctl doctor [--json|--plain] [--quick|--full] [--fix [--apply]]
   pocketcastsctl doctor explain <code> [--json]
   pocketcastsctl setup [run|check|auth|verify] [--json|--plain] [--no-input]
@@ -265,20 +265,26 @@ Command reference:
   pocketcastsctl auth logout [--json|--plain]
   pocketcastsctl web login [--browser <name>] [--browser-app <app>] [--url url]
   pocketcastsctl web tabs [--browser <name>] [--browser-app <app>] [--json|--plain]
-  pocketcastsctl web <play|pause|toggle|next|prev|status> [--browser <name>] [--browser-app <app>] [--url-contains needle]
-  pocketcastsctl queue ls [--json] [--browser <name>] [--browser-app <app>] [--url-contains needle]
+  pocketcastsctl web <play|pause|toggle|next|prev> [--browser <name>] [--browser-app <app>] [--url-contains needle]
+  pocketcastsctl web status [--details] [--json|--plain] [--browser <name>] [--browser-app <app>] [--url-contains needle]
+  pocketcastsctl queue ls [--json] [--plain] [--search q] [--limit N] [--browser <name>] [--browser-app <app>] [--url-contains needle]
   pocketcastsctl queue api ls [--limit N] [--search q] [--json|--plain|--raw]
-  pocketcastsctl queue api add (--uuid id --podcast id --title t --published rfc3339 --url audioUrl) | (--episode-json json)
-  pocketcastsctl queue api rm [--dry-run] [--force|--no-input] <episode-uuid...>
-  pocketcastsctl queue api play <index|uuid> [--dry-run] [--browser <name>] [--browser-app <app>] [--url-contains needle]
-  pocketcastsctl queue api pick [--search q] [--recent] [--unplayed|--in-progress] [--browser <name>] [--browser-app <app>] [--url-contains needle]
+  pocketcastsctl queue api add (--uuid id --podcast id --title t --published rfc3339 --url audioUrl) | (--episode-json json) [--raw]
+  pocketcastsctl queue api rm [--dry-run] [--force|--no-input] [--raw] <episode-uuid...>
+  pocketcastsctl queue api play <index|uuid> [--search q] [--dry-run] [--browser <name>] [--browser-app <app>] [--url-contains needle] [--web-base url]
+  pocketcastsctl queue api pick [--search q] [--limit N] [--recent] [--unplayed|--in-progress] [--no-play] [--browser <name>] [--browser-app <app>] [--url-contains needle] [--web-base url]
   pocketcastsctl queue api bump <index|uuid> [--dry-run] [--json|--raw]
   pocketcastsctl queue api move <index|uuid> <to-index> [--dry-run] [--json|--raw]
   pocketcastsctl queue api dedupe [--dry-run] [--json|--raw]
+  pocketcastsctl local pick [--search q] [--limit N] [--recent] [--unplayed|--in-progress] [--from-start]
+  pocketcastsctl local play [--from-start] [--dry-run] <index|uuid>
+  pocketcastsctl local pause|resume|stop
+  pocketcastsctl local status [--json] [--plain]
   pocketcastsctl har summarize [--host host] [--json] <file.har>   (use --host= to disable filtering)
   pocketcastsctl har graphql [--host host] [--json] <file.har>     (use --host= to disable filtering)
   pocketcastsctl har redact <in.har> <out.har>
   pocketcastsctl config init|path|show|set
+  pocketcastsctl completion [zsh|bash|fish]
   pocketcastsctl help [now|setup|start|doctor|auth|web|queue|local|har|config|completion]
 
 Deprecated shortcuts (use canonical commands above):
@@ -302,9 +308,9 @@ func printSetupHelp() {
 Usage:
   pocketcastsctl setup [run|check|auth|verify] [--json|--plain] [--no-input]
   pocketcastsctl setup run [--json|--plain] [--no-input]
-  pocketcastsctl setup check [--json|--plain]
+  pocketcastsctl setup check [--json|--plain] [--no-input]
   pocketcastsctl setup auth [--json|--plain] [--no-input]
-  pocketcastsctl setup verify [--json|--plain]
+  pocketcastsctl setup verify [--json|--plain] [--no-input]
   pocketcastsctl help setup
 
 Recommended first-run flow:
@@ -317,13 +323,16 @@ Recommended first-run flow:
 func printNowHelp() {
 	fmt.Print(strings.TrimSpace(`
 Usage:
-  pocketcastsctl now [--watch] [--interactive] [--interval 5s] [--verify-auth] [--json|--plain]
+  pocketcastsctl now [--watch] [--interactive] [--interval 5s] [--max-updates N] [--verify-auth] [--json|--plain]
 
 Examples:
   pocketcastsctl now
   pocketcastsctl now --watch
   pocketcastsctl now --watch --interval 3s
+  pocketcastsctl now --watch --max-updates 10
   pocketcastsctl now --json
+
+--max-updates limits snapshots in watch mode (0 = unlimited).
 `) + "\n")
 }
 
@@ -366,9 +375,14 @@ Install (zsh):
   autoload -Uz compinit && compinit
 
 Install (bash):
-  pocketcastsctl completion bash > /usr/local/etc/bash_completion.d/pocketcastsctl
+  mkdir -p ~/.local/share/pocketcastsctl
+  pocketcastsctl completion bash > ~/.local/share/pocketcastsctl/completion.bash
+  source ~/.local/share/pocketcastsctl/completion.bash
+  echo 'source ~/.local/share/pocketcastsctl/completion.bash' >> ~/.bash_profile
+  For non-login interactive Bash shells, put the source line in ~/.bashrc instead.
 
 Install (fish):
+  mkdir -p ~/.config/fish/completions
   pocketcastsctl completion fish > ~/.config/fish/completions/pocketcastsctl.fish
 `)
 }

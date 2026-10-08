@@ -155,6 +155,15 @@ Open and sign into the Web Player, then control it independently from API authen
 
 `web status --json` adds available `episode_title`, `podcast_title`, `position_seconds`, `duration_seconds`, and `progress_percent` fields alongside the existing `state`. State is derived from the primary Web Player audio element—not unrelated page-level Play buttons—and can be `playing`, `paused`, `loading`, `transition`, `no_episode`, or `unknown`. Missing metadata is omitted from JSON and shown as `unknown` in detailed human/plain output; a snapshot with state only remains successful.
 
+Web Player flags:
+
+- `--browser safari|chrome|dia` (default: `chrome`)
+- `--browser-app <app>` selects an explicit browser application.
+- `--url-contains <substring>` (default: `pocketcasts.com`) selects the tab for playback actions and status; `web login` uses `--url` instead.
+
+macOS may prompt you to allow `osascript` to control your browser (Automation permission).
+Rich Web Player playback details also require the browser to allow JavaScript from Apple Events. Safari exposes this in Settings > Developer. Dia must be launched with `--enable-applescript-javascript`; `web login --browser dia` adds the flag automatically when Dia is not already running. If Dia is already running without it, quit Dia and rerun the login command. Dia supports rich status inspection, but some versions refuse scripted playback actions; the CLI verifies those actions and recommends Safari or Chrome instead of reporting false success. Other browser applications are best effort and may not expose a compatible AppleScript interface.
+
 ### Now-playing cockpit
 
 Use `now` as the main dashboard command:
@@ -162,11 +171,14 @@ Use `now` as the main dashboard command:
 ```bash
 ./bin/pocketcastsctl now
 ./bin/pocketcastsctl now --watch --interval 3s
+./bin/pocketcastsctl now --watch --max-updates 10
 ./bin/pocketcastsctl now --verify-auth
 ./bin/pocketcastsctl now --json
 ```
 
 `now` merges a Web Player playback snapshot, local status, queue health, auth state, and next-action suggestions in one view. Web Player and local playback collection run concurrently with the API check. With `--verify-auth`, queue health and auth verification share one Up Next request and credential manager; successful authentication does not require a readable queue response. Watch mode reports positions observed from the player at each interval; it does not estimate progress between observations.
+
+Use `--max-updates N` to stop watch mode after N snapshots; `0` (the default) is unlimited.
 
 The combined API check has a six-second budget, including credential lookup and retries. Ordinary `now` makes one attempt; `now --verify-auth` allows two attempts and `auth verify` allows three. Verification retries HTTP 408, 429, and 5xx responses and recognized transient network errors, stopping when its deadline expires or the caller cancels. The client's existing token refresh and request replay can add requests within an attempt.
 
@@ -211,6 +223,7 @@ Older state files do not contain a verifiable process identity. The first local 
 
 ```bash
 ./bin/pocketcastsctl local pick
+./bin/pocketcastsctl local pick --from-start
 ./bin/pocketcastsctl local play 3
 ./bin/pocketcastsctl local play --from-start 3
 ./bin/pocketcastsctl local pause
@@ -228,14 +241,6 @@ Resume/start-offset behavior:
 ```bash
 brew install mpv
 ```
-
-Flags:
-
-- `--browser safari|chrome|dia` (default: `chrome`)
-- `--url-contains <substring>` (default: `pocketcasts.com`)
-
-macOS may prompt you to allow `osascript` to control your browser (Automation permission).
-Rich Web Player playback details also require the browser to allow JavaScript from Apple Events. Safari exposes this in Settings > Developer. Dia must be launched with `--enable-applescript-javascript`; `web login --browser dia` adds the flag automatically when Dia is not already running. If Dia is already running without it, quit Dia and rerun the login command. Dia supports rich status inspection, but some versions refuse scripted playback actions; the CLI verifies those actions and recommends Safari or Chrome instead of reporting false success. Other browser applications are best effort and may not expose a compatible AppleScript interface.
 
 ### Queue (best-effort, from Web UI)
 

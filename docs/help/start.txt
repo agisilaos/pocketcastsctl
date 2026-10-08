@@ -1,9 +1,9 @@
 Usage:
   pocketcastsctl setup [run|check|auth|verify] [--json|--plain] [--no-input]
   pocketcastsctl setup run [--json|--plain] [--no-input]
-  pocketcastsctl setup check [--json|--plain]
+  pocketcastsctl setup check [--json|--plain] [--no-input]
   pocketcastsctl setup auth [--json|--plain] [--no-input]
-  pocketcastsctl setup verify [--json|--plain]
+  pocketcastsctl setup verify [--json|--plain] [--no-input]
   pocketcastsctl help setup
 
 Recommended first-run flow:

@@ -22,7 +22,7 @@ Snapshot registry: `../scripts/help-snapshots.txt`. Generation and checks use
 - Config command handling: `../cmd/pocketcastsctl/cmd_config.go`
 - Setup/start flows: `../cmd/pocketcastsctl/cmd_setup.go`
 - Now dashboard flow: `../cmd/pocketcastsctl/cmd_now.go`
-- Web and HAR handlers: `../cmd/pocketcastsctl/cmd_web_har.go`
+- Web and HAR handlers: `../cmd/pocketcastsctl/cmd_web_har.go`, `../cmd/pocketcastsctl/cmd_web_login.go`
 - Playback snapshot output helpers: `../cmd/pocketcastsctl/playback_output.go`
 - Completion command and shell scripts: `../cmd/pocketcastsctl/cmd_completion.go`
 - Shared utility helpers and types: `../cmd/pocketcastsctl/cmd_shared_helpers.go`
@@ -30,7 +30,7 @@ Snapshot registry: `../scripts/help-snapshots.txt`. Generation and checks use
 - Auth handlers: `../cmd/pocketcastsctl/cmd_auth.go`, `../cmd/pocketcastsctl/cmd_auth_login.go`, `../cmd/pocketcastsctl/cmd_auth_import_browser.go`, `../cmd/pocketcastsctl/cmd_auth_logout.go`, `../cmd/pocketcastsctl/cmd_auth_status_verify.go`, and `../cmd/pocketcastsctl/cmd_auth_refresh.go`
 - API-session lifecycle, Keychain storage, and browser-cookie import: `../internal/authn/`
 - Auth persistence ownership and partial-success semantics: `adr/0005-serialize-saved-api-session-writes.md`
-- Queue handlers: `../cmd/pocketcastsctl/cmd_queue_dispatch.go`, `../cmd/pocketcastsctl/cmd_queue_api_ls.go`, `../cmd/pocketcastsctl/cmd_queue_api_mutations.go`, `../cmd/pocketcastsctl/cmd_queue_api_play_pick.go`, `../cmd/pocketcastsctl/cmd_queue_helpers.go`, `../cmd/pocketcastsctl/cmd_queue_fetch.go`
+- Queue handlers: `../cmd/pocketcastsctl/cmd_queue_dispatch.go`, `../cmd/pocketcastsctl/cmd_queue_api_ls.go`, `../cmd/pocketcastsctl/cmd_queue_api_mutations.go`, `../cmd/pocketcastsctl/cmd_queue_api_play_pick.go`, `../cmd/pocketcastsctl/cmd_queue_api_reorder.go`, `../cmd/pocketcastsctl/cmd_queue_helpers.go`, `../cmd/pocketcastsctl/cmd_queue_fetch.go`
 - Shared retry/auth-recovery helpers: `../cmd/pocketcastsctl/cmd_retry.go`
 - App-owned Up Next probe, auth/queue classification, and private retry policy: `../internal/app/upnext_probe.go`
 - Shared flag parsing/usage helpers: `../cmd/pocketcastsctl/flag_helpers.go`
