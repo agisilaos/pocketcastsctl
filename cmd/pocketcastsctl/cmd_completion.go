@@ -300,6 +300,8 @@ complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from setup' -l json -l 
 complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from start' -l json -l plain -l no-input
 complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from doctor' -a 'explain' -l json -l plain -l quick -l full -l fix -l apply
 complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from config' -a 'init path show set'
+complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from config; and __fish_seen_subcommand_from init' -l force
+complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from config; and __fish_seen_subcommand_from show' -l json -l saved -l reveal-secrets
 complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from config; and __fish_seen_subcommand_from set' -a 'browser'
 complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from config; and __fish_seen_subcommand_from set; and __fish_seen_subcommand_from browser' -a 'safari chrome dia arc brave edge'
 complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from auth' -a 'login import-browser refresh status verify logout sync tabs clear'
@@ -307,6 +309,8 @@ complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from web' -a 'login tab
 complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from auth; and __fish_seen_subcommand_from login' -l email -l password-stdin -l force -l no-input -l json -l plain
 complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from auth; and __fish_seen_subcommand_from import-browser' -l browser -l profile -l force -l no-input -l json -l plain
 complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from auth; and __fish_seen_subcommand_from sync' -l browser -l profile -l force -l no-input -l json -l plain
+complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from auth; and __fish_seen_subcommand_from refresh status verify logout' -l json -l plain
+complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from auth; and __fish_seen_subcommand_from tabs' -l browser -l browser-app -l json -l plain
 complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from web; and __fish_seen_subcommand_from login' -l browser -l browser-app -l url
 complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from web; and __fish_seen_subcommand_from tabs' -l browser -l browser-app -l json -l plain
 complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from web; and __fish_seen_subcommand_from play pause toggle next prev' -l browser -l browser-app -l url-contains
@@ -317,13 +321,18 @@ complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from local' -a 'pick pl
 complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from har' -a 'summarize graphql redact'
 
 complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from queue; and __fish_seen_subcommand_from api; and __fish_seen_subcommand_from play' -l dry-run -l search -l browser -l browser-app -l url-contains -l web-base
+complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from queue; and __fish_seen_subcommand_from api; and __fish_seen_subcommand_from pick' -l search -l limit -l recent -l unplayed -l in-progress -l no-play -l browser -l browser-app -l url-contains -l web-base
+complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from queue; and __fish_seen_subcommand_from api; and __fish_seen_subcommand_from add' -l episode-json -l uuid -l podcast -l title -l published -l url -l raw
 complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from queue; and __fish_seen_subcommand_from api; and __fish_seen_subcommand_from bump' -l dry-run -l json -l raw
 complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from queue; and __fish_seen_subcommand_from api; and __fish_seen_subcommand_from move' -l dry-run -l json -l raw
 complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from queue; and __fish_seen_subcommand_from api; and __fish_seen_subcommand_from dedupe' -l dry-run -l json -l raw
 complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from local; and __fish_seen_subcommand_from play' -l dry-run -l from-start
-complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from queue; and __fish_seen_subcommand_from api; and __fish_seen_subcommand_from rm' -l dry-run -l force -l no-input
-complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from queue; and __fish_seen_subcommand_from ls' -l json -l plain -l search -l limit -l browser -l browser-app -l url-contains
+complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from local; and __fish_seen_subcommand_from pick' -l search -l limit -l recent -l unplayed -l in-progress -l from-start
+complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from local; and __fish_seen_subcommand_from status' -l json -l plain
+complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from queue; and __fish_seen_subcommand_from api; and __fish_seen_subcommand_from rm' -l dry-run -l force -l no-input -l raw
+complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from queue; and __fish_seen_subcommand_from ls; and not __fish_seen_subcommand_from api' -l json -l plain -l search -l limit -l browser -l browser-app -l url-contains
 complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from queue; and __fish_seen_subcommand_from api; and __fish_seen_subcommand_from ls' -l json -l plain -l raw -l search -l limit
+complete -c pocketcastsctl -f -n '__fish_seen_subcommand_from har; and __fish_seen_subcommand_from summarize graphql' -l host -l json
 `,
 	}
 }
