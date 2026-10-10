@@ -23,10 +23,10 @@ Use commit messages, changed-file evidence, and PR metadata to understand impact
 
 ## Validate and publish
 
-Run these commands in order:
+For a standalone readiness assessment, run `make release-check VERSION=vX.Y.Z`.
+To prepare and publish a release, run these commands in order:
 
 ```bash
-make release-check VERSION=vX.Y.Z
 make release-dry-run VERSION=vX.Y.Z
 make release VERSION=vX.Y.Z
 ```

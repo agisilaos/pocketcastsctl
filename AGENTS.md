@@ -1,5 +1,9 @@
 ## Agent skills
 
+### Code navigation
+
+For code navigation and focused checks, see `docs/README.md`.
+
 ### Issue tracker
 
 Issues and specs are tracked in GitHub Issues for `agisilaos/pocketcastsctl`. See `docs/agents/issue-tracker.md`.
