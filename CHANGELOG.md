@@ -4,6 +4,25 @@ All notable changes to this project will be documented in this file.
 
 The format is based on *Keep a Changelog*, and this project adheres to *Semantic Versioning*.
 
+## [v0.1.8] - 2026-10-11
+
+This release tightens validation of command arguments and help topics. Existing supported commands and saved configuration remain compatible; no configuration migration is required.
+
+### Fixed
+
+- Honored safety flags such as `--dry-run` and `--help` after positional arguments, and validated `local pause`, `resume`, and `stop` arguments before changing playback state ([78c42e0](https://github.com/agisilaos/pocketcastsctl/commit/78c42e0ac2f9b6c1e62aca5926fc1cbb19c482fb), [13b8534](https://github.com/agisilaos/pocketcastsctl/commit/13b8534779c49d3609989c5b331bb40d11be15ee)).
+- Prevented an in-flight authentication refresh from restoring a logged-out session or overwriting a replacement session, and cleared all accepted spellings of saved auth fields during cleanup ([67d0cec](https://github.com/agisilaos/pocketcastsctl/commit/67d0cec29d6083ccf5f9b20dd8b849774f687a1c), [6f0aa58](https://github.com/agisilaos/pocketcastsctl/commit/6f0aa5881f82fe9e2bc31a3dc963bf66eb72c9da)).
+- Made auth status and diagnostics agree on whether credentials are configured without exposing tokens to observation callers, and preserved case-sensitive API endpoint paths and queries when checking saved-session identity ([#20](https://github.com/agisilaos/pocketcastsctl/pull/20), [#24](https://github.com/agisilaos/pocketcastsctl/pull/24), [5cb092f](https://github.com/agisilaos/pocketcastsctl/commit/5cb092f454f2008a250146bbf302e628d799986a)).
+- Preserved authoritative Up Next membership and order when responses also contain unrelated episode metadata, and counted saved progress only for distinct episodes actually in the queue ([9c302f7](https://github.com/agisilaos/pocketcastsctl/commit/9c302f7ae48376cde40ddf186474acae8ec44179), [20f43ae](https://github.com/agisilaos/pocketcastsctl/commit/20f43aead3b6ae4e2b0d066987535332a708df26)).
+- Started queue operation deadlines after interactive selection or confirmation, and kept fallback picker menus off UUID-only `--no-play` output ([bb626de](https://github.com/agisilaos/pocketcastsctl/commit/bb626ded552e639a6d1d7e2a835e590136666e14), [03583da](https://github.com/agisilaos/pocketcastsctl/commit/03583dab7095af1e496df189417539e98c422740)).
+- Made `web login --browser` launch the explicitly selected browser despite an inherited application override, and rejected unsupported Web actions before browser execution ([db138be](https://github.com/agisilaos/pocketcastsctl/commit/db138bee43503bc074959e9cb6874ec93f9da982), [#22](https://github.com/agisilaos/pocketcastsctl/pull/22)).
+- Preserved warnings and failures in aggregate setup reports, and made Doctor guidance distinguish transient auth failures, verification timeouts, and failed repairs ([#27](https://github.com/agisilaos/pocketcastsctl/pull/27), [#28](https://github.com/agisilaos/pocketcastsctl/pull/28)).
+- Rejected invalid or trailing help-topic arguments consistently, aligned help with supported options, and corrected Fish completion flags and completion installation instructions ([#23](https://github.com/agisilaos/pocketcastsctl/pull/23), [a160850](https://github.com/agisilaos/pocketcastsctl/commit/a1608503dc32467b02a7b53ae49990e4f7d886eb), [f8b44dc](https://github.com/agisilaos/pocketcastsctl/commit/f8b44dcf3be6de6f313bd40f172b609186992cab)).
+- Made HAR summary and GraphQL analysis use consistent host filtering and operation classification, excluding ordinary JSON, malformed bodies, and batch arrays from GraphQL results ([#25](https://github.com/agisilaos/pocketcastsctl/pull/25)).
+- Updated the configured Homebrew tap branch from its own history during publication, and documented the supported source-checkout installation command ([6950cb4](https://github.com/agisilaos/pocketcastsctl/commit/6950cb4e157d637ec46f20909e4479be4aa0883e), [b948f62](https://github.com/agisilaos/pocketcastsctl/commit/b948f62022ee7d3ce685f4cd85846205a508499f)).
+
+Live Chrome and Safari playback-state verification remains incomplete, as documented in the roadmap. This release does not claim full live-browser parity ([e49fb56](https://github.com/agisilaos/pocketcastsctl/commit/e49fb564d4d39ea871ba7b398c126df5f485b4ec)).
+
 ## [v0.1.7] - 2026-09-01
 
 No supported command or output schema was removed. Commands that previously ignored unsupported Web flags or attempted to replace an environment-sourced API session now fail with explicit usage or safety errors.
