@@ -50,6 +50,47 @@ make release VERSION=vX.Y.Z
 
 Automatic PR and push validation runs `make release-check-ci` once, including all package and script tests, vet, docs/help, module metadata, formatting, changelog checks, and a version-stamped build. CI also runs the focused lifecycle race tests and snapshot benchmarks. The `release-check` workflow provides the same validation gate on manual dispatch. Use `make test-scripts` for focused script iteration; it is already included in the complete gate.
 
+### Shell completion
+
+Generate a script with `pocketcastsctl completion bash`, `zsh`, or `fish`.
+Completions suggest flags for the current command, browser names where
+supported, and diagnostic codes for `doctor explain`.
+
+For Bash, including the macOS system Bash:
+
+```bash
+mkdir -p ~/.local/share/pocketcastsctl
+pocketcastsctl completion bash > ~/.local/share/pocketcastsctl/completion.bash
+source ~/.local/share/pocketcastsctl/completion.bash
+```
+
+Add the source line to `~/.bash_profile` for login shells or `~/.bashrc` for
+non-login interactive shells.
+
+For Zsh:
+
+```zsh
+mkdir -p ~/.zsh/completions
+pocketcastsctl completion zsh > ~/.zsh/completions/_pocketcastsctl
+fpath=(~/.zsh/completions $fpath)
+autoload -Uz compinit && compinit
+```
+
+Add the `fpath` line to `~/.zshrc` before `compinit`. If your configuration
+already runs `compinit`, keep that invocation.
+
+For Fish, the generated file loads automatically in new shells:
+
+```fish
+mkdir -p ~/.config/fish/completions
+pocketcastsctl completion fish > ~/.config/fish/completions/pocketcastsctl.fish
+source ~/.config/fish/completions/pocketcastsctl.fish
+```
+
+Try pressing Tab after `pocketcastsctl queue api rm <episode-uuid> --d` (replace
+`<episode-uuid>` with a UUID), `pocketcastsctl config show --sa`, or
+`pocketcastsctl web login --browser c`.
+
 ## Usage
 
 Show build metadata:

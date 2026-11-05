@@ -371,19 +371,20 @@ func printCompletionHelp() {
 Install (zsh):
   mkdir -p ~/.zsh/completions
   pocketcastsctl completion zsh > ~/.zsh/completions/_pocketcastsctl
-  echo 'fpath=(~/.zsh/completions $fpath)' >> ~/.zshrc
+  fpath=(~/.zsh/completions $fpath)
   autoload -Uz compinit && compinit
+  Add the fpath line to ~/.zshrc before compinit.
 
 Install (bash):
   mkdir -p ~/.local/share/pocketcastsctl
   pocketcastsctl completion bash > ~/.local/share/pocketcastsctl/completion.bash
   source ~/.local/share/pocketcastsctl/completion.bash
-  echo 'source ~/.local/share/pocketcastsctl/completion.bash' >> ~/.bash_profile
-  For non-login interactive Bash shells, put the source line in ~/.bashrc instead.
+  Add the source line to ~/.bash_profile for login shells or ~/.bashrc for non-login interactive shells.
 
 Install (fish):
   mkdir -p ~/.config/fish/completions
   pocketcastsctl completion fish > ~/.config/fish/completions/pocketcastsctl.fish
+  source ~/.config/fish/completions/pocketcastsctl.fish
 `)
 }
 
