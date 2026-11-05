@@ -16,9 +16,12 @@ SESSION_NAME = r"[a-z0-9]+(?:-[a-z0-9]+)*"
 
 
 def git(*args, capture=True):
-    return subprocess.run(
-        ["git", *args], check=True, text=True, stdout=subprocess.PIPE if capture else None
-    ).stdout
+    try:
+        return subprocess.run(
+            ["git", *args], check=True, text=True, stdout=subprocess.PIPE if capture else None
+        ).stdout
+    except subprocess.CalledProcessError as error:
+        raise ValueError(f"git {args[0]} exited {error.returncode}") from None
 
 
 def read_git(*args):
@@ -123,7 +126,7 @@ def main():
             start(args.name)
         else:
             land(args.base, args.reviewed, args.dry_run)
-    except (OSError, ValueError, subprocess.CalledProcessError) as error:
+    except (OSError, ValueError) as error:
         print(f"session: {error}", file=sys.stderr)
         return 1
     return 0

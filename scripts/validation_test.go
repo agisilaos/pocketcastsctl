@@ -55,6 +55,17 @@ func TestReleaseCheckValidation(t *testing.T) {
 		})
 	}
 
+	t.Run("external build directory with spaces", func(t *testing.T) {
+		repo, _ := setupValidationRepo(t)
+		outDir := filepath.Join(t.TempDir(), "external build")
+		t.Setenv("POCKETCASTSCTL_RELEASE_CHECK_OUT_DIR", outDir)
+		mustRun(t, repo, "bash", "scripts/release-check.sh", "--ci")
+		mustRun(t, repo, filepath.Join(outDir, "pocketcastsctl"), "--version")
+		if _, err := os.Stat(filepath.Join(repo, "dist")); !os.IsNotExist(err) {
+			t.Fatalf("external build created a dist directory in the checkout: %v", err)
+		}
+	})
+
 	for _, stage := range []string{"test", "vet", "docs", "mod", "build"} {
 		t.Run(stage+" failure", func(t *testing.T) {
 			repo, log := setupValidationRepo(t)

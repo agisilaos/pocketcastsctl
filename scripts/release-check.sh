@@ -139,7 +139,7 @@ go build \
   -o "$out_bin" \
   ./cmd/pocketcastsctl
 
-version_out="$($out_bin --version)"
+version_out="$("$out_bin" --version)"
 if [[ "$version_out" != pocketcastsctl\ "$version"* ]]; then
   die "version output mismatch: $version_out"
 fi
