@@ -1,5 +1,11 @@
 ## Agent skills
 
+### Sessions and landing
+
+Read [the session workflow](docs/agents/sessions.md) when briefing a new chat,
+starting a worktree, landing on `main`, or closing a session. Keep one task per
+worktree and run focused checks during development.
+
 ### Code navigation
 
 For code navigation and focused checks, see `docs/README.md`.

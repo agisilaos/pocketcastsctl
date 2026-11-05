@@ -1,0 +1,133 @@
+#!/usr/bin/env python3
+"""Create an isolated worktree or qualify and push a reviewed commit to main."""
+
+import argparse
+import fcntl
+import os
+from pathlib import Path
+import re
+import subprocess
+import sys
+import tempfile
+
+
+MAIN = "refs/heads/main"
+SESSION_NAME = r"[a-z0-9]+(?:-[a-z0-9]+)*"
+
+
+def git(*args, capture=True):
+    return subprocess.run(
+        ["git", *args], check=True, text=True, stdout=subprocess.PIPE if capture else None
+    ).stdout
+
+
+def read_git(*args):
+    return git(*args).rstrip("\n")
+
+
+def fetch_main():
+    git("fetch", "--quiet", "--no-tags", "origin", MAIN)
+    return read_git("rev-parse", "FETCH_HEAD")
+
+
+def start(name):
+    if not re.fullmatch(SESSION_NAME, name):
+        raise ValueError("use a lowercase session name with digits and single hyphens")
+    primary = Path(git("worktree", "list", "--porcelain", "-z").split("\0", 1)[0][9:])
+    path = primary.with_name(f"{primary.name}-{name}")
+    git("worktree", "add", "--quiet", "--no-track", "-b", f"fix/{name}", str(path), fetch_main())
+    print(path)
+
+
+def require_checkout(branch, head):
+    if read_git("branch", "--show-current") != branch or read_git("rev-parse", "HEAD") != head:
+        raise ValueError("the session must be on the branch and full commit SHA that were reviewed")
+    if read_git("status", "--porcelain", "--untracked-files=all"):
+        raise ValueError("the session worktree must be clean")
+    for operation in ("rebase-merge", "rebase-apply", "MERGE_HEAD", "CHERRY_PICK_HEAD", "sequencer"):
+        if Path(read_git("rev-parse", "--git-path", operation)).exists():
+            raise ValueError("finish the in-progress Git operation before landing")
+
+
+def log_directory(name):
+    default = Path.home() / "Library" / "Logs" / "pocketcastsctl" / "threads"
+    root = (Path(os.environ.get("POCKETCASTSCTL_SESSION_LOG_ROOT", default)) / name).resolve()
+    for entry in git("worktree", "list", "--porcelain", "-z").split("\0"):
+        if entry.startswith("worktree "):
+            worktree = Path(entry[9:]).resolve()
+            if root == worktree or worktree in root.parents:
+                raise ValueError("session evidence must be outside repository worktrees")
+    root.mkdir(parents=True, exist_ok=True)
+    return Path(tempfile.mkdtemp(prefix="landing-", dir=root))
+
+
+def land(base, head, dry_run):
+    branch = read_git("branch", "--show-current")
+    match = re.fullmatch(f"fix/({SESSION_NAME})", branch)
+    if not match:
+        raise ValueError("land from a named fix/<name> session branch")
+    require_checkout(branch, head)
+    common_dir = Path(read_git("rev-parse", "--path-format=absolute", "--git-common-dir"))
+    with (common_dir / "pocketcastsctl-landing.lock").open("a") as lock:
+        print("Taking the landing turn for this clone", flush=True)
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        require_checkout(branch, head)
+        if fetch_main() != base:
+            raise ValueError("origin/main moved; rebase and review the updated range")
+        if base == head:
+            raise ValueError("there are no commits to land")
+        if subprocess.run(["git", "merge-base", "--is-ancestor", base, head]).returncode:
+            raise ValueError("the reviewed commit must descend from current origin/main")
+        git("diff", "--check", f"{base}..{head}", capture=False)
+
+        evidence = log_directory(match[1])
+        log = evidence / "validation.log"
+        print(f"Qualifying {head}; log: {log}", flush=True)
+        with log.open("w") as output:
+            env = dict(os.environ, POCKETCASTSCTL_RELEASE_CHECK_OUT_DIR=str(evidence / "build"))
+            # An inherited make dry run or ignore-errors flag would skip the gate.
+            for name in ("MAKEFLAGS", "MFLAGS", "GNUMAKEFLAGS", "MAKEFILES", "MAKEOVERRIDES"):
+                env.pop(name, None)
+            result = subprocess.run(
+                ["make", "release-check-ci", "test-race-local", "bench-local-ci"],
+                env=env, stdout=output, stderr=subprocess.STDOUT,
+            )
+        if result.returncode:
+            raise ValueError(f"validation exited {result.returncode}; see {log}")
+
+        require_checkout(branch, head)
+        push_urls = read_git("remote", "get-url", "--push", "--all", "origin").splitlines()
+        if len(push_urls) != 1:
+            raise ValueError("landing requires exactly one origin push URL")
+        remote_tip = read_git("ls-remote", "--exit-code", "--refs", push_urls[0], MAIN)
+        if remote_tip != f"{base}\t{MAIN}":
+            raise ValueError("the push destination's main moved; rebase and review before landing")
+        flags = ["--dry-run"] if dry_run else []
+        git("push", "--no-follow-tags", "--recurse-submodules=no", *flags,
+            "origin", f"{head}:{MAIN}", capture=False)
+        print(f"{'Dry run passed for' if dry_run else 'Landed'} {head}; log: {log}")
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    commands = parser.add_subparsers(dest="command", required=True)
+    commands.add_parser("start", help="create a worktree from latest origin/main").add_argument("name")
+    landing = commands.add_parser("land", help="qualify an exact reviewed range and push it to main")
+    landing.add_argument("--base", required=True, help="full SHA of the reviewed base")
+    landing.add_argument("--reviewed", required=True, help="full SHA of the reviewed commit")
+    landing.add_argument("--dry-run", action="store_true", help="run qualification without updating main")
+    args = parser.parse_args()
+    try:
+        os.chdir(read_git("rev-parse", "--show-toplevel"))
+        if args.command == "start":
+            start(args.name)
+        else:
+            land(args.base, args.reviewed, args.dry_run)
+    except (OSError, ValueError, subprocess.CalledProcessError) as error:
+        print(f"session: {error}", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -45,8 +45,5 @@ verification, a Chrome JavaScript-permission blocker, and Dia action limitations
 - Keep macOS CI and portable release-check workflows green; use the stricter
   versioned release gate when preparing the next release.
 
-## Working style
-
-- Land small, reviewable commits on `main`.
-- Run targeted tests first, then `go test ./...`.
-- Distinguish local/CI contract coverage from live browser verification.
+For worktree setup, focused checks, and direct landing, see
+[the session workflow](docs/agents/sessions.md).

@@ -7,6 +7,7 @@
 - Release history: `../CHANGELOG.md`
 - Domain vocabulary: `../CONTEXT.md`
 - Architecture decisions: `adr/`
+- [Agent sessions and direct landing](agents/sessions.md)
 
 ## Help Snapshots
 

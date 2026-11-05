@@ -14,6 +14,9 @@ fi
 
 ci_mode=0
 version=""
+out_dir="${POCKETCASTSCTL_RELEASE_CHECK_OUT_DIR:-dist/release-check}"
+# Script tests invoke this gate in their own fixtures.
+unset POCKETCASTSCTL_RELEASE_CHECK_OUT_DIR
 if [[ $# -eq 1 && "$1" == "--ci" ]]; then
   ci_mode=1
 elif [[ $# -eq 1 ]]; then
@@ -126,7 +129,6 @@ fi
 
 commit="$(git rev-parse --short=12 HEAD)"
 build_date="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-out_dir="dist/release-check"
 out_bin="$out_dir/pocketcastsctl"
 
 mkdir -p "$out_dir"
