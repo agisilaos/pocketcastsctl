@@ -84,7 +84,6 @@ For Fish, the generated file loads automatically in new shells:
 ```fish
 mkdir -p ~/.config/fish/completions
 pocketcastsctl completion fish > ~/.config/fish/completions/pocketcastsctl.fish
-source ~/.config/fish/completions/pocketcastsctl.fish
 ```
 
 Try pressing Tab after `pocketcastsctl queue api rm <episode-uuid> --d` (replace

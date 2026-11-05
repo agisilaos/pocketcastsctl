@@ -384,7 +384,7 @@ Install (bash):
 Install (fish):
   mkdir -p ~/.config/fish/completions
   pocketcastsctl completion fish > ~/.config/fish/completions/pocketcastsctl.fish
-  source ~/.config/fish/completions/pocketcastsctl.fish
+  Start a new Fish shell to load the generated completions.
 `)
 }
 
